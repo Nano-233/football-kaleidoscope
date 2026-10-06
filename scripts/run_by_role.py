@@ -3,9 +3,11 @@
     python scripts/run_by_role.py [N]
 """
 import sys, pathlib
+import os
 from multiprocessing import Pool
 import numpy as np
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+WORKERS = max(1, (os.cpu_count() or 8) - 4)  # leave a few cores for the machine
 from matchsim.engine import Match
 from matchsim.teams import make_team, Tactics, ROLES
 
@@ -29,7 +31,7 @@ def one(seed):
 
 if __name__ == "__main__":
     n = int(sys.argv[1]) if len(sys.argv) > 1 else 6
-    with Pool(6) as p:
+    with Pool(WORKERS) as p:
         rows = [x for r in p.map(one, range(300, 300 + n)) for x in r]
     print(f"{'role':4s} {'km':>6s}  target     {'sprint s':>8s} {'top m/s':>8s}")
     for role in ROLES:

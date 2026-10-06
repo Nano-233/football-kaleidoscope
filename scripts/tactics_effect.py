@@ -3,9 +3,11 @@
     python scripts/tactics_effect.py
 """
 import sys, pathlib
+import os
 from multiprocessing import Pool
 import numpy as np
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+WORKERS = max(1, (os.cpu_count() or 8) - 4)  # leave a few cores for the machine
 from matchsim.engine import Match
 from matchsim.teams import make_team, Tactics
 
@@ -36,7 +38,7 @@ def run(args):
 
 if __name__ == "__main__":
     seeds = range(200, 206)
-    with Pool(6) as p:
+    with Pool(WORKERS) as p:
         for knob, lo, hi in [("line_height", .15, .85), ("press", .1, .9), ("width", .1, .9), ("marking", 0., 1.)]:
             a = p.map(run, [(s, knob, lo) for s in seeds])
             b = p.map(run, [(s, knob, hi) for s in seeds])

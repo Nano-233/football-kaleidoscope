@@ -19,7 +19,7 @@ from .movement import _tf, _unit
 
 DT = 0.2
 # Single tuning table (calibrated by scripts/calibrate.py against real-football norms).
-TUNE = dict(pass_sigma=1.55, intercept=.33, shot_mid=1.4, usage=0.4, fk_bonus=0.4, long_bonus=0.523, prog_base=0.654, prog_dir=0.9, keep=0.455, loss=1.0, cross_v=0.98, gk_long=.5, box_foul=.08, home_edge=1.2, shot_cost=0.5, shot_k=4.5, shot_k_dir=5.0,
+TUNE = dict(pass_sigma=1.085, intercept=0.33, shot_mid=1.82, usage=0.4, fk_bonus=0.4, long_bonus=0.523, prog_base=0.654, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=0.98, gk_long=.5, box_foul=.08, home_edge=1.2, shot_cost=0.35, shot_k=3.15, shot_k_dir=5.0,
             carry_base=.1, carry_prog=.2, carry_streak=.3, dwell_base=1.04, dwell_shape=2.4, dwell_scale=1.61,
             tackle_rate=0.164, wide_error=2.6, off_miss=0.55, off_mult=.5)
 sig = lambda x: 1 / (1 + np.exp(-x))
@@ -829,7 +829,7 @@ class Match:
         opp = s._opp(i // 11)
         dn = np.linalg.norm(s.pos[opp] - at, axis=1).min()
         tech = (a["dribbling"][i] + a["composure"][i]) / 2
-        return float(np.clip(.96 - .012 * max(0, speed - 12) + .012 * (tech - 10) - .15 * np.clip(1 - dn / 4, 0, 1), .3, .99))
+        return float(np.clip(.985 - .012 * max(0, speed - 12) + .012 * (tech - 10) - .1 * np.clip(1 - dn / 4, 0, 1), .3, .995))
 
     def _flight(s):
         f = s.flight
@@ -871,7 +871,7 @@ class Match:
                         s.pending_pass["outcome"], s.pending_pass = "incomplete", None
                     return s._loose_ball(_unit(ab + s.rng.normal(0, .8, 2)) * s.rng.uniform(2, 5))
                 s.block_until[i] = s.t + .4
-                if s.rng.random() < .35:
+                if s.rng.random() < .2:
                     if s.pending_pass is not None:
                         s.pending_pass["outcome"], s.pending_pass = "deflected", None
                     return s._loose_ball(_unit(ab + s.rng.normal(0, 1.0, 2)) * f["speed"] * .35)
@@ -910,7 +910,7 @@ class Match:
         s.ball = pt.copy()
         pt_t = _tf(pt) if t else pt
         if t == f["team"]:
-            if pt_t[0] > .7 * L and abs(pt_t[1] - W / 2) < 18 and s.rng.random() < .33:
+            if pt_t[0] > .7 * L and abs(pt_t[1] - W / 2) < 18 and s.rng.random() < .14:
                 s._gain_control(i, pt)
                 C = pt_t
                 O = _tf(s.pos[s._opp(t)]) if t else s.pos[s._opp(t)]

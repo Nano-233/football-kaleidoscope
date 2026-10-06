@@ -7,9 +7,11 @@
 Norms are rough public aggregates from memory, used as tuning targets, not redistributed data.
 """
 import sys, pathlib, collections
+import os
 from multiprocessing import Pool
 import numpy as np
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+WORKERS = max(1, (os.cpu_count() or 8) - 4)  # leave a few cores for the machine
 from matchsim.engine import Match
 from matchsim.teams import make_team, Tactics, LEAGUE, L, W
 
@@ -66,7 +68,7 @@ if __name__ == "__main__":
     mode = "home" if "--home" in args else "balance" if "--balance" in args else "mix"
     nums = [a for a in args if a.isdigit()]
     n = int(nums[0]) if nums else (100 if mode != "mix" else 48)
-    with Pool(6) as p:
+    with Pool(WORKERS) as p:
         rows = p.map(one, [(1000 + i, mode) for i in range(n)])
     sc = np.array([r["score"] for r in rows])
     if mode == "home":

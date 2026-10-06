@@ -6,9 +6,11 @@ Runs each candidate on the same seeds, scores how far every banded metric sits o
 (normalised by band width) and keeps the best value per parameter. Writes out/tune_best.json.
 """
 import sys, json, pathlib, time
+import os
 from multiprocessing import Pool
 import numpy as np
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+WORKERS = max(1, (os.cpu_count() or 8) - 4)  # leave a few cores for the machine
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import calibrate, realism
 from matchsim import engine
@@ -32,8 +34,8 @@ def one(seed):
     return d
 
 
-def score(tune, seeds, workers=6):
-    with Pool(workers, initializer=_init, initargs=(tune,)) as p:
+def score(tune, seeds, workers=None):
+    with Pool(workers or WORKERS, initializer=_init, initargs=(tune,)) as p:
         rows = p.map(one, seeds)
     means = {k: float(np.mean([r[k] for r in rows])) for k in BANDS if k in rows[0]}
     total = 0.

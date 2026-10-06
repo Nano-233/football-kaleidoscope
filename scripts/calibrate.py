@@ -7,9 +7,11 @@ combined unless noted). They are tuning targets, not redistributed data.
 --check exits non-zero when a stat leaves its band (used as the realism test).
 """
 import sys, pathlib
+import os
 from multiprocessing import Pool
 import numpy as np
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+WORKERS = max(1, (os.cpu_count() or 8) - 4)  # leave a few cores for the machine
 from matchsim.engine import Match
 from matchsim.teams import make_team, Tactics, LEAGUE
 
@@ -77,7 +79,7 @@ if __name__ == "__main__":
         if "=" in a:
             k, v = a.split("=")
             engine.TUNE[k] = float(v)
-    with Pool(min(n, 6), initializer=_init, initargs=(dict(engine.TUNE),)) as p:
+    with Pool(min(n, WORKERS), initializer=_init, initargs=(dict(engine.TUNE),)) as p:
         rows = p.map(one, range(100, 100 + n))
     bad = 0
     print(f"{n} matches")
