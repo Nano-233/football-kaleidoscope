@@ -11,7 +11,8 @@ football events into explainable match intelligence, narratives, and personalize
 |---|---|
 | `matchsim/` synthetic match engine (events + tracking frames) | working, calibrated (see below) |
 | `viewer/` 2D playback of a generated match | working |
-| Director layer (story arcs: red card, comeback, ...) | planned |
+| `analytics/` deterministic stats from events (take-on rate, dribbled past, PPDA, ratings, ...), batch and live | working |
+| Director layer (story arcs) | dropped (not needed; real matches produce stories) |
 | Agents (stats, tactics, commentators, localizer, fact-checker, recap) on Microsoft Foundry / Agent Framework | planned |
 | Event streaming + overlay output + web UI + Azure deploy | planned |
 
@@ -23,6 +24,7 @@ python scripts/run_match.py 1      # writes out/match_1.json (events + 5 Hz trac
 python -m http.server 8765         # then open http://localhost:8765/viewer/index.html?src=../out/match_1.json
 python scripts/calibrate.py 18     # simulate 18 matches and compare with real-football norms
 python scripts/tactics_effect.py   # check that tactics measurably change behaviour
+python scripts/match_stats.py out/match_1.json   # team and player statistics computed from events only
 python scripts/run_by_role.py 18   # distance covered per position vs real-world norms
 python scripts/realism.py 48       # style, wide play, restarts, pressing, officiating vs real norms (--home / --balance variants)
 python scripts/tune.py 24 2        # auto-tune TUNE so every metric sits inside its band (coordinate search)

@@ -36,6 +36,16 @@ movement. `engine._steer` moves players with pace, acceleration, stamina limits 
 **Dynamic resolution.** Passes and loose balls are resolved by whoever physically reaches the ball first rolling for
 control, so completion rates emerge from player positions instead of being dice rolls detached from the geometry.
 
+## Data, metrics, insight
+
+Three layers, deliberately separate:
+1. **Data (engine):** events, tracking frames, lineups and the `why` decision rationale. The engine never computes an aggregate.
+2. **Metrics (`analytics/`):** every number a viewer sees (pass accuracy, take-on rate, dribbled past, PPDA, xG, ratings, ...)
+   is a deterministic reducer over events (`StatsAccumulator.update(event)`), so a finished match and a live feed use the same code
+   and cannot disagree with the events.
+3. **Insight (agents):** decide which numbers matter now, explain why a moment mattered using the `why` causes, personalise and
+   translate it, and fact-check each claim against the metrics layer.
+
 ## Event coverage
 
 46 event types, documented in [EVENTS.md](EVENTS.md) (regenerated from simulated matches by `scripts/event_schema.py`).
