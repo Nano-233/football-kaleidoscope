@@ -27,7 +27,7 @@ const L = 105, W = 68, PAD = 30, SX = (cv.width - 2*PAD)/L, SY = (cv.height - 2*
 const px = x => PAD + x*SX, py = y => PAD + y*SY;
 let D, frames, dt, t = 0, playing = false, last = 0, names = {}, info = {}, slots = [], mouse = null;
 const src = new URLSearchParams(location.search).get('src') || '../out/match_1.json';
-fetch(src).then(r => r.json()).then(d => {
+(window.__EMBED__ ? Promise.resolve(window.__EMBED__()) : fetch(src).then(r => r.json())).then(d => {
   D = d; frames = d.frames; dt = d.meta.dt;
   [...d.meta.home.players, ...d.meta.away.players, ...d.meta.home.bench, ...d.meta.away.bench].forEach(p => { names[p.id] = p; info[p.id] = p; });
   slots = [...d.meta.home.players, ...d.meta.away.players];
