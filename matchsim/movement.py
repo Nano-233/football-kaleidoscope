@@ -17,7 +17,7 @@ GK, CB, FB, DM, CM, WG, AM, ST = range(8)
 PUSH = np.array([0, 3, 9, 2, 4, 8, 7, 6.])        # metres forward when we have the ball
 DROP = np.array([0, -2, -3, -1, -3, -6, -7, -10.])  # metres back when we do not
 FOLLOW = np.array([.1, .5, .55, .55, .55, .5, .5, .45])  # how strongly the role follows the ball's x
-CRUISE = np.array([1.7, 1.5, 1.55, 1.35, 1.75, 1.1, 1.1, .8])  # jogging speed by role (box-to-box midfielders cover more ground)
+CRUISE = np.array([1.7, .95, .95, 1.0, 1.1, .8, 1.0, .75])  # jogging speed by role (box-to-box midfielders cover more ground)
 SHOULDER = np.array([0, 0, 0, 0, 0, -9., -13., -6.])  # where each attacking role stands relative to the last defender (m)
 MIN_X = np.array([0, 12, 11, 17, 21, 24, 26, 30.])  # deepest a role will drop (defenders hold the box edge, they do not hug the goal line)
 GOAL = np.array([0., W / 2])
@@ -129,11 +129,12 @@ def team_targets(m, t):
         ty = np.where(far, W / 2 + np.sign(A[:, 1] - W / 2) * 9, ty)
     zone = np.stack([clip(tx, 2, L - 2), clip(ty, 2, W - 2)], 1)
     carrier = m.carrier if m.state == "held" else -1
-    if has and B[0] > .6 * L:
+    bx = B[0] + max(float(Bv[0]), 0.)  # the team moves up with the play: look a second ahead along the ball's path
+    if has and bx > .5 * L:
         # attacking shape near the box: every role has a job (near post, far post, edge of the box, overlap, cover),
         # mirrored to the side the ball is on. Blended in as the ball gets closer to goal.
         sd = 1 if B[1] > W / 2 else -1
-        w = float(clip((B[0] - .6 * L) / (.15 * L), 0, 1)) * .9
+        w = float(clip((bx - .5 * L) / (.2 * L), 0, 1)) * .9
         line_t = max(np.sort(O[:, 0])[-2], L / 2) + .5
         templ = {ST: [(L - 9, W / 2 - sd * 2.5), (L - 11, W / 2 + sd * 6)], WG: [(L - 13, W / 2 + sd * 22), (L - 9, W / 2 - sd * 11)],
                  AM: [(L - 19, W / 2 + sd * 2), (L - 21, W / 2 - sd * 7)], CM: [(L - 21, W / 2 + sd * 9), (L - 23, W / 2 - sd * 8), (L - 31, W / 2)],

@@ -18,7 +18,7 @@ from matchsim import engine
 WORKERS = max(1, (os.cpu_count() or 8) - 4)
 L, W = 105., 68.
 BANDS = {"hold_pass": (1.2, 3.0), "first_time_pass": (.2, .45), "first_time_big_chance": (.55, 1.0), "near_ball_defenders": (1.2, 2.6),
-         "near_ball_danger": (2., 4.5), "bunched_frames": (0., .12), "unmarked_in_box": (.2, .55), "nearest_mate": (9., 16.)}
+         "near_ball_danger": (2., 4.5), "bunched_frames": (0., .12), "unmarked_in_box": (.2, .55), "nearest_mate": (9., 16.), "attackers_near_box": (3.5, 6.5)}
 
 
 def _init(over):
@@ -33,7 +33,7 @@ def one(seed):
     fr = np.array(r["frames"])[::5]
     pos = fr[:, 5:49].reshape(len(fr), 22, 2)
     ball, carrier, poss = fr[:, 1:3], fr[:, 3], fr[:, 4]
-    near, dng, bunched, box_tot, box_free, mates = [], [], 0, 0, 0, []
+    near, dng, bunched, box_tot, box_free, mates, nbox = [], [], 0, 0, 0, [], []
     for k in range(len(fr)):
         if carrier[k] < 0 or pos[k, :, 1].min() < -5:
             continue
@@ -48,6 +48,8 @@ def one(seed):
         bunched += n >= 4
         att = pos[k, 11 * t:11 * t + 11]
         x_t = att[:, 0] if t == 0 else L - att[:, 0]
+        if bx_t > L - 20:
+            nbox.append(int(((x_t > L - 22) & (np.abs(att[:, 1] - W / 2) < 26)).sum()))
         inbox = (x_t > L - 16.5) & (np.abs(att[:, 1] - W / 2) < 20.2)
         inbox[0] = False
         for i in np.nonzero(inbox)[0]:
@@ -58,7 +60,7 @@ def one(seed):
         mates.append(dd.min(1).mean())
     return dict(hold_pass=np.mean([e["hold"] for e in passes]), first_time_pass=np.mean([e["hold"] < .6 for e in passes]),
                 first_time_big_chance=np.mean([e["hold"] < .6 for e in shots]) if shots else np.nan, near_ball_defenders=np.mean(near), near_ball_danger=np.mean(dng) if dng else np.nan,
-                bunched_frames=bunched / max(len(near), 1), unmarked_in_box=box_free / max(box_tot, 1), nearest_mate=np.mean(mates))
+                bunched_frames=bunched / max(len(near), 1), unmarked_in_box=box_free / max(box_tot, 1), nearest_mate=np.mean(mates), attackers_near_box=np.mean(nbox) if nbox else np.nan)
 
 
 if __name__ == "__main__":

@@ -22,7 +22,7 @@ DT = 0.2
 # Single tuning table (calibrated by scripts/calibrate.py against real-football norms).
 TUNE = dict(shoot_min=.1, react=3.0, patience=.6, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.4, fk_bonus=0.05, long_bonus=0.523, prog_base=0.654, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=2.2, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=1.05, shot_k=3.15, shot_k_dir=5.0,
             carry_base=.3, carry_prog=.2, carry_streak=.3, dwell_base=0.9, dwell_shape=2.4, dwell_scale=1.61,
-            tackle_rate=0.3, wide_error=3.2, off_miss=0.55, off_mult=.5)
+            tackle_rate=0.3, wide_error=3.2, off_miss=.2, off_mult=.25)
 sig = lambda x: 1 / (1 + np.exp(-x))
 GOAL_HALF = 3.66
 _MULT = ("shot", "runs", "follow", "prog", "loss", "cruise", "commit", "foul", "tackle")
