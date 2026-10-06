@@ -36,6 +36,10 @@ DOC = {  # one line per type for the agents reading this
     "var_overturned": "VAR changes the decision (penalty awarded or cancelled, red card downgraded).",
     "keeper_claim": "Keeper claims a cross or collects a ball played into his box.", "keeper_punch": "Keeper punches a cross clear.",
     "keeper_sweep": "Keeper comes off his line to clear a ball played in behind.", "outfield_keeper": "No keeper left: an outfield player takes the gloves.",
+    "half_start": "Kick-off of a half.", "ball_out": "Ball leaves the pitch (over the touchline or goal line) with the last toucher.",
+    "error": "Unforced mistake in the own half that leads to a shot or goal (leads_to, delay in seconds).",
+    "fifty_fifty": "Contested loose ball between two sides: winner and the beaten rival.",
+    "player_off": "Player leaves the pitch temporarily for treatment.", "player_on": "Player returns after treatment.",
     "tactic_change": "Manager adjusts tactics: reason and the changed dials [old, new].",
 }
 
