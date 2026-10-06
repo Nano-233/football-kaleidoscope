@@ -512,7 +512,7 @@ class Match:
             p_ctrl = np.clip(.84 + .13 * sig(.7 * (dn_r - 2.2)) + .004 * (tech - 10), .35, .98)
             p_air = np.clip(.55 + .02 * (a["aerial"][11 * t + m_] - a["aerial"][s._opp(t)].mean()), .2, .85)
             p_ctrl = np.where(lofted, p_air, p_ctrl)
-            sg = (.5 + .05 * d2) * (TUNE["pass_sigma"] - .06 * a["passing"][c]) * (1 + .35 * pr) * np.where(lofted, 1.5, 1)
+            sg = (.5 + .05 * d2) * (TUNE["pass_sigma"] * (1 - .0353 * a["passing"][c])) * (1 + .35 * pr) * np.where(lofted, 1.5, 1)
             p_acc = 1 - np.exp(-(2.5 ** 2) / (2 * sg ** 2))
             p_s = (1 - p_int) * p_acc * p_ctrl
             line = s.line_hist[t][0]  # second-last defender as the passer last saw him; defenders may have stepped up since
@@ -617,7 +617,7 @@ class Match:
         start = s.ball.copy()
         d = np.linalg.norm(aim - start)
         pr = np.clip(1 - np.linalg.norm(s.pos[s._opp(t)] - s.pos[c], axis=1).min() / 5, 0, 1)
-        sg = (.5 + .05 * d) * (TUNE["pass_sigma"] - .06 * s.attr["passing"][c]) * (1 + .35 * pr) * (1.8 if lofted else 1) * sigma_scale
+        sg = (.5 + .05 * d) * (TUNE["pass_sigma"] * (1 - .0353 * s.attr["passing"][c])) * (1 + .35 * pr) * (1.8 if lofted else 1) * sigma_scale
         sg *= s.rain
         wide = min(aim[1], W - aim[1]) < 9
         end = aim + s.rng.normal(0, sg * (1 + TUNE["wide_error"] * wide), 2)
