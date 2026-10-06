@@ -25,7 +25,9 @@ python scripts/calibrate.py 18     # simulate 18 matches and compare with real-f
 python scripts/tactics_effect.py   # check that tactics measurably change behaviour
 python scripts/run_by_role.py 18   # distance covered per position vs real-world norms
 python scripts/realism.py 48       # style, wide play, restarts, pressing, officiating vs real norms (--home / --balance variants)
-python scripts/tune.py 24 2        # auto-tune TUNE so every metric sits inside its band (slow)
+python scripts/tune.py 24 2        # auto-tune TUNE so every metric sits inside its band (coordinate search)
+python scripts/tune_rs.py 24 3 36  # faster: regression surrogate + gradient descent, writes out/sensitivity.md
+python scripts/export_tracking.py out/match_1.json 25   # 25 Hz tracking feed (npz)
 python tests/test_sim.py           # determinism + invariants
 ```
 

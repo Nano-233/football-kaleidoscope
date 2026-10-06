@@ -38,12 +38,16 @@ control, so completion rates emerge from player positions instead of being dice 
 
 ## Event coverage
 
-37 event types, documented in [EVENTS.md](EVENTS.md) (regenerated from simulated matches by `scripts/event_schema.py`).
+46 event types, documented in [EVENTS.md](EVENTS.md) (regenerated from simulated matches by `scripts/event_schema.py`).
 Beyond the core pipeline events (passes, shots, tackles, possession changes, pressure, match metadata) a match also
 contains the stoppages and officiating a real feed has: injuries (knock / forced substitution / serious, with treatment
 stoppages), cards and sent-offs, offsides, VAR checks and disallowed goals, own goals, announced added time
 (driven by the actual stoppages), a referee with a strictness level, weather, a lineup event, and key-pass / assist
-links with shot freeze-frames (positions of all 22 players at the moment of the shot).
+links with shot freeze-frames (positions of all 22 players at the moment of the shot). Goalkeepers catch, parry or
+tip over, throw or kick it out, claim, punch and sweep; free kicks have takers and a wall; corners have routines
+(short, near/far post, penalty spot, edge of the box); the manager changes formation (including ten-man shapes after a
+red card); VAR also reviews penalties and red cards; the referee plays advantage; bookings include dissent and time
+wasting. `scripts/export_tracking.py` turns a match into a 25 Hz provider-style tracking feed (speed, heading, ball height).
 
 ## Players, traits and the manager
 
