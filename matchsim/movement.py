@@ -17,8 +17,9 @@ GK, CB, FB, DM, CM, WG, AM, ST = range(8)
 PUSH = np.array([0, 3, 9, 2, 4, 8, 7, 6.])        # metres forward when we have the ball
 DROP = np.array([0, -2, -3, -1, -3, -6, -7, -10.])  # metres back when we do not
 FOLLOW = np.array([.1, .5, .55, .55, .55, .5, .5, .45])  # how strongly the role follows the ball's x
-CRUISE = np.array([1.7, .95, .95, 1.0, 1.1, .8, 1.0, .75])  # jogging speed by role (box-to-box midfielders cover more ground)
+CRUISE = np.array([1.7, .56, .56, .6, .7, .5, .6, .48])  # jogging speed by role (box-to-box midfielders cover more ground)
 SHOULDER = np.array([0, 0, 0, 0, 0, -9., -13., -6.])  # where each attacking role stands relative to the last defender (m)
+WANDER = np.array([.4, 1.3, 1.8, 1.7, 2.2, 2.3, 2.4, 2.4])  # metres of constant drifting around the target: nobody stands still
 MIN_X = np.array([0, 12, 11, 17, 21, 24, 26, 30.])  # deepest a role will drop (defenders hold the box edge, they do not hug the goal line)
 GOAL = np.array([0., W / 2])
 TUNE_COMMIT = .08
@@ -58,6 +59,48 @@ def refresh_marking(m, t):
     mk = -np.ones(11, int)
     mk[D[r]] = Oo[c]
     m.mark[t] = mk
+
+
+WTHREAT = np.array([0., 0., .35, .2, .5, .95, .9, 1.])  # how much each role cares about being dangerous (GK CB FB DM CM WG AM ST)
+OFFS = np.array([[0, 0], [6, 0], [-6, 0], [0, 6], [0, -6], [4.5, 4.5], [4.5, -4.5], [-4.5, 4.5], [-4.5, -4.5], [9, 0], [0, 9], [0, -9]], float)
+
+
+def seek_space(m, t, P, O, C, zone, role, out_f, skip, line):
+    """Off-ball players of the team with the ball look for a better place to stand, every second or sooner when marked.
+
+    Each candidate spot near the player's zone is scored on: space from defenders, an open passing lane from the ball,
+    how dangerous the spot is, a useful distance from the ball, spacing from team-mates, staying onside and staying
+    close to the shape. The best spot is kept for about a second (less when a defender is on him)."""
+    sl = slice(11 * t, 11 * t + 11)
+    near = np.sqrt(((P[:, None] - O[None]) ** 2).sum(-1)).min(1)
+    due = out_f & ~skip & ((m.space_until[sl] <= m.t) | (near < 2.2))
+    idx = np.nonzero(due)[0]
+    if len(idx):
+        cand = clip(zone[idx][:, None, :] + OFFS[None], [2., 2.], [L - 2., W - 2.])  # (n, K, 2)
+        n, K = cand.shape[:2]
+        dmin = np.sqrt(((cand[:, :, None, :] - O[None, None]) ** 2).sum(-1)).min(2)  # (n, K)
+        open_ = clip(dmin / 6., 0, 1.2)
+        ab = cand - C
+        ab2 = np.maximum((ab ** 2).sum(-1), 1e-6)
+        rel = O[None, None] - C  # (1,1,11,2)
+        s_ = clip((rel * ab[:, :, None, :]).sum(-1) / ab2[:, :, None], 0, 1)
+        perp = np.sqrt(((O[None, None] - (C + s_[..., None] * ab[:, :, None, :])) ** 2).sum(-1))  # (n, K, 11)
+        lane = clip(perp.min(2) / 3., 0, 1)
+        thr = np.exp(-np.hypot(L - cand[..., 0], W / 2 - cand[..., 1]) / 22.) * 3 * WTHREAT[role[idx]][:, None]
+        dc = np.sqrt(ab2)
+        pref = np.exp(-((dc - 16.) / 12.) ** 2) * (dc < 40)
+        dz = np.sqrt(((cand[:, :, None, :] - zone[None, None]) ** 2).sum(-1))  # distance to every team-mate's target
+        dz[np.arange(n)[:, None], np.arange(K)[None, :], idx[:, None]] = 99.  # not to himself
+        spacing = clip((7. - dz) / 7., 0, 1).sum(2)
+        att = np.isin(role[idx], (WG, AM, ST))[:, None]
+        offside = att * ((cand[..., 0] > line + .3) & (cand[..., 0] > C[0]))
+        dev = np.sqrt(((cand - zone[idx][:, None]) ** 2).sum(-1)) / 8.
+        marked = (near[idx] < 2.2)[:, None]
+        score = (1. + .5 * marked) * open_ + .9 * lane + .7 * thr + .5 * pref - 1.2 * spacing - 2. * offside - .6 * dev + m.rng.normal(0, .05, (n, K))
+        best = score.argmax(1)
+        m.space_off[11 * t + idx] = cand[np.arange(n), best] - zone[idx]
+        m.space_until[11 * t + idx] = m.t + m.rng.uniform(.8, 1.6, n)
+    return zone + m.space_off[sl] * (out_f & ~skip)[:, None]
 
 
 def team_targets(m, t):
@@ -100,6 +143,8 @@ def team_targets(m, t):
             for i, s in zip(order, spots):
                 tg[i] = s
             tg[0] = (1.5, W / 2)
+        jost = 1.1 * np.stack([np.sin(.9 * m.t + m.phase[sl] * 3), np.cos(.7 * m.t + m.phase[sl] * 2)], 1)
+        tg[1:] += jost[1:]  # jostling for position in the box
         return f(tg), urgent
 
     # ---- team block: follows the ball, shaped by tactic and phase ---------------------
@@ -251,6 +296,10 @@ def team_targets(m, t):
                 side = 1 if P[i, 1] >= C[1] else -1
                 th = .9 if pr < .5 else 2.3
                 zone[i] = .55 * (C + 15 * np.array([np.cos(th), side * np.sin(th)])) + .45 * zone[i]
+        holder = carrier - 11 * t if mine else (m.dead["taker"] - 11 * t if m.state == "dead" and kind in ("throw_in", "goal_kick", "drop_ball", "indirect_free_kick", "free_kick") else -1)
+        if holder >= 0 and kind not in ("corner", "kickoff"):
+            skip = (idx == holder) | urgent | (m.t < m.run_until[sl])
+            zone = seek_space(m, t, P, O, P[holder] if mine else B, zone, role, out_f, skip, max(np.sort(O[:, 0])[-2], L / 2))
         running = has & (m.t < m.run_until[sl])
         for i in np.nonzero(running)[0]:
             zone[i], urgent[i] = m.run_tgt[11 * t + i], True

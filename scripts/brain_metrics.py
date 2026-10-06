@@ -18,7 +18,7 @@ from matchsim import engine
 WORKERS = max(1, (os.cpu_count() or 8) - 4)
 L, W = 105., 68.
 BANDS = {"hold_pass": (1.2, 3.0), "first_time_pass": (.2, .45), "first_time_big_chance": (.55, 1.0), "near_ball_defenders": (1.2, 2.6),
-         "near_ball_danger": (2., 4.5), "bunched_frames": (0., .12), "unmarked_in_box": (.2, .55), "nearest_mate": (9., 16.), "attackers_near_box": (3.5, 6.5)}
+         "near_ball_danger": (2., 4.5), "bunched_frames": (0., .12), "unmarked_in_box": (.2, .55), "nearest_mate": (9., 16.), "attackers_near_box": (3.5, 6.5), "still_while_held": (0., .25), "still_restart": (0., .4), "mean_speed_held": (1.6, 2.8)}
 
 
 def _init(over):
@@ -30,6 +30,20 @@ def one(seed):
     ev = r["events"]
     passes = [e for e in ev if e["type"] == "pass" and "hold" in e]
     shots = [e for e in ev if e["type"] == "shot" and e.get("xg", 0) >= .15 and "hold" in e]
+    full = np.array(r["frames"])
+    sp = np.hypot(*np.diff(full[:, 5:49].reshape(len(full), 22, 2), axis=0).transpose(2, 0, 1)) / r["meta"]["dt"]  # speed of every player per frame
+    sp[sp > 15] = 0
+    out_idx = [i for i in range(22) if i % 11 != 0]
+    held = full[1:, 3] >= 0
+    bspeed = np.hypot(*np.diff(full[:, 1:3], axis=0).T) / r["meta"]["dt"]
+    tt = full[1:, 0]
+    dead = np.zeros(len(tt), bool)
+    for a, b, k in r['meta']['dead_log']:
+        if k in ('throw_in', 'goal_kick', 'free_kick', 'indirect_free_kick') and 4 < b - a < 45:
+            dead |= (tt > a + 2) & (tt < b)
+    still_held = float((sp[held][:, out_idx] < 1.).mean())
+    still_dead = float((sp[dead][:, out_idx] < 1.).mean()) if dead.any() else np.nan
+    mean_held = float(sp[held][:, out_idx].mean())
     fr = np.array(r["frames"])[::5]
     pos = fr[:, 5:49].reshape(len(fr), 22, 2)
     ball, carrier, poss = fr[:, 1:3], fr[:, 3], fr[:, 4]
@@ -60,7 +74,7 @@ def one(seed):
         mates.append(dd.min(1).mean())
     return dict(hold_pass=np.mean([e["hold"] for e in passes]), first_time_pass=np.mean([e["hold"] < .6 for e in passes]),
                 first_time_big_chance=np.mean([e["hold"] < .6 for e in shots]) if shots else np.nan, near_ball_defenders=np.mean(near), near_ball_danger=np.mean(dng) if dng else np.nan,
-                bunched_frames=bunched / max(len(near), 1), unmarked_in_box=box_free / max(box_tot, 1), nearest_mate=np.mean(mates), attackers_near_box=np.mean(nbox) if nbox else np.nan)
+                bunched_frames=bunched / max(len(near), 1), unmarked_in_box=box_free / max(box_tot, 1), nearest_mate=np.mean(mates), attackers_near_box=np.mean(nbox) if nbox else np.nan, still_while_held=still_held, still_restart=still_dead, mean_speed_held=mean_held)
 
 
 if __name__ == "__main__":

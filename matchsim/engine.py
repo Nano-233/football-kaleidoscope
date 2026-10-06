@@ -20,9 +20,9 @@ from .movement import _tf, _unit, nrm, clip
 
 DT = 0.2
 # Single tuning table (calibrated by scripts/calibrate.py against real-football norms).
-TUNE = dict(shoot_min=.1, react=3.0, patience=.6, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.4, fk_bonus=0.05, long_bonus=0.523, prog_base=0.654, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=2.2, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=1.05, shot_k=3.15, shot_k_dir=5.0,
+TUNE = dict(shoot_min=.12, react=3.0, patience=.6, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.4, fk_bonus=0.05, long_bonus=0.523, prog_base=0.654, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=1.3, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=1.3, shot_k=3.15, shot_k_dir=5.0,
             carry_base=.3, carry_prog=.2, carry_streak=.3, dwell_base=0.9, dwell_shape=2.4, dwell_scale=1.61,
-            tackle_rate=0.3, wide_error=3.2, off_miss=.2, off_mult=.25)
+            tackle_rate=0.22, wide_error=3.2, off_miss=.2, off_mult=.25)
 sig = lambda x: 1 / (1 + np.exp(-x))
 GOAL_HALF = 3.66
 _MULT = ("shot", "runs", "follow", "prog", "loss", "cruise", "commit", "foul", "tackle")
@@ -88,6 +88,8 @@ class Match:
         s.first_time_ok = 1.0
         s._tg = s._urg = None
         s.turnover, s.sched = None, []
+        s.dead_log = []  # [start, end, kind] of every dead-ball spell
+        s.idle_off, s.idle_until = np.zeros((22, 2)), np.zeros(22)  # players mill about while the ball is dead
         s.state_ticks = collections.Counter()
         s.phase = s.rng.uniform(0, 6.28, 22)
         s.recent = np.zeros(22)  # recent touches, decays; the ball gets spread around instead of feeding one man
@@ -104,6 +106,8 @@ class Match:
         s.carry_streak = 0
         s.next_dec, s.protect_until = 0., 0.
         s.carry_tgt = s.ball.copy()
+        s.carry_dir, s.carry_speed = np.array([1., 0.]), 3.
+        s.space_off, s.space_until = np.zeros((22, 2)), np.zeros(22)  # where each off-ball player has chosen to stand (offset from his zone) and until when
         s._reset_positions()
         s.tgt = s.pos.copy()
         s.tsm = s.pos.copy()
@@ -178,7 +182,7 @@ class Match:
         dx, dy = L - C[0], C[1] - W / 2
         d = np.hypot(dx, dy)
         ang = abs(np.arctan2(W / 2 + GOAL_HALF - C[1], dx) - np.arctan2(W / 2 - GOAL_HALF - C[1], dx))
-        z = -1.95 - .13 * d + 2.0 * ang - (.2 if header else 0)
+        z = -2.15 - .13 * d + 2.0 * ang - (.2 if header else 0)
         a, b = np.array([L, W / 2 - GOAL_HALF]), np.array([L, W / 2 + GOAL_HALF])
         cr = lambda p, q, r: (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
         nb = 0
@@ -220,6 +224,9 @@ class Match:
         s.state, s.poss, s.carrier, s.flight = "dead", team, -1, None
         s.ball, s.ball_v = np.array(pos, float), np.zeros(2)
         s.dead = dict(kind=kind, team=team, pos=np.array(pos, float), taker=int(taker), ready=s.t + delay)
+        if s.dead_log and s.dead_log[-1][1] is None:
+            s.dead_log[-1][1] = s.t
+        s.dead_log.append([s.t, None, kind])
         if kind == "corner":  # a short corner now and then: a teammate comes to the corner flag
             own = np.arange(11 * team, 11 * team + 11)
             helpers = [j for j in own if s.role[j] in (ROLE_IDX["FB"], ROLE_IDX["CM"], ROLE_IDX["WG"], ROLE_IDX["AM"]) and not s.off[j] and j != taker]
@@ -262,9 +269,18 @@ class Match:
         else:
             tg, urg = s._tg.copy(), s._urg.copy()
         if s.state == "held":
-            tg[s.carrier], urg[s.carrier] = s.carry_tgt, True
+            tg[s.carrier], urg[s.carrier] = clip(s.pos[s.carrier] + s.carry_dir * 12, [1., 1.], [L - 1, W - 1]), True  # always running somewhere, never parked
         elif s.state == "dead":
             tg[s.dead["taker"]], urg[s.dead["taker"]] = s.dead["pos"], True
+        if s.state == "dead" and s.dead["kind"] not in ("kickoff", "penalty") and s.dead["ready"] - s.t > 1.5:
+            due = s.idle_until <= s.t  # waiting players wander a few metres every few seconds: stretch, reposition, find a marker
+            if due.any():
+                sd = np.where(np.arange(22) // 11 == s.dead["team"], 3.0, 1.8)[due]  # the side with the restart looks for room, the other holds its shape
+                s.idle_off[due] = s.rng.normal(0, 1, (int(due.sum()), 2)) * sd[:, None]
+                s.idle_until[due] = s.t + s.rng.uniform(4, 8, int(due.sum()))
+            mill = ~s.off
+            mill[[0, 11, s.dead["taker"]]] = False
+            tg[mill] += s.idle_off[mill]
         s.tgt = tg
         s._steer(tg, urg)
         for t in (0, 1):
@@ -327,7 +343,7 @@ class Match:
         energy = s.mod["cruise"] * movement.CRUISE[s.role]  # role/trait work rate: how much ground a player covers
         cap = np.where(urg, vmax, np.minimum(vmax, (4.3 + .07 * s.attr["work_rate"]) * energy))
         if s.state == "held":
-            cap[s.carrier] = min(cap[s.carrier], .85 * vmax[s.carrier])
+            cap[s.carrier] = min(cap[s.carrier], s.carry_speed, .85 * vmax[s.carrier])
         vdes = d / np.maximum(dist, 1e-6)[:, None] * np.minimum(cap, np.maximum(dist - .4, 0) * 1.1 * np.where(urg, 1., energy))[:, None]
         dv = vdes - s.vel
         n = nrm(dv, axis=1)
@@ -409,6 +425,7 @@ class Match:
         s.next_dec = s.t + s._dwell(i)
         s.protect_until = s.t + .6
         s.carry_tgt = s.pos[i] + np.array([1., 0.] if t == 0 else [-1., 0.]) * 5
+        s.carry_dir, s.carry_speed = np.array([1., 0.] if t == 0 else [-1., 0.]), 1.6 + 1.0 * float(clip(nrm(s.pos[s._opp(t)] - s.pos[i], axis=1).min() / 8, 0, 1))  # a jog with the ball, faster with space
         s.spell = (s.t, s.pos[i].copy(), i)
 
     def _end_spell(s):
@@ -711,6 +728,8 @@ class Match:
                     return s._loose_ball(_unit(s.vel[o] + s.rng.normal(0, 1, 2)) * 2.5)
                 s.block_until[o] = s.t + 1.2
             s.carry_tgt = f(cpos)
+            s.carry_dir = _unit(f(cpos) - s.pos[c])
+            s.carry_speed = float(min(.85 * s.vmax[c], 3.2 + 2.2 * (1 - pr)))  # running at a defender or into space: faster when unpressed
             s.carry_streak += 1
             s.next_dec = s.t + s.rng.uniform(.35, .6)  # keep carrying and look again shortly
 
@@ -1124,7 +1143,7 @@ class Match:
         s.ball = pt.copy()
         pt_t = _tf(pt) if t else pt
         if t == f["team"]:
-            if pt_t[0] > .7 * L and abs(pt_t[1] - W / 2) < 18 and s.rng.random() < .18:
+            if pt_t[0] > .7 * L and abs(pt_t[1] - W / 2) < 18 and s.rng.random() < .13:
                 s._gain_control(i, pt)
                 C = pt_t
                 O = _tf(s.pos[s._opp(t)]) if t else s.pos[s._opp(t)]
@@ -1253,6 +1272,8 @@ class Match:
         if s.t >= d["ready"] and nrm(s.pos[k] - d["pos"]) < 1.3:
             s.last_ctrl_team = d["team"] if s.last_ctrl_team is None else s.last_ctrl_team
             s._gain_control(k, d["pos"])
+            if s.dead_log and s.dead_log[-1][1] is None:
+                s.dead_log[-1][1] = s.t
             s.rk = d["kind"] if d["kind"] != "kickoff" else None
             s.next_dec = s.t + .4
 
@@ -1261,6 +1282,6 @@ class Match:
         fr = np.round(np.array(s.frames), 1)
         return dict(
             meta=dict(seed=s.seed, dt=s.dt, pitch=[L, W], home=team_meta(s.teams[0]), away=team_meta(s.teams[1]),
-                      score=s.score, ball_in_play=round(1 - s.state_ticks["dead"] / max(sum(s.state_ticks.values()), 1), 3), half_time=s.h1, added_time=s.added, duration=round(s.t, 1), info=s.info,
+                      score=s.score, dead_log=[[round(a, 1), round(b if b is not None else s.t, 1), k] for a, b, k in s.dead_log], ball_in_play=round(1 - s.state_ticks["dead"] / max(sum(s.state_ticks.values()), 1), 3), half_time=s.h1, added_time=s.added, duration=round(s.t, 1), info=s.info,
                       frame_cols=["t", "ball_x", "ball_y", "carrier", "poss"] + [f"{c}{i}" for i in range(22) for c in "xy"] + ["ball_z"]),
             events=s.events, frames=fr.tolist())
