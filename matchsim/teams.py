@@ -139,6 +139,7 @@ def make_team(code, formation="4-3-3", tactics=None, quality=None, rng=None):
     rng = rng or np.random.default_rng()
     name, q = LEAGUE[code]
     q = quality if quality is not None else q
+    q = 12.8 + (q - 12.8) * .8  # compress the spread: real leagues are more balanced than raw attribute gaps suggest
     slots = FORMATIONS[formation]
     # stars: the best forward, one creative midfielder/winger and one defender or the keeper
     pick = lambda roles: [i for i, s_ in enumerate(slots) if s_[1] in roles]

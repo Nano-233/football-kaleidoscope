@@ -19,14 +19,14 @@ from .movement import _tf, _unit
 
 DT = 0.2
 # Single tuning table (calibrated by scripts/calibrate.py against real-football norms).
-TUNE = dict(shot_mid=1.0, usage=.4, fk_bonus=.4, long_bonus=0.65, prog_base=0.654, prog_dir=0.9, keep=.35, loss=1.0, cross_v=1.4, gk_long=.5, box_foul=.08, home_edge=.35, shot_cost=0.5, shot_k=4.5, shot_k_dir=5.0,
-            carry_base=.1, carry_prog=.2, carry_streak=.3, dwell_base=1.04, dwell_shape=2.4, dwell_scale=1.4,
-            tackle_rate=0.164, wide_error=2.0, off_miss=.55, off_mult=.5)
+TUNE = dict(pass_sigma=1.55, intercept=.33, shot_mid=1.4, usage=0.4, fk_bonus=0.4, long_bonus=0.523, prog_base=0.654, prog_dir=0.9, keep=0.455, loss=1.0, cross_v=0.98, gk_long=.5, box_foul=.08, home_edge=1.2, shot_cost=0.5, shot_k=4.5, shot_k_dir=5.0,
+            carry_base=.1, carry_prog=.2, carry_streak=.3, dwell_base=1.04, dwell_shape=2.4, dwell_scale=1.61,
+            tackle_rate=0.164, wide_error=2.6, off_miss=0.55, off_mult=.5)
 sig = lambda x: 1 / (1 + np.exp(-x))
 GOAL_HALF = 3.66
 _MULT = ("shot", "runs", "follow", "prog", "loss", "cruise", "commit", "foul", "tackle")
 _ADD = ("range", "carry", "takeon", "sweep")
-ROLE_SHOT = np.array([0., .6, .7, .9, 1.15, 1.1, 1.25, 1.0])  # shot appetite by role (GK CB FB DM CM WG AM ST)
+ROLE_SHOT = np.array([0., .6, .7, .9, 1.15, 1.1, 1.25, .85])  # shot appetite by role (GK CB FB DM CM WG AM ST)
 _PRESET_X = {"GK": .03, "CB": .20, "FB": .22, "DM": .37, "CM": .43, "WG": .66, "AM": .57, "ST": .70}
 _ROLE_NAME = {v: k for k, v in ROLE_IDX.items()}
 PARK = np.array([[L / 2, -40. - 2 * (i % 11)] for i in range(22)])  # sent-off players wait off the pitch
@@ -288,7 +288,7 @@ class Match:
         dist = np.linalg.norm(d, axis=1)
         vmax = s.vmax * (1 - .15 * (1 - s.stam))
         energy = s.mod["cruise"] * movement.CRUISE[s.role]  # role/trait work rate: how much ground a player covers
-        cap = np.where(urg, vmax, np.minimum(vmax, (4.0 + .07 * s.attr["work_rate"]) * energy))
+        cap = np.where(urg, vmax, np.minimum(vmax, (4.3 + .07 * s.attr["work_rate"]) * energy))
         if s.state == "held":
             cap[s.carrier] = min(cap[s.carrier], .85 * vmax[s.carrier])
         vdes = d / np.maximum(dist, 1e-6)[:, None] * np.minimum(cap, np.maximum(dist - .4, 0) * 1.1 * np.where(urg, 1., energy))[:, None]
@@ -512,7 +512,7 @@ class Match:
             p_ctrl = np.clip(.84 + .13 * sig(.7 * (dn_r - 2.2)) + .004 * (tech - 10), .35, .98)
             p_air = np.clip(.55 + .02 * (a["aerial"][11 * t + m_] - a["aerial"][s._opp(t)].mean()), .2, .85)
             p_ctrl = np.where(lofted, p_air, p_ctrl)
-            sg = (.5 + .05 * d2) * (1.7 - .06 * a["passing"][c]) * (1 + .35 * pr) * np.where(lofted, 1.5, 1)
+            sg = (.5 + .05 * d2) * (TUNE["pass_sigma"] - .06 * a["passing"][c]) * (1 + .35 * pr) * np.where(lofted, 1.5, 1)
             p_acc = 1 - np.exp(-(2.5 ** 2) / (2 * sg ** 2))
             p_s = (1 - p_int) * p_acc * p_ctrl
             line = s.line_hist[t][0]  # second-last defender as the passer last saw him; defenders may have stepped up since
@@ -617,7 +617,7 @@ class Match:
         start = s.ball.copy()
         d = np.linalg.norm(aim - start)
         pr = np.clip(1 - np.linalg.norm(s.pos[s._opp(t)] - s.pos[c], axis=1).min() / 5, 0, 1)
-        sg = (.5 + .05 * d) * (1.7 - .06 * s.attr["passing"][c]) * (1 + .35 * pr) * (1.8 if lofted else 1) * sigma_scale
+        sg = (.5 + .05 * d) * (TUNE["pass_sigma"] - .06 * s.attr["passing"][c]) * (1 + .35 * pr) * (1.8 if lofted else 1) * sigma_scale
         sg *= s.rain
         wide = min(aim[1], W - aim[1]) < 9
         end = aim + s.rng.normal(0, sg * (1 + TUNE["wide_error"] * wide), 2)
@@ -860,7 +860,7 @@ class Match:
                     p = s._claim_p(i, f["speed"], f["team"], q[i], True)
                 else:
                     ar = s.attr
-                    p = float(np.clip(.33 + .02 * (ar["positioning"][i] - 10) + .01 * (ar["tackling"][i] - 10) - .02 * (f["speed"] - 12), .15, .9)) * float(np.clip((s.t - f["t0"]) / .3, .35, 1))
+                    p = float(np.clip(TUNE["intercept"] + .02 * (ar["positioning"][i] - 10) + .01 * (ar["tackling"][i] - 10) - .02 * (f["speed"] - 12), .15, .9)) * float(np.clip((s.t - f["t0"]) / .3, .35, 1))
                 if s.rng.random() < p:
                     s.ball = q[i]
                     return s._gain_control(i, q[i])
@@ -891,7 +891,7 @@ class Match:
     def _aerial(s, f):
         pt = f["end"]
         d = np.linalg.norm(s.pos - pt, axis=1)
-        ok = (d < 5) & (s.block_until <= s.t)
+        ok = (d < 6.5) & (s.block_until <= s.t)
         if not ok.any():
             return s._loose_ball(s.rng.normal(0, 1.5, 2))
         a = s.attr
