@@ -73,6 +73,7 @@ class Match:
         s.added = [None, None]
         s.injured, s.pending_inj = np.zeros(22, bool), []
         s.ctrl_t = 0.
+        s.state_ticks = collections.Counter()
         s.phase = s.rng.uniform(0, 6.28, 22)
         s.line_hist = [collections.deque(maxlen=4), collections.deque(maxlen=4)]  # the line as the passer last saw it (~.8 s ago)
         s.done = False
@@ -240,6 +241,7 @@ class Match:
         if s.pending_inj and s.state in ("held", "dead"):
             s._stop_for_injury()
         {"held": s._held, "flight": s._flight, "loose": s._loose, "dead": s._dead_step}[s.state]()
+        s.state_ticks[s.state] += 1
         if s.tick % 150 == 0 and s.t > 120:
             s._manage()
         if s.state == "dead":
@@ -555,7 +557,7 @@ class Match:
             s.next_dec = s.t + s.rng.uniform(.8, 1.6)
 
     # ------------------------------------------------------------------ actions
-    def _pass(s, c, rcv, aim, lofted, spd, est, kind="pass", sigma_scale=1.0, why=None):
+    def _pass(s, c, rcv, aim, lofted, spd, est, kind="pass", sigma_scale=1.0, why=None, source=None):
         t = c // 11
         start = s.ball.copy()
         d = np.linalg.norm(aim - start)
@@ -575,7 +577,7 @@ class Match:
                      "through_ball" if not lofted and fwd > 14 and f_(aim)[0] > line - 3 else "forward" if fwd > 8 else "backward" if fwd < -5 else "sideways")
         ev = s.emit(kind, player=c, pos=start, end=aim, length=d, speed=spd, lofted=lofted, height="high" if lofted else "ground",
                     body_part="foot", technique=technique, receiver=None if rcv is None else s.ids[rcv], p_success=est,
-                    difficulty=1 - est, progressive=bool(fwd >= 10), outcome=None, why=why)
+                    difficulty=1 - est, progressive=bool(fwd >= 10), gain=round(float(fwd), 1), source=source, outcome=None, why=why)
         s._end_spell()
         if offside:
             ev["outcome"] = "offside"
@@ -600,7 +602,7 @@ class Match:
         if not box:
             box = [i for i in range(1, 11) if 11 * t + i != c]
         j = max(box, key=lambda i: s.attr["aerial"][11 * t + i] - .15 * np.linalg.norm(P[i] - np.array([L - 9, W / 2])))
-        s._pass(c, 11 * t + j, f(P[j]), True, 19., .35, kind="cross", sigma_scale=.8)
+        s._pass(c, 11 * t + j, f(P[j]), True, 19., .35, kind="cross", sigma_scale=.8, source="corner")
 
     def _shoot(s, c, C, xg, nb, kind="shot", why=None):
         t = c // 11
@@ -967,6 +969,6 @@ class Match:
         fr = np.round(np.array(s.frames), 1)
         return dict(
             meta=dict(seed=s.seed, dt=s.dt, pitch=[L, W], home=team_meta(s.teams[0]), away=team_meta(s.teams[1]),
-                      score=s.score, half_time=s.h1, added_time=s.added, duration=round(s.t, 1), info=s.info,
+                      score=s.score, ball_in_play=round(1 - s.state_ticks["dead"] / max(sum(s.state_ticks.values()), 1), 3), half_time=s.h1, added_time=s.added, duration=round(s.t, 1), info=s.info,
                       frame_cols=["t", "ball_x", "ball_y", "carrier", "poss"] + [f"{c}{i}" for i in range(22) for c in "xy"]),
             events=s.events, frames=fr.tolist())
