@@ -1,0 +1,9 @@
+[project]
+name = "matchday-newsroom"
+version = "0.1.0"
+description = "Synthetic football match engine + multi-agent match intelligence (Microsoft Premier League Hackathon)"
+requires-python = ">=3.11"
+dependencies = ["numpy", "scipy"]
+
+[project.optional-dependencies]
+dev = ["matplotlib", "pytest"]

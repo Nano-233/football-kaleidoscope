@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Match Viewer</title>
+<style>
+  :root{--bg:#0f1720;--fg:#e8eef5;--mut:#8aa0b4;--home:#3b82f6;--away:#ef4444}
+  body{margin:0;background:var(--bg);color:var(--fg);font:14px system-ui,sans-serif;display:flex;flex-direction:column;align-items:center}
+  #bar{display:flex;gap:12px;align-items:center;padding:8px 16px;flex-wrap:wrap;width:100%;box-sizing:border-box;max-width:1100px}
+  #score{font-size:20px;font-weight:700;min-width:240px}
+  input[type=range]{flex:1;min-width:200px}
+  canvas{height:calc(100vh - 150px);max-width:100vw;aspect-ratio:1100/720;background:#1b6b3a;display:block}
+  #log{width:100%;max-width:1100px;box-sizing:border-box;padding:8px 16px;color:var(--mut);font-size:12px;height:90px;overflow:hidden}
+  button,select{background:#22303f;color:var(--fg);border:1px solid #33475c;border-radius:6px;padding:4px 10px}
+</style></head><body>
+<div id="bar">
+  <span id="score">loading…</span>
+  <button id="play">Play</button>
+  <select id="speed"><option>1</option><option>2</option><option selected>5</option><option>10</option><option>30</option></select>x
+  <input id="seek" type="range" min="0" max="1" step="0.1" value="0">
+  <span id="clock"></span>
+</div>
+<canvas id="c" width="1100" height="720"></canvas>
+<div id="log"></div>
+<script>
+const $ = id => document.getElementById(id), cv = $('c'), g = cv.getContext('2d');
+const L = 105, W = 68, PAD = 30, SX = (cv.width - 2*PAD)/L, SY = (cv.height - 2*PAD)/W;
+const px = x => PAD + x*SX, py = y => PAD + y*SY;
+let D, frames, dt, t = 0, playing = false, last = 0, names = {};
+const src = new URLSearchParams(location.search).get('src') || '../out/match_1.json';
+fetch(src).then(r => r.json()).then(d => {
+  D = d; frames = d.frames; dt = d.meta.dt;
+  [...d.meta.home.players, ...d.meta.away.players].forEach(p => names[p.id] = p);
+  $('seek').max = d.meta.duration; draw();
+});
+function pitch(){
+  g.fillStyle = '#1b6b3a'; g.fillRect(0,0,cv.width,cv.height);
+  g.strokeStyle = 'rgba(255,255,255,.7)'; g.lineWidth = 2;
+  g.strokeRect(px(0),py(0),L*SX,W*SY);
+  g.beginPath(); g.moveTo(px(L/2),py(0)); g.lineTo(px(L/2),py(W)); g.stroke();
+  g.beginPath(); g.arc(px(L/2),py(W/2),9.15*SX,0,7); g.stroke();
+  for (const s of [0,1]) { const x = s ? L : 0, d = s ? -1 : 1;
+    g.strokeRect(px(s ? L-16.5 : 0),py(W/2-20.16),16.5*SX,40.32*SY);
+    g.strokeRect(px(s ? L-5.5 : 0),py(W/2-9.16),5.5*SX,18.32*SY);
+    g.strokeRect(px(s ? L : -2),py(W/2-3.66),2*SX,7.32*SY); }
+}
+function draw(){
+  if (!D) return;
+  const i = Math.min(frames.length-1, Math.max(0, Math.round(t/dt))), f = frames[i];
+  pitch();
+  const carrier = f[3];
+  for (let k = 0; k < 22; k++) {
+    const x = px(f[5+2*k]), y = py(f[6+2*k]), home = k < 11;
+    g.beginPath(); g.arc(x,y,9,0,7); g.fillStyle = home ? '#3b82f6' : '#ef4444'; g.fill();
+    g.lineWidth = k % 11 === 0 ? 3 : 1; g.strokeStyle = k % 11 === 0 ? '#facc15' : '#fff'; g.stroke();
+    if (k === carrier) { g.beginPath(); g.arc(x,y,14,0,7); g.strokeStyle = '#fff'; g.lineWidth = 2; g.stroke(); }
+    g.fillStyle = '#fff'; g.font = '10px sans-serif'; g.textAlign = 'center'; g.fillText((k % 11)+1, x, y+3.5);
+  }
+  g.beginPath(); g.arc(px(f[1]),py(f[2]),5,0,7); g.fillStyle = '#fff'; g.fill(); g.strokeStyle = '#000'; g.lineWidth = 1.5; g.stroke();
+  const ev = D.events.filter(e => e.t <= t);
+  let h = 0, a = 0; ev.forEach(e => { if (e.type === 'goal') e.team ? a++ : h++; });
+  $('score').textContent = `${D.meta.home.code} ${h} – ${a} ${D.meta.away.code}`;
+  const m = Math.floor(t/60), s = Math.floor(t%60);
+  $('clock').textContent = `${m}:${String(s).padStart(2,'0')}`;
+  $('log').innerHTML = ev.filter(e => !['pressure','carry','possession_change'].includes(e.type)).slice(-6).reverse()
+    .map(e => `${Math.floor(e.t/60)}' ${e.type}${e.player ? ' – '+(names[e.player]?.name||e.player) : ''}${e.outcome ? ' ('+e.outcome+')' : ''}${e.xg ? ' xG '+e.xg.toFixed(2) : ''}`).join('<br>');
+  $('seek').value = t;
+}
+function tick(now){
+  if (playing) { t = Math.min(D.meta.duration, t + (now-last)/1000 * +$('speed').value); if (t >= D.meta.duration) playing = false; }
+  last = now; draw(); requestAnimationFrame(tick);
+}
+$('play').onclick = () => { playing = !playing; $('play').textContent = playing ? 'Pause' : 'Play'; };
+$('seek').oninput = e => { t = +e.target.value; draw(); };
+requestAnimationFrame(tick);
+</script></body></html>
