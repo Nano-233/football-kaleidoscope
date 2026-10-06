@@ -23,6 +23,7 @@ python scripts/run_match.py 1      # writes out/match_1.json (events + 5 Hz trac
 python -m http.server 8765         # then open http://localhost:8765/viewer/index.html?src=../out/match_1.json
 python scripts/calibrate.py 18     # simulate 18 matches and compare with real-football norms
 python scripts/tactics_effect.py   # check that tactics measurably change behaviour
+python scripts/run_by_role.py 18   # distance covered per position vs real-world norms
 python tests/test_sim.py           # determinism + invariants
 ```
 

@@ -80,23 +80,77 @@ def _name(rng):
     return f"{first} {last}"
 
 
+# Traits: small, football-readable behaviour modifiers on top of attributes.
+# keys - mult: shot, runs, follow, prog, loss, cruise, commit, foul, tackle | add: range (m of shot range), carry,
+#        takeon (p_beat) | baked into attributes: vision, aerial, finishing | flag: sweep
+TRAITS = {
+    "long_shots":     ("Shoots from distance",                  dict(shot=1.5, range=7)),
+    "poacher":        ("Lives on the last defender",            dict(shot=1.25, runs=1.6, follow=.7)),
+    "clinical":       ("Rarely wastes a chance",                dict(finishing=2.5)),
+    "playmaker":      ("Looks for the incisive pass",           dict(prog=3.0, vision=2.5, loss=.8)),
+    "safe_passer":    ("Keeps it simple, retains possession",   dict(loss=1.6, prog=.6)),
+    "dribbler":       ("Takes defenders on",                    dict(carry=.15, takeon=.07)),
+    "runner":         ("Runs in behind, stretches the defence", dict(runs=2.2, cruise=1.05)),
+    "box_to_box":     ("Covers every blade of grass",           dict(cruise=1.15, follow=1.35)),
+    "hard_tackler":   ("Wins the ball by force",                dict(commit=1.6, tackle=1.3, foul=1.5)),
+    "target_man":     ("Holds the ball up, wins headers",       dict(aerial=4, follow=.65, cruise=.9, runs=.6)),
+    "sweeper_keeper": ("Plays high, sweeps behind the line",    dict(sweep=1)),
+    "low_workrate":   ("Conserves energy",                      dict(cruise=.88, follow=.8)),
+}
+_ROLE_TRAITS = {
+    "ST": ["poacher", "target_man", "runner", "clinical", "long_shots", "dribbler"],
+    "WG": ["dribbler", "runner", "long_shots", "playmaker", "clinical", "low_workrate"],
+    "AM": ["playmaker", "long_shots", "dribbler", "runner", "clinical"],
+    "CM": ["box_to_box", "playmaker", "hard_tackler", "long_shots", "safe_passer", "low_workrate"],
+    "DM": ["hard_tackler", "safe_passer", "playmaker", "box_to_box"],
+    "FB": ["runner", "box_to_box", "safe_passer", "hard_tackler", "dribbler"],
+    "CB": ["hard_tackler", "safe_passer", "target_man", "playmaker"],
+    "GK": ["sweeper_keeper"],
+}
+_ROLE_KEY = {"GK": ["gk", "composure", "passing"], "CB": ["tackling", "aerial", "strength", "positioning"],
+             "FB": ["pace", "stamina", "tackling", "passing"], "DM": ["tackling", "passing", "positioning", "stamina"],
+             "CM": ["passing", "vision", "stamina", "tackling"], "WG": ["pace", "dribbling", "accel", "passing"],
+             "AM": ["passing", "vision", "dribbling", "finishing"], "ST": ["finishing", "pace", "aerial", "composure"]}
+_BENCH = ["GK", "CB", "FB", "DM", "CM", "WG", "ST"]  # 7 on the bench; 5 substitutions allowed
+
+
+def overall(p):
+    return round(float(np.mean([p["attrs"][a] for a in _ROLE_KEY[p["role"]]])), 1)
+
+
+def _player(code, num, label, role, anchor, q, rng, star=False):
+    prof = _PROFILE[role]
+    attrs = {a: float(np.clip(q + prof.get(a, 0) + rng.normal(0, 1.4), 1, 20)) for a in ATTRS}
+    if role != "GK":
+        attrs["gk"] = 1.0
+    if star:
+        for a in _ROLE_KEY[role]:
+            attrs[a] = min(20., attrs[a] + 2.5)
+    pool = _ROLE_TRAITS[role]
+    n = 1 if role == "GK" and rng.random() < .5 else (0 if role == "GK" else int(rng.choice([0, 1, 1, 2]) if not star else rng.choice([1, 2])))
+    traits = [str(t) for t in rng.choice(pool, size=min(n, len(pool)), replace=False)] if n else []
+    p = dict(id=f"{code}{num:02d}", name=_name(rng), number=num, label=label, role=role, anchor=anchor,
+             attrs=attrs, traits=traits, star=star)
+    p["overall"] = overall(p)
+    return p
+
+
 def make_team(code, formation="4-3-3", tactics=None, quality=None, rng=None):
     rng = rng or np.random.default_rng()
     name, q = LEAGUE[code]
     q = quality if quality is not None else q
-    players = []
-    for i, (label, role, ax, ay) in enumerate(FORMATIONS[formation]):
-        prof = _PROFILE[role]
-        attrs = {a: float(np.clip(q + prof.get(a, 0) + rng.normal(0, 1.4), 1, 20)) for a in ATTRS}
-        if role != "GK":
-            attrs["gk"] = 1.0
-        players.append(dict(id=f"{code}{i + 1:02d}", name=_name(rng), number=i + 1, label=label, role=role,
-                            anchor=(ax, ay), attrs=attrs))
-    return dict(code=code, name=name, formation=formation, quality=q,
-                tactics=tactics or Tactics(), players=players)
+    slots = FORMATIONS[formation]
+    # stars: the best forward, one creative midfielder/winger and one defender or the keeper
+    pick = lambda roles: [i for i, s_ in enumerate(slots) if s_[1] in roles]
+    stars = {int(rng.choice(pick(["ST", "AM", "WG"]))), int(rng.choice(pick(["CM", "AM", "DM", "WG"]))), int(rng.choice(pick(["CB", "GK", "FB"])))}
+    players = [_player(code, i + 1, lab, role, (ax, ay), q, rng, star=i in stars) for i, (lab, role, ax, ay) in enumerate(slots)]
+    bench = [_player(code, 12 + k, r, r, None, q - 1.0, rng) for k, r in enumerate(_BENCH)]
+    return dict(code=code, name=name, formation=formation, quality=q, tactics=tactics or Tactics(), players=players, bench=bench)
 
 
 def team_meta(t):
+    keep = ("id", "name", "number", "label", "role", "traits", "star", "overall")
     return dict(code=t["code"], name=t["name"], formation=t["formation"], quality=t["quality"],
                 tactics=asdict(t["tactics"]),
-                players=[{k: p[k] for k in ("id", "name", "number", "label", "role")} for p in t["players"]])
+                players=[{k: p[k] for k in keep} for p in t["players"]],
+                bench=[{k: p[k] for k in keep} for p in t["bench"]])

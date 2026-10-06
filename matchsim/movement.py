@@ -17,6 +17,7 @@ GK, CB, FB, DM, CM, WG, AM, ST = range(8)
 PUSH = np.array([0, 3, 9, 2, 4, 8, 7, 6.])        # metres forward when we have the ball
 DROP = np.array([0, -2, -3, -1, -3, -6, -7, -10.])  # metres back when we do not
 FOLLOW = np.array([.1, .5, .55, .55, .55, .5, .5, .45])  # how strongly the role follows the ball's x
+CRUISE = np.array([1.3, 1.5, 1.4, 1.35, 1.75, 1.1, 1.1, .8])  # jogging speed by role (box-to-box midfielders cover more ground)
 MIN_X = np.array([0, 12, 11, 17, 21, 24, 26, 30.])  # deepest a role will drop (defenders hold the box edge, they do not hug the goal line)
 GOAL = np.array([0., W / 2])
 TUNE_COMMIT = .12
@@ -83,7 +84,7 @@ def team_targets(m, t):
         return f(tg), urgent
 
     # ---- team block: follows the ball, shaped by tactic and phase ---------------------
-    kx = FOLLOW[role] * (1 + .3 * (tc.compactness - .5))
+    kx = FOLLOW[role] * m.mod["follow"][sl] * (1 + .3 * (tc.compactness - .5))
     tx = A[:, 0] + kx * (B[0] - L / 2) + (tc.line_height - .5) * 14 * out_f
     by = B[1] - W / 2
     if has:
@@ -136,7 +137,7 @@ def team_targets(m, t):
                 if d[i] < R:
                     g = 11 * t + i  # jockey goal-side; occasionally commit to the tackle
                     danger = np.clip((.4 * L - C[0]) / (.3 * L), 0, 1)  # defenders commit more as the ball nears their goal
-                    if m.t >= m.commit_until[g] and m.rng.random() < (TUNE_COMMIT + .3 * tc.press) * (1 + 2 * danger) * m.dt:
+                    if m.t >= m.commit_until[g] and m.rng.random() < (TUNE_COMMIT + .3 * tc.press) * m.mod["commit"][g] * (1 + 2 * danger) * m.dt:
                         m.commit_until[g] = m.t + m.rng.uniform(1., 2.)
                     zone[i] = C + Cv * .2 if m.t < m.commit_until[g] else C + _unit(GOAL - C) * (1.8 + 1.6 * (1 - tc.press)) + Cv * .2
                     urgent[i] = True
@@ -166,7 +167,7 @@ def team_targets(m, t):
         if mine and m.state == "held":
             C = P[carrier - 11 * t]
             elig = ((role == ST) | (role == WG) | (role == AM)) & (m.t >= m.run_cool[sl]) & (C[0] > .3 * L)
-            start = elig & (m.rng.random(11) < (.05 + .12 * tc.directness) * m.dt)
+            start = elig & (m.rng.random(11) < (.05 + .12 * tc.directness) * m.mod["runs"][sl] * m.dt)
             for i in np.nonzero(start)[0]:
                 line = max(np.sort(O[:, 0])[-2], L / 2)
                 m.run_tgt[11 * t + i] = (min(line - 1, C[0] + 28), np.clip(A[i, 1] + m.rng.uniform(-9, 9), 4, W - 4))
@@ -194,5 +195,6 @@ def team_targets(m, t):
                 zone[r], urgent[r] = f(m.flight["end"]), True  # receiver tracks the real ball flight
 
     # ---- goalkeeper ---------------------------------------------------------------------
-    zone[0] = (np.clip(2.5 + (.12 if has else .05) * B[0], 2.5, 14), W / 2 + np.clip(by * .22, -8, 8))
+    sw = 1 + 1.2 * m.mod["sweep"][11 * t]  # sweeper keepers play higher
+    zone[0] = (np.clip(2.5 + (.12 if has else .05) * B[0] * sw, 2.5, 14 * sw), W / 2 + np.clip(by * .22, -8, 8))
     return f(np.stack([np.clip(zone[:, 0], 1, L - 1), np.clip(zone[:, 1], 1, W - 1)], 1)), urgent

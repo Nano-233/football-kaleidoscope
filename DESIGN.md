@@ -36,6 +36,22 @@ movement. `engine._steer` moves players with pace, acceleration, stamina limits 
 **Dynamic resolution.** Passes and loose balls are resolved by whoever physically reaches the ball first rolling for
 control, so completion rates emerge from player positions instead of being dice rolls detached from the geometry.
 
+## Players, traits and the manager
+
+- **Attributes** (14, scale 1-20): pace, acceleration, stamina, work rate, strength, passing, vision, dribbling,
+  finishing, tackling, aerial, composure, positioning, goalkeeping. Each drives specific behaviour in the engine.
+- **Roles** (GK, CB, FB, DM, CM, WG, AM, ST) set position, push/drop, how much the player follows the ball and how
+  much ground he covers (`movement.CRUISE`): central midfielders run ~12 km, wide players and holding midfielders ~10.5-11,
+  centre-backs ~9, strikers ~10, keepers ~4 (`scripts/run_by_role.py` checks this against real-world norms).
+- **Traits** (12, `teams.TRAITS`): long_shots, poacher, clinical, playmaker, safe_passer, dribbler, runner, box_to_box,
+  hard_tackler, target_man, sweeper_keeper, low_workrate. Each is a small modifier on decisions or movement.
+- **Stars**: each squad has three standout players (a forward, a creative midfielder, a defender or keeper) with boosted
+  key attributes and at least one trait. Every player has an `overall` rating.
+- **Bench and substitutions**: 7 on the bench, 5 substitutions in three windows. The manager chooses like-for-like fresh
+  legs, attacking changes when trailing, or defensive changes when protecting a late lead.
+- **In-match tactics**: every 30 s the manager shifts press, line height, risk, directness, compactness and width for the
+  score, time and numbers (`tactic_change` events). Red cards (direct, or a second yellow) leave a team a man down.
+
 ## Realism evidence
 
 `scripts/calibrate.py` simulates N matches and compares aggregates with rough real-football norms (goals, shots,
@@ -45,7 +61,7 @@ pressures +44%, opponent passes -27%, possession rises; line height raises the c
 
 ## Known simplifications
 
-- No side swap at half time, no substitutions, injuries or weather, no real offside calls (attackers are held onside).
+- No side swap at half time, no injuries or weather, no real offside calls (attackers are held onside).
 - Aerial play and goalkeeping are statistical, not simulated in 3D.
 - Corners and set-piece routines are simple.
 - Some aggregates sit at the edge of their bands (corners a little low, pass accuracy low end).

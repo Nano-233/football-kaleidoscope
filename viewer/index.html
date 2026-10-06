@@ -19,16 +19,18 @@
   <span id="clock"></span>
 </div>
 <canvas id="c" width="1100" height="720"></canvas>
+<div id="tip" style="position:fixed;display:none;background:#0b1118;border:1px solid #33475c;border-radius:6px;padding:6px 8px;font-size:12px;pointer-events:none;max-width:260px"></div>
 <div id="log"></div>
 <script>
 const $ = id => document.getElementById(id), cv = $('c'), g = cv.getContext('2d');
 const L = 105, W = 68, PAD = 30, SX = (cv.width - 2*PAD)/L, SY = (cv.height - 2*PAD)/W;
 const px = x => PAD + x*SX, py = y => PAD + y*SY;
-let D, frames, dt, t = 0, playing = false, last = 0, names = {};
+let D, frames, dt, t = 0, playing = false, last = 0, names = {}, info = {}, slots = [], mouse = null;
 const src = new URLSearchParams(location.search).get('src') || '../out/match_1.json';
 fetch(src).then(r => r.json()).then(d => {
   D = d; frames = d.frames; dt = d.meta.dt;
-  [...d.meta.home.players, ...d.meta.away.players].forEach(p => names[p.id] = p);
+  [...d.meta.home.players, ...d.meta.away.players, ...d.meta.home.bench, ...d.meta.away.bench].forEach(p => { names[p.id] = p; info[p.id] = p; });
+  slots = [...d.meta.home.players, ...d.meta.away.players];
   $('seek').max = d.meta.duration; draw();
 });
 function pitch(){
@@ -42,17 +44,19 @@ function pitch(){
     g.strokeRect(px(s ? L-5.5 : 0),py(W/2-9.16),5.5*SX,18.32*SY);
     g.strokeRect(px(s ? L : -2),py(W/2-3.66),2*SX,7.32*SY); }
 }
+function who(k){ let p = slots[k]; for (const e of D.events) { if (e.t > t) break; if (e.type === 'substitution' && e.slot === k) p = info[e.on]; } return p; }
 function draw(){
   if (!D) return;
   const i = Math.min(frames.length-1, Math.max(0, Math.round(t/dt))), f = frames[i];
   pitch();
   const carrier = f[3];
   for (let k = 0; k < 22; k++) {
+    if (f[6+2*k] < -5) continue;  // sent off
     const x = px(f[5+2*k]), y = py(f[6+2*k]), home = k < 11;
     g.beginPath(); g.arc(x,y,9,0,7); g.fillStyle = home ? '#3b82f6' : '#ef4444'; g.fill();
     g.lineWidth = k % 11 === 0 ? 3 : 1; g.strokeStyle = k % 11 === 0 ? '#facc15' : '#fff'; g.stroke();
     if (k === carrier) { g.beginPath(); g.arc(x,y,14,0,7); g.strokeStyle = '#fff'; g.lineWidth = 2; g.stroke(); }
-    g.fillStyle = '#fff'; g.font = '10px sans-serif'; g.textAlign = 'center'; g.fillText((k % 11)+1, x, y+3.5);
+    g.fillStyle = '#fff'; g.font = '10px sans-serif'; g.textAlign = 'center'; g.fillText(who(k).number, x, y+3.5);
   }
   g.beginPath(); g.arc(px(f[1]),py(f[2]),5,0,7); g.fillStyle = '#fff'; g.fill(); g.strokeStyle = '#000'; g.lineWidth = 1.5; g.stroke();
   const ev = D.events.filter(e => e.t <= t);
@@ -60,8 +64,14 @@ function draw(){
   $('score').textContent = `${D.meta.home.code} ${h} – ${a} ${D.meta.away.code}`;
   const m = Math.floor(t/60), s = Math.floor(t%60);
   $('clock').textContent = `${m}:${String(s).padStart(2,'0')}`;
-  $('log').innerHTML = ev.filter(e => !['pressure','carry','possession_change'].includes(e.type)).slice(-6).reverse()
-    .map(e => `${Math.floor(e.t/60)}' ${e.type}${e.player ? ' – '+(names[e.player]?.name||e.player) : ''}${e.outcome ? ' ('+e.outcome+')' : ''}${e.xg ? ' xG '+e.xg.toFixed(2) : ''}`).join('<br>');
+  const line = e => e.type === 'substitution' ? `${e.minute}' SUB ${D.meta[e.team ? 'away' : 'home'].code}: ${e.off_name} → ${e.on_name} (${e.reason})`
+    : e.type === 'tactic_change' ? `${e.minute}' TACTICS ${D.meta[e.team ? 'away' : 'home'].code}: ${e.reason}`
+    : `${e.minute}' ${e.type}${e.player ? ' – '+(names[e.player]?.name||e.player) : ''}${e.outcome ? ' ('+e.outcome+')' : ''}${e.card ? ' '+e.card : ''}${e.xg ? ' xG '+e.xg.toFixed(2) : ''}`;
+  $('log').innerHTML = ev.filter(e => !['pressure','carry','possession_change','take_on'].includes(e.type)).slice(-6).reverse().map(line).join('<br>');
+  const tip = $('tip');
+  if (mouse) { let best = -1, bd = 16; for (let k = 0; k < 22; k++) { const d = Math.hypot(px(f[5+2*k])-mouse[0], py(f[6+2*k])-mouse[1]); if (d < bd) { bd = d; best = k; } }
+    if (best >= 0) { const p = who(best); tip.style.display = 'block'; tip.style.left = (mouse[2]+12)+'px'; tip.style.top = (mouse[3]+12)+'px';
+      tip.innerHTML = `<b>${p.number} ${p.name}</b>${p.star ? ' ★' : ''}<br>${p.role} · rating ${p.overall}<br>${(p.traits||[]).join(', ') || 'no traits'}`; } else tip.style.display = 'none'; } else tip.style.display = 'none';
   $('seek').value = t;
 }
 function tick(now){
@@ -70,5 +80,7 @@ function tick(now){
 }
 $('play').onclick = () => { playing = !playing; $('play').textContent = playing ? 'Pause' : 'Play'; };
 $('seek').oninput = e => { t = +e.target.value; draw(); };
+cv.onmousemove = e => { const r = cv.getBoundingClientRect(); mouse = [(e.clientX-r.left)*cv.width/r.width, (e.clientY-r.top)*cv.height/r.height, e.clientX, e.clientY]; draw(); };
+cv.onmouseleave = () => { mouse = null; draw(); };
 requestAnimationFrame(tick);
 </script></body></html>

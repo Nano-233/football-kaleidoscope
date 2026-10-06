@@ -10,8 +10,9 @@ Two output streams (SoccER-style): ground-truth `events` and `frames` (tracking)
   first rolls for control, so outcomes follow from where players really are.
 Home attacks +x for the whole match (no side swap; ponytail: invisible to analytics).
 """
+import dataclasses
 import numpy as np
-from .teams import L, W, ATTRS, ROLE_IDX, team_meta
+from .teams import L, W, ATTRS, ROLE_IDX, TRAITS, team_meta
 from . import movement
 from .movement import _tf, _unit
 
@@ -22,6 +23,11 @@ TUNE = dict(prog_base=.25, prog_dir=.5, keep=.35, loss=1.0, shot_cost=.45, shot_
             tackle_rate=.12, wide_error=1.0)
 sig = lambda x: 1 / (1 + np.exp(-x))
 GOAL_HALF = 3.66
+_MULT = ("shot", "runs", "follow", "prog", "loss", "cruise", "commit", "foul", "tackle")
+_ADD = ("range", "carry", "takeon", "sweep")
+_PRESET_X = {"GK": .03, "CB": .20, "FB": .22, "DM": .37, "CM": .43, "WG": .66, "AM": .57, "ST": .70}
+_ROLE_NAME = {v: k for k, v in ROLE_IDX.items()}
+PARK = np.array([[L / 2, -40. - 2 * (i % 11)] for i in range(22)])  # sent-off players wait off the pitch
 
 
 class Match:
@@ -29,16 +35,26 @@ class Match:
         s.rng = np.random.default_rng(seed)
         s.seed, s.dt = seed, dt
         s.teams = [home, away]
-        s.tact = [home["tactics"], away["tactics"]]
+        s.base_tact = [home["tactics"], away["tactics"]]
+        s.tact = [dataclasses.replace(t) for t in s.base_tact]
+        s.last_tact_emit = [dataclasses.asdict(t) for t in s.tact]
+        s.last_tact_t = [-999., -999.]
         pl = home["players"] + away["players"]
-        s.ids = [p["id"] for p in pl]
-        s.role = np.array([ROLE_IDX[p["role"]] for p in pl])
-        s.anchor = np.array([[p["anchor"][0] * L, p["anchor"][1] * W] for p in pl])
-        s.attr = {a: np.array([p["attrs"][a] for p in pl], float) for a in ATTRS}
-        s.vmax = 6.4 + .17 * s.attr["pace"]
-        s.acc = 2.8 + .1 * s.attr["accel"]
+        s.ids, s.shirt = [""] * 22, [0] * 22
+        s.names = {p["id"]: p["name"] for tm in (home, away) for p in tm["players"] + tm["bench"]}
+        s.role, s.anchor = np.zeros(22, int), np.zeros((22, 2))
+        s.attr = {a: np.zeros(22) for a in ATTRS}
+        s.mod = {k: np.ones(22) for k in _MULT}
+        s.mod.update({k: np.zeros(22) for k in _ADD})
+        s.vmax, s.acc = np.zeros(22), np.zeros(22)
         s.vel = np.zeros((22, 2))
         s.stam = np.ones(22)
+        for i, p in enumerate(pl):
+            s._load(i, p, p["anchor"])
+        s.bench = [list(home["bench"]), list(away["bench"])]
+        s.yellow, s.off = np.zeros(22, int), np.zeros(22, bool)
+        s.subs = [0, 0]
+        s.windows = [[(s.rng.uniform(9, 16), 2), (s.rng.uniform(24, 30), 2), (s.rng.uniform(34, 40), 1)] for _ in (0, 1)]
         s.mark = [-np.ones(11, int), -np.ones(11, int)]
         s.run_until, s.run_cool = np.zeros(22), np.zeros(22)
         s.run_tgt = np.zeros((22, 2))
@@ -85,6 +101,27 @@ class Match:
         s.events.append(ev)
         return ev
 
+    def _load(s, i, p, anchor):
+        """Put player dict p into field slot i (start of match or substitution)."""
+        s.ids[i], s.shirt[i], s.role[i] = p["id"], p["number"], ROLE_IDX[p["role"]]
+        if anchor is not None:
+            s.anchor[i] = [anchor[0] * L, anchor[1] * W]
+        for a in ATTRS:
+            s.attr[a][i] = p["attrs"][a]
+        for k in _MULT:
+            s.mod[k][i] = 1.
+        for k in _ADD:
+            s.mod[k][i] = 0.
+        for tr in p["traits"]:
+            for k, v in TRAITS[tr][1].items():
+                if k in ("vision", "aerial", "finishing"):
+                    s.attr[k][i] = min(20., s.attr[k][i] + v)
+                elif k in _MULT:
+                    s.mod[k][i] *= v
+                else:
+                    s.mod[k][i] += v
+        s.vmax[i], s.acc[i] = 6.4 + .17 * s.attr["pace"][i], 2.8 + .1 * s.attr["accel"][i]
+
     def _reset_positions(s):
         a = s.anchor.copy()
         a[:, 0] = np.minimum(a[:, 0], L / 2 - 2)
@@ -129,9 +166,10 @@ class Match:
             elif kind == "penalty":
                 taker = own[np.argmax(s.attr["finishing"][own])]
             else:
-                cand = own[s.role[own] > 0]
+                cand = own[(s.role[own] > 0) & ~s.off[own]]
                 if kind == "corner":
-                    cand = own[np.isin(s.role[own], [ROLE_IDX["WG"], ROLE_IDX["FB"], ROLE_IDX["AM"]])]
+                    cand = own[np.isin(s.role[own], [ROLE_IDX["WG"], ROLE_IDX["FB"], ROLE_IDX["AM"]]) & ~s.off[own]]
+                    cand = cand if len(cand) else own[(s.role[own] > 0) & ~s.off[own]]
                 taker = cand[np.argmin(np.linalg.norm(s.pos[cand] - pos, axis=1))]
         s.state, s.poss, s.carrier, s.flight = "dead", team, -1, None
         s.ball, s.ball_v = np.array(pos, float), np.zeros(2)
@@ -174,6 +212,10 @@ class Match:
         s.tgt = tg
         s._steer(tg, urg)
         {"held": s._held, "flight": s._flight, "loose": s._loose, "dead": s._dead_step}[s.state]()
+        if s.tick % 150 == 0 and s.t > 120:
+            s._manage()
+        if s.state == "dead":
+            s._do_subs()
         s._record()
         s.t += s.dt
         s.tick += 1
@@ -201,10 +243,11 @@ class Match:
         d = s.tsm - s.pos
         dist = np.linalg.norm(d, axis=1)
         vmax = s.vmax * (1 - .15 * (1 - s.stam))
-        cap = np.where(urg, vmax, np.minimum(vmax, 3.7 + .07 * s.attr["work_rate"]))
+        energy = s.mod["cruise"] * movement.CRUISE[s.role]  # role/trait work rate: how much ground a player covers
+        cap = np.where(urg, vmax, np.minimum(vmax, (3.7 + .07 * s.attr["work_rate"]) * energy))
         if s.state == "held":
             cap[s.carrier] = min(cap[s.carrier], .85 * vmax[s.carrier])
-        vdes = d / np.maximum(dist, 1e-6)[:, None] * np.minimum(cap, np.maximum(dist - .4, 0) * 1.1)[:, None]
+        vdes = d / np.maximum(dist, 1e-6)[:, None] * np.minimum(cap, np.maximum(dist - .4, 0) * 1.1 * np.where(urg, 1., energy))[:, None]
         dv = vdes - s.vel
         n = np.linalg.norm(dv, axis=1)
         s.vel += dv * np.minimum(1, s.acc * dt / np.maximum(n, 1e-6))[:, None]
@@ -213,6 +256,8 @@ class Match:
         dd = np.linalg.norm(r, axis=2) + np.eye(22) * 99
         s.pos += (r / dd[..., None] * ((1.6 - dd).clip(0))[..., None]).sum(1) * .35
         s.pos = np.clip(s.pos, [-1, -1], [L + 1, W + 1])
+        if s.off.any():
+            s.pos[s.off], s.vel[s.off] = PARK[s.off], 0
         sp = np.linalg.norm(s.vel, axis=1)
         s.stam = np.clip(s.stam - dt * (1.5e-5 + 6e-4 * (sp / s.vmax) ** 3) * (1.35 - .035 * s.attr["stamina"]), 0, 1)
 
@@ -278,14 +323,14 @@ class Match:
         if s.t >= s.protect_until:
             xt = s.pos[c][0] if t == 0 else L - s.pos[c][0]
             danger = np.clip((xt - .65 * L) / (.3 * L), 0, 1)
-            att = np.nonzero(s.rng.random(11) < TUNE["tackle_rate"] * (1 + 1.5 * danger) * np.clip(1 - d / 2.2, 0, 1) * s.dt)[0]
+            att = np.nonzero(s.rng.random(11) < TUNE["tackle_rate"] * s.mod["tackle"][opp] * (1 + 1.5 * danger) * np.clip(1 - d / 2.2, 0, 1) * s.dt)[0]
             if len(att):
                 o = opp[att[np.argmin(d[att])]]
                 a = s.attr
                 p_win = sig(.22 * ((a["tackling"][o] + .3 * a["strength"][o]) - (a["dribbling"][c] + .3 * a["strength"][c])) - .1)
                 s.protect_until = s.t + .7
                 if s.rng.random() < p_win:
-                    if s.rng.random() < .4 + .2 * (1 - a["tackling"][o] / 20):
+                    if s.rng.random() < (.4 + .2 * (1 - a["tackling"][o] / 20)) * s.mod["foul"][o]:
                         s._foul(o, c)
                     else:
                         s.emit("tackle", player=o, pos=s.pos[c], target=s.ids[c], outcome="won")
@@ -301,10 +346,16 @@ class Match:
         t = c // 11
         s.emit("foul", player=o, pos=s.pos[c], target=s.ids[c])
         u = s.rng.random()
-        if u < .005:
+        if u < .005 and s.role[o] != 0:
             s.emit("card", player=o, card="red")
+            s._send_off(o)
         elif u < .13:
-            s.emit("card", player=o, card="yellow")
+            s.yellow[o] += 1
+            if s.yellow[o] >= 2 and s.role[o] != 0:
+                s.emit("card", player=o, card="second_yellow")
+                s._send_off(o)
+            else:
+                s.emit("card", player=o, card="yellow")
         p = s.pos[c].copy()
         pt = _tf(p) if t else p
         s._end_spell()
@@ -333,7 +384,7 @@ class Match:
         pr = float(np.clip(1 - dnear / 5, 0, 1))
         Vf = lambda p: np.exp(-np.hypot(L - p[..., 0], W / 2 - p[..., 1]) / 22)
         VC = Vf(C)
-        prog_w = TUNE["prog_base"] + TUNE["prog_dir"] * tc.directness
+        prog_w = (TUNE["prog_base"] + TUNE["prog_dir"] * tc.directness) * s.mod["prog"][c]
         if rk == "penalty":
             return s._shoot(c, C, xg=.76, kind="penalty", nb=0)
         if rk == "corner":
@@ -353,6 +404,7 @@ class Match:
             vis &= dist > 8
         if not (C[0] < .45 * L or pr > .4):
             vis &= s.role[11 * t + mates] != 0
+        vis &= ~s.off[11 * t + mates]
         if vis.any():
             m_ = mates[vis]
             Pm, Vm = P[m_], Vp[m_]
@@ -378,14 +430,14 @@ class Match:
             sg = (.5 + .05 * d2) * (1.7 - .06 * a["passing"][c]) * (1 + .35 * pr) * np.where(lofted, 1.8, 1)
             p_acc = 1 - np.exp(-(2.5 ** 2) / (2 * sg ** 2))
             p_s = (1 - p_int) * p_acc * p_ctrl
-            u = p_s * (prog_w * np.maximum(Vf(tgt) - VC, -.05) + TUNE["keep"]) - (1 - p_s) * TUNE["loss"] - .001 * d2
+            u = p_s * (prog_w * np.maximum(Vf(tgt) - VC, -.05) + TUNE["keep"]) - (1 - p_s) * TUNE["loss"] * s.mod["loss"][c] - .001 * d2
             for k in range(len(m_)):
                 U.append(u[k]); K.append("pass"); X.append((11 * t + m_[k], tgt[k], bool(lofted[k]), spd[k], p_s[k]))
         # -- shot
         dg = np.hypot(L - C[0], W / 2 - C[1])
-        if dg < 35 and rk in (None, "free_kick"):
+        if dg < 35 + s.mod["range"][c] and rk in (None, "free_kick"):
             xg, nb = s._xg(C, O[s.role[s._opp(t)] > 0])
-            U.append((TUNE["shot_k"] + TUNE["shot_k_dir"] * tc.shoot) * xg * (.6 + .04 * a["finishing"][c]) - TUNE["shot_cost"]); K.append("shot"); X.append((xg, nb))
+            U.append((TUNE["shot_k"] + TUNE["shot_k_dir"] * tc.shoot) * s.mod["shot"][c] * xg * (.6 + .04 * a["finishing"][c]) - TUNE["shot_cost"]); K.append("shot"); X.append((xg, nb))
         # -- carry / clearance
         if rk is None:
             toward = _unit(np.array([L, W / 2]) - C)
@@ -400,11 +452,12 @@ class Match:
             if len(blk):  # a defender stands in the way: carrying on means a take-on
                 j = blk[np.argmin(ahead[blk])]
                 o = 11 * (1 - t) + j
-                p_beat = float(sig(.22 * ((a["dribbling"][c] + .3 * a["pace"][c]) - (a["tackling"][o] + .3 * a["pace"][o])) - .3))
+                p_beat = float(sig(.22 * ((a["dribbling"][c] + .3 * a["pace"][c]) - (a["tackling"][o] + .3 * a["pace"][o])) - .3)) + s.mod["takeon"][c]
+                p_beat = min(p_beat, .97)
             else:
                 j, o, p_beat = -1, -1, 1.
             p_keep = p_beat * (1 - .15 * np.exp(-dnear / 2.3))
-            U.append(p_keep * (TUNE["carry_base"] + TUNE["carry_prog"] * prog_w * (Vf(cpos) - VC)) - (1 - p_keep) * .5 - TUNE["carry_streak"] * s.carry_streak); K.append("carry"); X.append((cpos, o, p_beat))
+            U.append(p_keep * (TUNE["carry_base"] + TUNE["carry_prog"] * prog_w * (Vf(cpos) - VC)) - (1 - p_keep) * .5 - TUNE["carry_streak"] * s.carry_streak + s.mod["carry"][c]); K.append("carry"); X.append((cpos, o, p_beat))
             if C[0] < .2 * L and dnear < 3.5:
                 U.append(.2 + .35 * pr); K.append("clear"); X.append(np.array([C[0] + 40, np.clip(C[1] + s.rng.choice([-1, 1]) * 18, 5, W - 5)]))
         if not U:
@@ -512,6 +565,89 @@ class Match:
         s.ball_v = (end - start) / s.flight["dur"]
         s.last_touch = c
         s.block_until[c] = s.t + .6
+
+    # ------------------------------------------------------------------ manager: tactics, substitutions, red cards
+    def _send_off(s, i):
+        t = i // 11
+        s.off[i] = True
+        s.emit("sent_off", player=i, pos=s.pos[i], men_left=int(11 - s.off[s._own(t)].sum()))
+
+    def _manage(s):
+        """Every 30 s: shift each team's tactics for the score, time and numbers, like a manager would."""
+        mins = (s.t if s.period == 1 else 2700 + (s.t - s.h1)) / 60
+        late = float(np.clip((mins - 55) / 35, 0, 1))
+        for t in (0, 1):
+            gd = s.score[t] - s.score[1 - t]
+            down = int(s.off[s._own(t)].sum() - s.off[s._opp(t)].sum())
+            need = float(np.clip(-gd, 0, 3)) * .12 * (.15 + .85 * late)
+            lead = float(np.clip(gd, 0, 3)) * .10 * late
+            b, cur = s.base_tact[t], s.tact[t]
+            goal = dict(press=b.press + need - lead - .15 * down, line_height=b.line_height + .8 * need - 1.2 * lead - .15 * down,
+                        risk=b.risk + 1.2 * need - lead, directness=b.directness + need + .4 * lead, shoot=b.shoot + .5 * need,
+                        compactness=b.compactness - .4 * need + .8 * lead + .15 * down, width=b.width - .1 * down)
+            new = {k: float(np.clip(getattr(cur, k) + .4 * (v - getattr(cur, k)), 0, 1)) for k, v in goal.items()}
+            last = s.last_tact_emit[t]
+            if sum(abs(new[k] - last[k]) for k in new) > .2 and s.t - s.last_tact_t[t] > 240:
+                reason = ("man down" if down > 0 else "man advantage" if down < 0 else "chasing the game" if gd < 0
+                          else "protecting the lead" if gd > 0 else "reset")
+                s.emit("tactic_change", team=t, reason=reason,
+                       changes={k: [round(last[k], 2), round(new[k], 2)] for k in new if abs(new[k] - last[k]) > .02})
+                s.last_tact_emit[t].update(new)
+                s.last_tact_t[t] = s.t
+            s.tact[t] = dataclasses.replace(cur, **new)
+
+    def _do_subs(s):
+        if s.period != 2:
+            return
+        mins = (s.t - s.h1) / 60 + 45
+        for t in (0, 1):
+            while s.windows[t] and mins >= 45 + s.windows[t][0][0] and s.subs[t] < 5:
+                _, n = s.windows[t].pop(0)
+                for _ in range(min(n, 5 - s.subs[t])):
+                    if not s._substitute(t):
+                        break
+
+    def _substitute(s, t):
+        own = np.arange(11 * t, 11 * t + 11)
+        gd = s.score[t] - s.score[1 - t]
+        late = s.t > s.h1 + 1800
+        outf = [i for i in own if s.role[i] > 0 and not s.off[i]]
+        bench = s.bench[t]
+        if not outf or not bench:
+            return False
+        tired = lambda i: (1 - s.stam[i]) + .08 * s.yellow[i] + s.rng.normal(0, .03)
+        att_r, def_r = {"ST", "WG", "AM"}, {"DM", "CM", "CB", "FB"}
+        best = lambda roles: max((b for b in bench if b["role"] in roles), key=lambda b: b["overall"])
+        if gd < 0 and any(b["role"] in ("ST", "WG") for b in bench):
+            reason, on = "chasing the game", best(("ST", "WG"))
+            pool = [i for i in outf if _ROLE_NAME[s.role[i]] in def_r] or outf
+            return s._swap(t, max(pool, key=tired), on, reason)
+        if gd > 0 and late and any(b["role"] in ("DM", "CB", "FB") for b in bench):
+            reason, on = "protecting the lead", best(("DM", "CB", "FB"))
+            pool = [i for i in outf if _ROLE_NAME[s.role[i]] in att_r] or outf
+            return s._swap(t, max(pool, key=tired), on, reason)
+        off_i = max(outf, key=tired)
+        name = _ROLE_NAME[s.role[off_i]]
+        near = {"AM": ("CM", "WG"), "CM": ("DM", "AM"), "DM": ("CM", "CB"), "WG": ("ST", "AM", "FB"),
+                "ST": ("WG",), "FB": ("CB", "WG"), "CB": ("FB", "DM")}
+        pick = [b for b in bench if b["role"] == name] or [b for b in bench if b["role"] in near.get(name, ())] or [b for b in bench if b["role"] != "GK"]
+        if not pick:
+            return False
+        return s._swap(t, off_i, max(pick, key=lambda b: b["overall"]), "fresh legs")
+
+    def _swap(s, t, i, on, reason):
+        anchor = None
+        if on["role"] != _ROLE_NAME[s.role[i]]:  # tactical change: the newcomer takes up his natural line, same flank
+            ay = s.anchor[i][1] / W
+            anchor = (_PRESET_X[on["role"]], ay if on["role"] in ("FB", "WG") else float(np.clip(ay, .35, .65)))
+        off_id = s.ids[i]
+        s.bench[t].remove(on)
+        s.subs[t] += 1
+        s.emit("substitution", team=t, slot=int(i), off=off_id, on=on["id"], off_name=s.names[off_id], on_name=on["name"],
+               reason=reason, off_stamina=round(float(s.stam[i]), 2), on_role=on["role"], pos=s.pos[i])
+        s._load(i, on, anchor)
+        s.stam[i], s.yellow[i], s.commit_until[i], s.run_until[i] = 1., 0, 0., 0.
+        return True
 
     # ------------------------------------------------------------------ flight
     def _claim_p(s, i, speed, t_team, at, receiver):

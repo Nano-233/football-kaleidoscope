@@ -19,7 +19,10 @@ def test_deterministic_and_consistent():
     fr = np.array(a["frames"])
     assert fr.shape[1] == 5 + 44 and np.all(np.diff(fr[:, 0]) > 0)
     pos = fr[:, 5:].reshape(len(fr), 22, 2)
-    assert pos[..., 0].min() >= -1.5 and pos[..., 0].max() <= L + 1.5 and pos[..., 1].min() >= -1.5 and pos[..., 1].max() <= W + 1.5
+    on = pos[..., 1] > -5  # sent-off players are parked off the pitch
+    assert pos[on][:, 0].min() >= -1.5 and pos[on][:, 0].max() <= L + 1.5 and pos[on][:, 1].min() >= -1.5 and pos[on][:, 1].max() <= W + 1.5
+    subs = [e for e in a["events"] if e["type"] == "substitution"]
+    assert len(subs) <= 10 and all(sum(e["team"] == t for e in subs) <= 5 for t in (0, 1))
     assert all(e["type"] != "shot" or e.get("why") is None or e["why"]["options"] for e in a["events"])
 
 
