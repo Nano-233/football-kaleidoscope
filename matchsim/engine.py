@@ -437,6 +437,15 @@ class Match:
         if s.t >= s.next_dec:
             s._decide()
 
+    def _yellow(s, o, reason):
+        s.yellow[o] += 1
+        s.stop[s.period - 1] += 10
+        if s.yellow[o] >= 2 and s.role[o] != 0:
+            s.emit("card", player=o, card="second_yellow", reason=reason)
+            s._send_off(o)
+        else:
+            s.emit("card", player=o, card="yellow", reason=reason)
+
     def _penalty_spot(s, t):
         spot = np.array([L - 11, W / 2])
         return _tf(spot) if t else spot
@@ -483,13 +492,7 @@ class Match:
             s.stop[s.period - 1] += 40
             s._send_off(o)
         elif card == "yellow":
-            s.yellow[o] += 1
-            s.stop[s.period - 1] += 10
-            if s.yellow[o] >= 2 and s.role[o] != 0:
-                s.emit("card", player=o, card="second_yellow")
-                s._send_off(o)
-            else:
-                s.emit("card", player=o, card="yellow")
+            s._yellow(o, reason)
         if s.rng.random() < .012:
             s._injury(c, "foul")
         p = s.pos[c].copy()
@@ -872,6 +875,13 @@ class Match:
                 s.last_tact_emit[t].update(new)
                 s.last_tact_t[t] = s.t
             s.tact[t] = dataclasses.replace(cur, **new)
+            if mins > 80 and gd > 0 and s.rng.random() < .012:  # time wasting by the leading side
+                i = int(s.rng.choice([j for j in s._own(t).start + np.arange(11) if not s.off[j] and s.role[j] > 0]))
+                s.stop[s.period - 1] += 12
+                s._yellow(i, "time_wasting")
+            elif s.rng.random() < .004:
+                i = int(s.rng.choice([j for j in s._own(t).start + np.arange(11) if not s.off[j] and s.role[j] > 0]))
+                s._yellow(i, "dissent")
             if s.want_form[t] is None and s.forms_used[t] < 3 and s.t - s.last_form_t[t] > 900:
                 choice = s._choose_formation(t, gd, mins, down)
                 if choice:
