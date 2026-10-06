@@ -19,7 +19,7 @@ from .movement import _tf, _unit
 
 DT = 0.2
 # Single tuning table (calibrated by scripts/calibrate.py against real-football norms).
-TUNE = dict(pass_sigma=1.085, intercept=0.33, shot_mid=1.82, usage=0.4, fk_bonus=0.4, long_bonus=0.523, prog_base=0.654, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=0.98, gk_long=.5, box_foul=.08, home_edge=1.2, shot_cost=0.35, shot_k=3.15, shot_k_dir=5.0,
+TUNE = dict(pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.4, fk_bonus=0.4, long_bonus=0.523, prog_base=0.654, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=0.98, gk_long=.5, box_foul=.08, home_edge=1.2, shot_cost=0.35, shot_k=3.15, shot_k_dir=5.0,
             carry_base=.1, carry_prog=.2, carry_streak=.3, dwell_base=1.04, dwell_shape=2.4, dwell_scale=1.61,
             tackle_rate=0.164, wide_error=2.6, off_miss=0.55, off_mult=.5)
 sig = lambda x: 1 / (1 + np.exp(-x))

@@ -92,7 +92,15 @@ so mean xG per shot is about 0.1 and headers about 0.07.
 | 1 | 24 | 5.78 | 2.98 | after passing-style rewrite; goals/shots/crosses balanced |
 | 2 | 24 | 8.17 | 3.90 | stricter metrics added (role shot shares, passes per possession) |
 | 3 | 24 | 3.74 | 2.67 | after accuracy and shot-share parameters; 14 parameters, 1 round |
-| 4 | 40 | 2.75 | in progress | 20 workers, 2 rounds, after deflection and header fixes |
+| 4 | 40 | 2.75 | 2.29 | 20 workers, stopped after round 0 (diminishing returns). Validated on 96 fresh matches: goals 3.04, shots 24.6, xG 3.08, offsides 6.1; still off: pass accuracy 0.76, throw-ins 27, open-play crosses 11.6, aerial duels 41.5, striker shot share 0.53 |
+
+## Is the tuner machine learning?
+
+No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
+choice model; `tune.py` is a derivative-free coordinate search (simulation-based calibration) that minimises distance to
+real-world bands. Nothing is trained on data (there is none). Honest framing: automated calibration against measurable
+norms. Possible genuinely-ML upgrades: Bayesian optimisation with a Gaussian-process surrogate over TUNE, or a learned
+emulator of the simulator.
 
 ## Open gaps (as of this entry)
 
