@@ -10,17 +10,18 @@ Two output streams (SoccER-style): ground-truth `events` and `frames` (tracking)
   first rolls for control, so outcomes follow from where players really are.
 Home attacks +x for the whole match (no side swap; ponytail: invisible to analytics).
 """
+import collections
 import dataclasses
 import numpy as np
-from .teams import L, W, ATTRS, ROLE_IDX, TRAITS, team_meta
+from .teams import L, W, ATTRS, ROLE_IDX, TRAITS, team_meta, make_match_info
 from . import movement
 from .movement import _tf, _unit
 
 DT = 0.2
 # Single tuning table (calibrated by scripts/calibrate.py against real-football norms).
-TUNE = dict(prog_base=.25, prog_dir=.5, keep=.35, loss=1.15, shot_cost=.52, shot_k=2.5, shot_k_dir=5.0,
+TUNE = dict(prog_base=.25, prog_dir=.5, keep=.35, loss=1.15, shot_cost=.58, shot_k=2.5, shot_k_dir=5.0,
             carry_base=.1, carry_prog=.2, carry_streak=.3, dwell_base=.8, dwell_shape=2.4, dwell_scale=1.4,
-            tackle_rate=.12, wide_error=1.0)
+            tackle_rate=.11, wide_error=1.0, off_miss=.9, off_mult=.9)
 sig = lambda x: 1 / (1 + np.exp(-x))
 GOAL_HALF = 3.66
 _MULT = ("shot", "runs", "follow", "prog", "loss", "cruise", "commit", "foul", "tackle")
@@ -31,8 +32,12 @@ PARK = np.array([[L / 2, -40. - 2 * (i % 11)] for i in range(22)])  # sent-off p
 
 
 class Match:
-    def __init__(s, home, away, seed=0, dt=DT):
+    def __init__(s, home, away, seed=0, dt=DT, info=None):
         s.rng = np.random.default_rng(seed)
+        s.info = info or make_match_info(s.rng, home)
+        s.ref = s.info["referee"]["strict"]                      # strict referees whistle and book more
+        s.rain = 1.1 if s.info["weather"]["rain"] else 1.0      # wet ball: less accurate passing
+        s.heat = 1 + .03 * max(0., s.info["weather"]["temp_c"] - 18)  # heat: faster fatigue
         s.seed, s.dt = seed, dt
         s.teams = [home, away]
         s.base_tact = [home["tactics"], away["tactics"]]
@@ -63,8 +68,13 @@ class Match:
         s.last_press = np.full(22, -9.)
         s.trans_until = [0., 0.]
         s.t, s.tick, s.period = 0., 0, 1
-        s.h1 = 2700 + int(s.rng.integers(60, 150))
-        s.end_t = s.h1 + 2700 + int(s.rng.integers(120, 300))
+        s.h1, s.end_t = 1e9, 1e9      # set when added time is announced
+        s.stop = [0., 0.]             # accumulated stoppage seconds per half (goals, subs, cards, injuries, VAR)
+        s.added = [None, None]
+        s.injured, s.pending_inj = np.zeros(22, bool), []
+        s.ctrl_t = 0.
+        s.phase = s.rng.uniform(0, 6.28, 22)
+        s.line_hist = [collections.deque(maxlen=4), collections.deque(maxlen=4)]  # the line as the passer last saw it (~.8 s ago)
         s.done = False
         s.score = [0, 0]
         s.events, s.frames = [], []
@@ -81,14 +91,22 @@ class Match:
         s.tgt = s.pos.copy()
         s.tsm = s.pos.copy()
         s._kickoff(0, delay=2.)
+        s.emit("match_info", **s.info)
+        for t in (0, 1):
+            tm = s.teams[t]
+            s.emit("lineup", team=t, formation=tm["formation"], tactics=dataclasses.asdict(s.base_tact[t]),
+                   players=[dict(id=p["id"], number=p["number"], label=p["label"], role=p["role"], star=p["star"], traits=p["traits"])
+                            for p in tm["players"]],
+                   bench=[dict(id=p["id"], number=p["number"], role=p["role"]) for p in tm["bench"]])
         s.emit("kickoff", team=0)
 
     # ------------------------------------------------------------------ helpers
     def emit(s, type, player=None, team=None, pos=None, end=None, **kw):
         if player is not None and team is None:
             team = player // 11
-        ev = dict(id=len(s.events), t=round(s.t, 1), period=s.period,
-                  minute=int(s.t // 60) if s.period == 1 else int(45 + (s.t - s.h1) // 60), type=type)
+        mn = int(s.t // 60) if s.period == 1 else int(45 + (s.t - s.h1) // 60)
+        clock = f"45+{mn - 44}'" if s.period == 1 and mn >= 45 else f"90+{mn - 89}'" if s.period == 2 and mn >= 90 else f"{mn + 1}'"
+        ev = dict(id=len(s.events), t=round(s.t, 1), period=s.period, minute=mn, clock=clock, type=type)
         if team is not None:
             ev["team"] = int(team)
         if player is not None:
@@ -211,6 +229,16 @@ class Match:
             tg[s.dead["taker"]], urg[s.dead["taker"]] = s.dead["pos"], True
         s.tgt = tg
         s._steer(tg, urg)
+        for t in (0, 1):
+            o = s.pos[s._opp(t)]
+            s.line_hist[t].append(float(np.sort(_tf(o) if t else o, axis=0)[-2, 0]))
+        if s.state != "dead":
+            on = ~s.off & ~s.injured
+            rate = 1.2e-6 * (1 + 3 * (1 - s.stam)) * on  # non-contact injury hazard per second, higher when tired
+            if s.rng.random() < s.dt * rate.sum():
+                s._injury(int(s.rng.choice(22, p=rate / rate.sum())), "non-contact")
+        if s.pending_inj and s.state in ("held", "dead"):
+            s._stop_for_injury()
         {"held": s._held, "flight": s._flight, "loose": s._loose, "dead": s._dead_step}[s.state]()
         if s.tick % 150 == 0 and s.t > 120:
             s._manage()
@@ -222,6 +250,14 @@ class Match:
         s._clock()
 
     def _clock(s):
+        if s.period == 1 and s.added[0] is None and s.t >= 2700:
+            n = int(np.clip(np.ceil(.7 * (s.stop[0] + 25) / 60 + s.rng.normal(.4, .6)), 1, 7))
+            s.added[0], s.h1 = n, 2700 + n * 60 + float(s.rng.uniform(0, 30))
+            s.emit("added_time", minutes=n)
+        elif s.period == 2 and s.added[1] is None and s.t >= s.h1 + 2700:
+            n = int(np.clip(np.ceil(.7 * (s.stop[1] + 60) / 60 + s.rng.normal(.6, .8)), 2, 10))
+            s.added[1], s.end_t = n, s.h1 + 2700 + n * 60 + float(s.rng.uniform(0, 30))
+            s.emit("added_time", minutes=n)
         if s.period == 1 and s.t >= s.h1 and (s.state == "dead" or s.t >= s.h1 + 40):
             s.emit("half_end")
             s.period = 2
@@ -259,7 +295,7 @@ class Match:
         if s.off.any():
             s.pos[s.off], s.vel[s.off] = PARK[s.off], 0
         sp = np.linalg.norm(s.vel, axis=1)
-        s.stam = np.clip(s.stam - dt * (1.5e-5 + 6e-4 * (sp / s.vmax) ** 3) * (1.35 - .035 * s.attr["stamina"]), 0, 1)
+        s.stam = np.clip(s.stam - dt * (1.5e-5 + 6e-4 * (sp / s.vmax) ** 3) * (1.35 - .035 * s.attr["stamina"]) * s.heat, 0, 1)
 
     def _record(s):
         s.frames.append(np.concatenate([[s.t, *s.ball, s.carrier, -1 if s.last_ctrl_team is None else s.last_ctrl_team],
@@ -273,12 +309,14 @@ class Match:
 
     def _gain_control(s, i, at):
         t = i // 11
+        if s.state == "loose" and s.last_ctrl_team != t:
+            s.emit("ball_recovery", player=i, pos=at)
         if s.pending_pass is not None:
             pp, s.pending_pass = s.pending_pass, None
             same = pp["team"] == t
             pp["outcome"] = "complete" if same else "intercepted"
             if same:
-                s.last_pass_to[t] = (pp["player"], i, s.t)
+                s.last_pass_to[t] = (pp["player"], i, s.t, pp)
             elif s.state == "flight":
                 s.emit("interception", player=i, pos=at)
         if s.last_ctrl_team is not None and s.last_ctrl_team != t:
@@ -289,6 +327,7 @@ class Match:
         s.state, s.poss, s.carrier, s.flight = "held", t, i, None
         s.ball, s.ball_v = np.array(at, float), s.vel[i].copy()
         s.last_touch = i
+        s.ctrl_t = s.t
         s.next_dec = s.t + s._dwell(i)
         s.protect_until = s.t + .6
         s.carry_tgt = s.pos[i] + np.array([1., 0.] if t == 0 else [-1., 0.]) * 5
@@ -316,10 +355,10 @@ class Match:
         s.ball, s.ball_v = s.pos[c] + face * .5, v.copy()
         opp = np.arange(11 * (1 - t), 11 * (1 - t) + 11)
         d = np.linalg.norm(s.pos[opp] - s.pos[c], axis=1)
-        for k in np.nonzero(d < 3.0)[0]:
-            if s.t - s.last_press[opp[k]] > 1.0:
+        for k in np.nonzero(d < 2.2)[0]:
+            if s.t - s.last_press[opp[k]] > 7.0:  # one pressure event per defender per engagement
                 s.emit("pressure", player=opp[k], pos=s.pos[opp[k]], target=s.ids[c])
-            s.last_press[opp[k]] = s.t
+                s.last_press[opp[k]] = s.t
         if s.t >= s.protect_until:
             xt = s.pos[c][0] if t == 0 else L - s.pos[c][0]
             danger = np.clip((xt - .65 * L) / (.3 * L), 0, 1)
@@ -330,10 +369,13 @@ class Match:
                 p_win = sig(.22 * ((a["tackling"][o] + .3 * a["strength"][o]) - (a["dribbling"][c] + .3 * a["strength"][c])) - .1)
                 s.protect_until = s.t + .7
                 if s.rng.random() < p_win:
-                    if s.rng.random() < (.4 + .2 * (1 - a["tackling"][o] / 20)) * s.mod["foul"][o]:
+                    if s.rng.random() < (.4 + .2 * (1 - a["tackling"][o] / 20)) * s.mod["foul"][o] * (.75 + .5 * s.ref):
                         s._foul(o, c)
                     else:
                         s.emit("tackle", player=o, pos=s.pos[c], target=s.ids[c], outcome="won")
+                        s.emit("dispossessed", player=c, pos=s.pos[c])
+                        if s.rng.random() < .004:
+                            s._injury(c, "tackle")
                         s.block_until[c] = s.t + .8
                         s.last_touch = o
                         s._loose_ball(_unit(s.vel[o] + s.rng.normal(0, 1, 2)) * 2.5)
@@ -344,18 +386,25 @@ class Match:
 
     def _foul(s, o, c):
         t = c // 11
-        s.emit("foul", player=o, pos=s.pos[c], target=s.ids[c])
+        s.stop[s.period - 1] += 4
+        reason = str(s.rng.choice(["tackle", "trip", "shirt_pull", "handball"], p=[.55, .2, .2, .05]))
+        s.emit("foul", player=o, pos=s.pos[c], target=s.ids[c], reason=reason)
         u = s.rng.random()
-        if u < .005 and s.role[o] != 0:
+        k = .7 + .6 * s.ref
+        if u < .005 * k and s.role[o] != 0:
             s.emit("card", player=o, card="red")
+            s.stop[s.period - 1] += 40
             s._send_off(o)
-        elif u < .13:
+        elif u < .13 * k:
             s.yellow[o] += 1
+            s.stop[s.period - 1] += 10
             if s.yellow[o] >= 2 and s.role[o] != 0:
                 s.emit("card", player=o, card="second_yellow")
                 s._send_off(o)
             else:
                 s.emit("card", player=o, card="yellow")
+        if s.rng.random() < .012:
+            s._injury(c, "foul")
         p = s.pos[c].copy()
         pt = _tf(p) if t else p
         s._end_spell()
@@ -398,7 +447,7 @@ class Match:
         dist = np.linalg.norm(dv, axis=1)
         cosang = dv @ face / np.maximum(dist, 1e-6)
         vis = (dist > 3.5) & (dist < 18 + 2.2 * a["vision"][c]) & (cosang > np.cos(np.radians(min(180, 100 + 4 * a["vision"][c]))))
-        if rk == "throw_in":
+        if rk in ("throw_in", "drop_ball", "indirect_free_kick"):
             vis &= dist < 28
         if rk == "goal_kick":
             vis &= dist > 8
@@ -430,6 +479,11 @@ class Match:
             sg = (.5 + .05 * d2) * (1.7 - .06 * a["passing"][c]) * (1 + .35 * pr) * np.where(lofted, 1.8, 1)
             p_acc = 1 - np.exp(-(2.5 ** 2) / (2 * sg ** 2))
             p_s = (1 - p_int) * p_acc * p_ctrl
+            line = s.line_hist[t][0]  # second-last defender as the passer last saw him; defenders may have stepped up since
+            Pp = Pm - Vm * .5  # runners are seen where they were half a second ago, so mistimed runs end up offside
+            off_m = (Pp[:, 0] > np.maximum(line, C[0]) + .3) & (Pp[:, 0] > L / 2)
+            off_m &= s.rng.random(len(off_m)) > TUNE["off_miss"] - .012 * a["vision"][c]  # now and then the passer misjudges the line
+            p_s = p_s * np.where(off_m, TUNE["off_mult"], 1.)
             u = p_s * (prog_w * np.maximum(Vf(tgt) - VC, -.05) + TUNE["keep"]) - (1 - p_s) * TUNE["loss"] * s.mod["loss"][c] - .001 * d2
             for k in range(len(m_)):
                 U.append(u[k]); K.append("pass"); X.append((11 * t + m_[k], tgt[k], bool(lofted[k]), spd[k], p_s[k]))
@@ -507,13 +561,29 @@ class Match:
         d = np.linalg.norm(aim - start)
         pr = np.clip(1 - np.linalg.norm(s.pos[s._opp(t)] - s.pos[c], axis=1).min() / 5, 0, 1)
         sg = (.5 + .05 * d) * (1.7 - .06 * s.attr["passing"][c]) * (1 + .35 * pr) * (1.8 if lofted else 1) * sigma_scale
+        sg *= s.rain
         wide = min(aim[1], W - aim[1]) < 7
         end = aim + s.rng.normal(0, sg * (1 + TUNE["wide_error"] * wide), 2)
         dur = max(np.linalg.norm(end - start) / spd, .3)
-        ev = s.emit(kind, player=c, pos=start, end=aim, length=d, speed=spd, lofted=lofted,
-                    receiver=None if rcv is None else s.ids[rcv], p_success=est, difficulty=1 - est,
-                    progressive=bool(abs((L if t == 0 else 0) - start[0]) - abs((L if t == 0 else 0) - aim[0]) >= 10), outcome=None, why=why)
+        gx = L if t == 0 else 0
+        fwd = abs(gx - start[0]) - abs(gx - aim[0])  # metres gained towards the opposition goal
+        f_ = _tf if t else (lambda x: x)
+        line = np.sort(f_(s.pos[s._opp(t)])[:, 0])[-2]
+        offside = bool(kind == "pass" and rcv is not None and f_(s.pos[rcv])[0] > max(line, f_(start)[0]) + .3 and f_(s.pos[rcv])[0] > L / 2)
+        lat = abs(aim[1] - start[1])
+        technique = ("long_ball" if lofted and d > 30 else "switch" if lat > 28 and fwd < 12 else
+                     "through_ball" if not lofted and fwd > 14 and f_(aim)[0] > line - 3 else "forward" if fwd > 8 else "backward" if fwd < -5 else "sideways")
+        ev = s.emit(kind, player=c, pos=start, end=aim, length=d, speed=spd, lofted=lofted, height="high" if lofted else "ground",
+                    body_part="foot", technique=technique, receiver=None if rcv is None else s.ids[rcv], p_success=est,
+                    difficulty=1 - est, progressive=bool(fwd >= 10), outcome=None, why=why)
         s._end_spell()
+        if offside:
+            ev["outcome"] = "offside"
+            spot = s.pos[rcv].copy()
+            s.emit("offside", player=rcv, pos=spot, passer=s.ids[c], line_x=round(float(f_(np.array([line, 0.]))[0]), 1))
+            s.stop[s.period - 1] += 8
+            s.last_touch = c
+            return s._set_dead("indirect_free_kick", 1 - t, np.clip(spot, [1, 1], [L - 1, W - 1]), 6 + s.rng.random() * 3)
         s.state, s.carrier = "flight", -1
         s.flight = dict(start=start, end=end, aim=aim, t0=s.t, dur=dur, speed=spd, kind="lofted" if lofted else "ground",
                         team=t, passer=c, rcv=-1 if rcv is None else rcv)
@@ -554,17 +624,62 @@ class Match:
                 "blocked": list(C + _unit(np.array([L, W / 2]) - C) * s.rng.uniform(1.5, 3))}[res]
         end = f(np.array(endt))
         spd = float(np.clip(20 + .5 * fin + s.rng.normal(0, 2), 16, 33))
+        lp = s.last_pass_to.get(t)
+        assist_ev = lp[3] if lp and lp[1] == c and s.t - lp[2] <= 8 else None
+        if assist_ev is not None:
+            assist_ev["key_pass"] = True
+        nd = float(np.linalg.norm(s.pos[s._opp(t)] - s.pos[c], axis=1).min())
         ev = s.emit("shot", player=c, pos=start, end=end, xg=xg, speed=spd, outcome=res, kind=kind, why=why,
-                    assist=None if t not in s.last_pass_to or s.t - s.last_pass_to[t][2] > 8 or s.last_pass_to[t][1] != c else s.last_pass_to[t][0])
+                    assist=None if assist_ev is None else assist_ev["player"], body_part="head" if kind == "header" else "foot",
+                    first_time=bool(s.t - s.ctrl_t < 1.0), under_pressure=bool(nd < 2.5), big_chance=bool(xg >= .3),
+                    freeze_frame=[[round(float(x), 1), round(float(y), 1)] for x, y in s.pos])
+        var = None
+        if res == "goal" and kind != "penalty" and s.rng.random() < .05:
+            var = dict(overturn=bool(s.rng.random() < .5), reason=str(s.rng.choice(["offside in build-up", "foul in build-up", "handball"], p=[.55, .35, .1])))
         s._end_spell()
         if s.pending_pass is not None:
             s.pending_pass = None
         s.state, s.carrier = "flight", -1
         s.flight = dict(start=start, end=end, aim=end, t0=s.t, dur=max(np.linalg.norm(end - start) / spd, .25), speed=spd,
-                        kind="shot", team=t, passer=c, rcv=-1, res=res, ev=ev)
+                        kind="shot", team=t, passer=c, rcv=-1, res=res, ev=ev, var=var, assist_ev=assist_ev)
         s.ball_v = (end - start) / s.flight["dur"]
         s.last_touch = c
         s.block_until[c] = s.t + .6
+
+    # ------------------------------------------------------------------ injuries
+    def _injury(s, i, cause):
+        if s.off[i] or s.injured[i]:
+            return
+        u = s.rng.random()
+        sev = "knock" if u < .5 else ("substitution" if u < .93 else "serious")
+        s.injured[i] = True
+        s.emit("injury", player=i, pos=s.pos[i], severity=sev, cause=cause, play_on=sev == "knock")
+        if sev == "knock":  # plays on, but slower
+            s.vmax[i] *= .88
+            s.acc[i] *= .9
+        else:
+            s.pending_inj.append((i, sev))
+
+    def _stop_for_injury(s):
+        i, sev = s.pending_inj.pop(0)
+        t = i // 11
+        treat = float(s.rng.uniform(45, 100) if sev == "substitution" else s.rng.uniform(150, 240))
+        s.stop[s.period - 1] += treat
+        if s.state == "held":
+            team = s.poss
+            s._end_spell()
+            pos = np.clip(s.ball.copy(), [1, 1], [L - 1, W - 1])
+            s.emit("play_stopped", reason="injury", team=int(team), pos=pos, duration=treat)
+            s._set_dead("drop_ball", team, pos, treat + 8)
+        else:
+            s.dead["ready"] += treat
+        name = _ROLE_NAME[s.role[i]]
+        near = {"AM": ("CM", "WG"), "CM": ("DM", "AM"), "DM": ("CM", "CB"), "WG": ("ST", "AM", "FB"), "ST": ("WG",), "FB": ("CB", "WG"), "CB": ("FB", "DM")}
+        pick = [b for b in s.bench[t] if b["role"] == name] or ([b for b in s.bench[t] if b["role"] in near.get(name, ())] if name != "GK" else [])
+        if s.subs[t] < 5 and pick:
+            return s._swap(t, i, max(pick, key=lambda b: b["overall"]), "injury")
+        s.off[i] = True  # no replacement: the team plays a man short
+        s.emit("injury_off", player=i, pos=s.pos[i], men_left=int(11 - s.off[s._own(t)].sum()))
 
     # ------------------------------------------------------------------ manager: tactics, substitutions, red cards
     def _send_off(s, i):
@@ -647,6 +762,8 @@ class Match:
                reason=reason, off_stamina=round(float(s.stam[i]), 2), on_role=on["role"], pos=s.pos[i])
         s._load(i, on, anchor)
         s.stam[i], s.yellow[i], s.commit_until[i], s.run_until[i] = 1., 0, 0., 0.
+        s.injured[i] = False
+        s.stop[s.period - 1] += 15
         return True
 
     # ------------------------------------------------------------------ flight
@@ -691,6 +808,7 @@ class Match:
                     s.ball = q[i]
                     return s._gain_control(i, q[i])
                 if mine:  # first touch lost
+                    s.emit("miscontrol", player=i, pos=q[i])
                     s.block_until[i] = s.t + .5
                     if s.pending_pass is not None:
                         s.pending_pass["outcome"], s.pending_pass = "incomplete", None
@@ -724,6 +842,9 @@ class Match:
         w[f["rcv"]] *= 1.2 if f["rcv"] >= 0 else 1
         i = int(s.rng.choice(22, p=w / w.sum()))
         t = i // 11
+        rivals = w * (np.arange(22) // 11 != t)
+        if rivals.max() > 0:
+            s.emit("duel", player=i, pos=pt, duel="aerial", outcome="won", target=s.ids[int(rivals.argmax())])
         s.ball = pt.copy()
         pt_t = _tf(pt) if t else pt
         if t == f["team"]:
@@ -755,9 +876,23 @@ class Match:
         t = c // 11
         opp0 = 11 * (1 - t)
         if res == "goal":
+            var = f.get("var")
+            if var is not None:
+                dur = float(s.rng.uniform(70, 140))
+                s.stop[s.period - 1] += dur
+                s.emit("var_check", team=t, player=c, reason=var["reason"], duration=dur)
+                if var["overturn"]:
+                    f["ev"]["outcome"] = "disallowed"
+                    s.emit("goal_disallowed", player=c, pos=f["start"], xg=f["ev"]["xg"], reason=var["reason"])
+                    s._end_spell()
+                    return s._set_dead("indirect_free_kick", 1 - t, np.clip(f["start"], [1, 1], [L - 1, W - 1]), dur + 8)
+                s.emit("var_confirmed", team=t, player=c)
+            if f.get("assist_ev") is not None:
+                f["assist_ev"]["assist"] = True
             s.score[t] += 1
+            s.stop[s.period - 1] += 35
             s.emit("goal", player=c, pos=f["start"], xg=f["ev"]["xg"], home=s.score[0], away=s.score[1],
-                   assist=f["ev"].get("assist"))
+                   assist=f["ev"].get("assist"), body_part=f["ev"]["body_part"])
             s._end_spell()
             s._kickoff(1 - t, delay=28.)
         elif res == "saved":
@@ -775,8 +910,18 @@ class Match:
             s.last_touch = c
             s.ball = f["end"].copy()
             s._out(f["end"])
-        else:  # blocked: sometimes behind for a corner
-            s.last_touch = s.rng.choice(np.arange(11 * (1 - t), 11 * (1 - t) + 11)) if s.rng.random() < .7 else c
+        else:  # blocked: a defender gets in the way
+            opp_f = np.arange(11 * (1 - t), 11 * (1 - t) + 11)
+            opp_f = opp_f[(s.role[opp_f] > 0) & ~s.off[opp_f]]
+            blocker = int(opp_f[np.argmin(np.linalg.norm(s.pos[opp_f] - f["end"], axis=1))])
+            s.emit("block", player=blocker, pos=f["end"], shooter=s.ids[c])
+            if s.rng.random() < .02:  # deflects past his own keeper
+                s.score[t] += 1
+                s.stop[s.period - 1] += 35
+                s.emit("own_goal", player=blocker, team=t, pos=f["end"], home=s.score[0], away=s.score[1], scorer=s.ids[c])
+                s._end_spell()
+                return s._kickoff(1 - t, delay=28.)
+            s.last_touch = blocker if s.rng.random() < .7 else c
             if s.rng.random() < .4:
                 cp = np.array([L if t == 0 else 0., 0. if f["start"][1] < W / 2 else W])
                 s.emit("corner", team=t, pos=cp)
@@ -822,6 +967,6 @@ class Match:
         fr = np.round(np.array(s.frames), 1)
         return dict(
             meta=dict(seed=s.seed, dt=s.dt, pitch=[L, W], home=team_meta(s.teams[0]), away=team_meta(s.teams[1]),
-                      score=s.score, half_time=s.h1, duration=round(s.t, 1),
+                      score=s.score, half_time=s.h1, added_time=s.added, duration=round(s.t, 1), info=s.info,
                       frame_cols=["t", "ball_x", "ball_y", "carrier", "poss"] + [f"{c}{i}" for i in range(22) for c in "xy"]),
             events=s.events, frames=fr.tolist())

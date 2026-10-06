@@ -154,3 +154,17 @@ def team_meta(t):
                 tactics=asdict(t["tactics"]),
                 players=[{k: p[k] for k in keep} for p in t["players"]],
                 bench=[{k: p[k] for k in keep} for p in t["bench"]])
+
+
+_CAPACITY = {"NBR": 38000, "HAR": 29000, "KES": 52000, "ASH": 21000, "RED": 60000, "OAK": 26000, "STB": 32000, "WMW": 24000}
+
+
+def make_match_info(rng, home):
+    """Fictional match context: referee, venue, weather, kick-off. Referee strictness and weather feed the engine."""
+    code = home["code"]
+    cap = _CAPACITY.get(code, 30000)
+    return dict(
+        referee=dict(name=_name(rng), strict=round(float(rng.uniform(.2, .9)), 2)),
+        venue=dict(name=f"{home['name'].split()[0]} Park", capacity=cap, attendance=int(cap * rng.uniform(.82, 1.0))),
+        weather=dict(temp_c=round(float(rng.normal(13, 6)), 1), rain=bool(rng.random() < .25), wind_kph=round(float(rng.uniform(0, 35)), 0)),
+        kickoff=str(rng.choice(["12:30", "15:00", "17:30", "20:00"])))

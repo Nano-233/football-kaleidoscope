@@ -14,7 +14,7 @@ def play(seed):
 def test_deterministic_and_consistent():
     a, b = play(7), play(7)
     assert a["events"] == b["events"] and a["frames"] == b["frames"], "same seed must give the same match"
-    goals = [e for e in a["events"] if e["type"] == "goal"]
+    goals = [e for e in a["events"] if e["type"] in ("goal", "own_goal")]  # team = team credited with the goal
     assert [sum(e["team"] == t for e in goals) for t in (0, 1)] == a["meta"]["score"]
     fr = np.array(a["frames"])
     assert fr.shape[1] == 5 + 44 and np.all(np.diff(fr[:, 0]) > 0)

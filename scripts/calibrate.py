@@ -18,7 +18,7 @@ BANDS = {  # stat: (low, high)
     "passes": (700, 1000), "pass_acc": (.78, .88), "poss_gap": (0, .2),
     "fouls": (16, 28), "corners": (7, 13), "throw_ins": (30, 55), "goal_kicks": (8, 18),
     "dist_km": (9.5, 12), "top_speed": (8.5, 10.5), "tackles": (40, 100),
-    "centroid_ball_corr": (.5, 1.0), "team_depth": (25, 45), "team_width": (40, 60),
+    "offsides": (2.5, 8), "centroid_ball_corr": (.5, 1.0), "team_depth": (25, 45), "team_width": (40, 60),
 }
 
 
@@ -57,7 +57,7 @@ def one(seed):
         pass_acc=np.mean([e["outcome"] == "complete" for e in passes if e["outcome"]]) if passes else 0,
         poss_gap=abs(np.mean(poss[poss >= 0] == 0) - .5) * 2,
         fouls=cnt("foul"), corners=cnt("corner"), throw_ins=cnt("throw_in"), goal_kicks=cnt("goal_kick"),
-        tackles=cnt("tackle"), dist_km=sp[:, outfield].sum(0).mean() * dt / 1000, top_speed=np.percentile(sp[:, outfield].max(0), 50),
+        tackles=cnt("tackle"), offsides=cnt("offside"), injuries=cnt("injury"), var=cnt("var_check"), disallowed=cnt("goal_disallowed"), subs=cnt("substitution"), recoveries=cnt("ball_recovery"), added1=r["meta"]["added_time"][0], added2=r["meta"]["added_time"][1], dist_km=sp[:, outfield].sum(0).mean() * dt / 1000, top_speed=np.percentile(sp[:, outfield].max(0), 50),
         centroid_ball_corr=corr, team_depth=depth, team_width=width,
         yellow=cnt("card", card="yellow"), red=cnt("card", card="red"), score=tuple(r["meta"]["score"]),
         stamina_end=float(m.stam[outfield].mean()))
@@ -79,7 +79,7 @@ if __name__ == "__main__":
         ok = lo <= v <= hi
         bad += not ok
         print(f"  {k:20s} {v:8.2f}   target {lo}-{hi}   {'ok' if ok else 'OFF'}")
-    for k in ("yellow", "red", "stamina_end"):
+    for k in ("yellow", "red", "injuries", "var", "disallowed", "subs", "recoveries", "added1", "added2", "stamina_end"):
         print(f"  {k:20s} {np.mean([r[k] for r in rows]):8.2f}")
     print("  scores:", [r["score"] for r in rows])
     if "--check" in sys.argv and bad:

@@ -36,6 +36,15 @@ movement. `engine._steer` moves players with pace, acceleration, stamina limits 
 **Dynamic resolution.** Passes and loose balls are resolved by whoever physically reaches the ball first rolling for
 control, so completion rates emerge from player positions instead of being dice rolls detached from the geometry.
 
+## Event coverage
+
+37 event types, documented in [EVENTS.md](EVENTS.md) (regenerated from simulated matches by `scripts/event_schema.py`).
+Beyond the core pipeline events (passes, shots, tackles, possession changes, pressure, match metadata) a match also
+contains the stoppages and officiating a real feed has: injuries (knock / forced substitution / serious, with treatment
+stoppages), cards and sent-offs, offsides, VAR checks and disallowed goals, own goals, announced added time
+(driven by the actual stoppages), a referee with a strictness level, weather, a lineup event, and key-pass / assist
+links with shot freeze-frames (positions of all 22 players at the moment of the shot).
+
 ## Players, traits and the manager
 
 - **Attributes** (14, scale 1-20): pace, acceleration, stamina, work rate, strength, passing, vision, dribbling,
@@ -61,7 +70,7 @@ pressures +44%, opponent passes -27%, possession rises; line height raises the c
 
 ## Known simplifications
 
-- No side swap at half time, no injuries or weather, no real offside calls (attackers are held onside).
+- No side swap at half time; no VAR for penalties or red cards; offside is called on release against the defensive line as the passer last saw it.
 - Aerial play and goalkeeping are statistical, not simulated in 3D.
 - Corners and set-piece routines are simple.
 - Some aggregates sit at the edge of their bands (corners a little low, pass accuracy low end).

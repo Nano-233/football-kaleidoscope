@@ -18,6 +18,7 @@ PUSH = np.array([0, 3, 9, 2, 4, 8, 7, 6.])        # metres forward when we have 
 DROP = np.array([0, -2, -3, -1, -3, -6, -7, -10.])  # metres back when we do not
 FOLLOW = np.array([.1, .5, .55, .55, .55, .5, .5, .45])  # how strongly the role follows the ball's x
 CRUISE = np.array([1.3, 1.5, 1.4, 1.35, 1.75, 1.1, 1.1, .8])  # jogging speed by role (box-to-box midfielders cover more ground)
+SHOULDER = np.array([0, 0, 0, 0, 0, -9., -13., -6.])  # where each attacking role stands relative to the last defender (m)
 MIN_X = np.array([0, 12, 11, 17, 21, 24, 26, 30.])  # deepest a role will drop (defenders hold the box edge, they do not hug the goal line)
 GOAL = np.array([0., W / 2])
 TUNE_COMMIT = .12
@@ -94,14 +95,14 @@ def team_targets(m, t):
     else:
         tx = tx + DROP[role] * np.clip(1.25 - tc.press, .3, 1.2)
         ty = W / 2 + (A[:, 1] - W / 2) * (1 - .3 * tc.compactness) + by * (.28 + .22 * tc.compactness) * out_f
-    if has:  # attackers stay onside while the ball is behind them
-        line = max(np.sort(O[:, 0])[-2], L / 2)
-        lim = max(line, B[0]) - .6
-        att = (role == ST) | (role == WG) | (role == AM)
-        tx = np.where(att, np.minimum(tx, lim), tx)
     tx = np.maximum(tx, MIN_X[role])
     cx = tx[out_f].mean()  # compact the block around its own centre
     tx = np.where(out_f, cx + (tx - cx) * (.9 - .2 * tc.compactness), tx)
+    if has:  # forwards hover around the last defender's shoulder: well timed they stay onside, mistimed they are flagged
+        line = max(np.sort(O[:, 0])[-2], L / 2)
+        att = (role == ST) | (role == WG) | (role == AM)
+        if B[0] > .35 * L:
+            tx = np.where(att, np.maximum(tx, line + SHOULDER[role] + 2. * np.sin(.5 * m.t + m.phase[sl])), tx)
     zone = np.stack([np.clip(tx, 2, L - 2), np.clip(ty, 2, W - 2)], 1)
 
     carrier = m.carrier if m.state == "held" else -1
@@ -126,12 +127,12 @@ def team_targets(m, t):
             d[role == GK] = 1e9
             n = 1 + (tc.press > .65)
             near = np.argsort(d)
-            danger = np.clip((.4 * L - C[0]) / (.3 * L), 0, 1)
-            if danger > 0:  # shot-blocking cover: the next two defenders drop onto the ball-goal line
+            danger = np.clip((.45 * L - C[0]) / (.3 * L), 0, 1)
+            if danger > 0:  # shot-blocking cover: the next three defenders drop onto the ball-goal line
                 gv = _unit(GOAL - C)
-                for k, i in enumerate(near[n:n + 2]):
+                for k, i in enumerate(near[n:n + 3]):
                     if d[i] < 22:
-                        zone[i] = C + gv * (3.5 + 2.5 * k) + np.array([-gv[1], gv[0]]) * (1.6 * k * (1 if k % 2 else -1))
+                        zone[i] = C + gv * (3.2 + 2.2 * k) + np.array([-gv[1], gv[0]]) * (1.8 * k * (1 if k % 2 else -1))
                         urgent[i] = True
             for i in np.argsort(d)[:n]:
                 if d[i] < R:
@@ -167,10 +168,10 @@ def team_targets(m, t):
         if mine and m.state == "held":
             C = P[carrier - 11 * t]
             elig = ((role == ST) | (role == WG) | (role == AM)) & (m.t >= m.run_cool[sl]) & (C[0] > .3 * L)
-            start = elig & (m.rng.random(11) < (.05 + .12 * tc.directness) * m.mod["runs"][sl] * m.dt)
+            start = elig & (m.rng.random(11) < (.07 + .15 * tc.directness) * m.mod["runs"][sl] * m.dt)
             for i in np.nonzero(start)[0]:
                 line = max(np.sort(O[:, 0])[-2], L / 2)
-                m.run_tgt[11 * t + i] = (min(line - 1, C[0] + 28), np.clip(A[i, 1] + m.rng.uniform(-9, 9), 4, W - 4))
+                m.run_tgt[11 * t + i] = (min(line + m.rng.uniform(-.8, 2.2), C[0] + 40), np.clip(A[i, 1] + m.rng.uniform(-9, 9), 4, W - 4))
                 m.run_until[11 * t + i] = m.t + m.rng.uniform(2.5, 4.0)
                 m.run_cool[11 * t + i] = m.t + m.rng.uniform(6, 12)
             # support triangles around the carrier
