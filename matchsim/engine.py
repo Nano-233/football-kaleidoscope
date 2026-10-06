@@ -20,7 +20,7 @@ from .movement import _tf, _unit, nrm, clip
 
 DT = 0.2
 # Single tuning table (calibrated by scripts/calibrate.py against real-football norms).
-TUNE = dict(shoot_min=.12, react=3.0, patience=.6, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.4, fk_bonus=0.05, long_bonus=0.523, prog_base=0.654, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=1.3, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=1.3, shot_k=3.15, shot_k_dir=5.0,
+TUNE = dict(adv_lin=.6, pack=.04, shoot_min=.12, react=3.0, patience=.6, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.4, fk_bonus=0.05, long_bonus=0.523, prog_base=0.654, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=1.3, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=1.3, shot_k=3.15, shot_k_dir=5.0,
             carry_base=.3, carry_prog=.2, carry_streak=.3, dwell_base=0.9, dwell_shape=2.4, dwell_scale=1.61,
             tackle_rate=0.22, wide_error=3.2, off_miss=.2, off_mult=.25)
 sig = lambda x: 1 / (1 + np.exp(-x))
@@ -86,6 +86,7 @@ class Match:
         s.injured, s.pending_inj = np.zeros(22, bool), []
         s.ctrl_t = 0.
         s.first_time_ok = 1.0
+        s.audit = None  # a list switches on decision auditing (scripts/logic_audit.py)
         s._tg = s._urg = None
         s.turnover, s.sched = None, []
         s.dead_log = []  # [start, end, kind] of every dead-ball spell
@@ -182,7 +183,7 @@ class Match:
         dx, dy = L - C[0], C[1] - W / 2
         d = np.hypot(dx, dy)
         ang = abs(np.arctan2(W / 2 + GOAL_HALF - C[1], dx) - np.arctan2(W / 2 - GOAL_HALF - C[1], dx))
-        z = -2.15 - .13 * d + 2.0 * ang - (.2 if header else 0)
+        z = -2.08 - .07 * d + 1.89 * ang - (.2 if header else 0)
         a, b = np.array([L, W / 2 - GOAL_HALF]), np.array([L, W / 2 + GOAL_HALF])
         cr = lambda p, q, r: (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
         nb = 0
@@ -574,7 +575,9 @@ class Match:
         dnear = dn.min()
         pr = float(clip(1 - dnear / 5, 0, 1))
         Vf = lambda p: np.exp(-np.hypot(L - p[..., 0], W / 2 - p[..., 1]) / 22)
+        Tf = lambda p: TUNE["adv_lin"] * p[..., 0] / L + Vf(p)  # territory: a little linear progress everywhere plus closeness to goal
         VC = Vf(C)
+        TC = Tf(C)
         prog_w = (TUNE["prog_base"] + TUNE["prog_dir"] * tc.directness) * s.mod["prog"][c]
         # losing the ball hurts most near your own goal and least in the opponent's final third
         loss_at = lambda x: TUNE["loss"] * s.mod["loss"][c] * (.45 + 1.1 * (1 - x / L))  # cost of losing it at pitch position x
@@ -631,7 +634,8 @@ class Match:
             off_m = (Pp[:, 0] > np.maximum(line, C[0]) + .3) & (Pp[:, 0] > L / 2)
             off_m &= s.rng.random(len(off_m)) > TUNE["off_miss"] - .012 * a["vision"][c]  # now and then the passer misjudges the line
             p_s = p_s * np.where(off_m, TUNE["off_mult"], 1.)
-            u = p_s * (prog_w * np.maximum(Vf(tgt) - VC, -.05) + TUNE["keep"]) - (1 - p_s) * loss_at(tgt[:, 0]) - .001 * d2 - TUNE["usage"] * s.recent[11 * t + m_]
+            byp = ((O[None, :, 0] > C[0] + 1) & (O[None, :, 0] < tgt[:, 0, None] - 1) & (dperp < 18) & (s.role[s._opp(t)] > 0)[None]).sum(1)  # opponents this pass takes out of the game
+            u = p_s * (prog_w * (Tf(tgt) - TC) + TUNE["pack"] * np.minimum(byp, 4) + TUNE["keep"]) - (1 - p_s) * loss_at(tgt[:, 0]) - .001 * d2 - TUNE["usage"] * s.recent[11 * t + m_]
             inbox_m = np.nonzero((tgt[:, 0] > L - 24) & (np.abs(tgt[:, 1] - W / 2) < 22))[0]
             for j_ in inbox_m[np.argsort(-Vf(tgt[inbox_m]))][:4]:  # could a teammate get a better chance than mine?
                 best_mate = max(best_mate, float(p_s[j_]) * s._xg(tgt[j_], O[s.role[s._opp(t)] > 0])[0])
@@ -684,7 +688,7 @@ class Match:
             else:
                 j, o, p_beat = -1, -1, 1.
             p_keep = p_beat * (1 - .15 * np.exp(-dnear / 2.3))
-            U.append(p_keep * (TUNE["carry_base"] + TUNE["carry_prog"] * prog_w * (Vf(cpos) - VC)) - (1 - p_keep) * .5 - TUNE["carry_streak"] * s.carry_streak + s.mod["carry"][c] + CARRY_ROLE[s.role[c]]
+            U.append(p_keep * (TUNE["carry_base"] + TUNE["carry_prog"] * prog_w * (Tf(cpos) - TC)) - (1 - p_keep) * .5 - TUNE["carry_streak"] * s.carry_streak + s.mod["carry"][c] + CARRY_ROLE[s.role[c]]
                      + TUNE["patience"] * np.exp(-(s.t - s.ctrl_t) / 2.0) * (1 - pr) * (dnear > 4)); K.append("carry"); X.append((cpos, o, p_beat))
             if C[0] < .2 * L and dnear < 3.5:
                 U.append(.2 + .35 * pr); K.append("clear"); X.append(np.array([C[0] + 40, clip(C[1] + s.rng.choice([-1, 1]) * 18, 5, W - 5)]))
@@ -694,6 +698,8 @@ class Match:
         U = np.array(U)
         pr_ = np.exp((U - U.max()) / tau)
         k = s.rng.choice(len(U), p=pr_ / pr_.sum())
+        if s.audit is not None:
+            s._audit(t, c, C, O, pr, dnear, rk, K, X, U, k)
         kind, x = K[k], X[k]
         order = np.argsort(-U)[:4]
         why = dict(pressure=round(pr, 2), nearest_opponent_m=round(float(dnear), 1), chosen=kind,
@@ -732,6 +738,27 @@ class Match:
             s.carry_speed = float(min(.85 * s.vmax[c], 3.2 + 2.2 * (1 - pr)))  # running at a defender or into space: faster when unpressed
             s.carry_streak += 1
             s.next_dec = s.t + s.rng.uniform(.35, .6)  # keep carrying and look again shortly
+
+    def _audit(s, t, c, C, O, pr, dnear, rk, K, X, U, k):
+        """Record every on-ball decision with all the options considered (attacking-left-to-right frame)."""
+        opts = []
+        for kk, xx, uu in zip(K, X, U):
+            o = dict(kind=kk, u=float(uu))
+            if kk == "pass":
+                tg = np.asarray(xx[1]); o.update(to=int(xx[0]) - 11 * t, tgt=tg.tolist(), p=float(xx[4]), lofted=bool(xx[2]), rcv_d=float(nrm(O - tg, axis=1).min()))
+            elif kk == "cross":
+                o.update(to=int(xx[0]) - 11 * t, tgt=np.asarray(xx[1]).tolist(), p=float(xx[2]))
+            elif kk == "shot":
+                o.update(xg=float(xx[0]), nb=int(xx[1]))
+            elif kk == "carry":
+                o.update(tgt=np.asarray(xx[0]).tolist(), p=float(xx[2]), blocked=bool(xx[1] >= 0))
+            else:
+                o.update(tgt=np.asarray(xx).tolist())
+            opts.append(o)
+        out = O[s.role[s._opp(t)] > 0]
+        s.audit.append(dict(t=round(s.t, 1), team=t, c=int(c - 11 * t), role=int(s.role[c]), pos=C.tolist(), rk=rk, press=float(pr), dnear=float(dnear),
+                            ahead=int((out[:, 0] > C[0]).sum()), ahead_close=int(((out[:, 0] > C[0] - 1) & (np.abs(out[:, 1] - C[1]) < 10)).sum()),
+                            hold=round(float(s.t - s.ctrl_t), 2), chosen=int(k), opts=opts))
 
     # ------------------------------------------------------------------ actions
     def _pass(s, c, rcv, aim, lofted, spd, est, kind="pass", sigma_scale=1.0, why=None, source=None, hands_ok=True):
