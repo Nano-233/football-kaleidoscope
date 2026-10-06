@@ -140,6 +140,23 @@ Fresh 96-match battery showed real gaps, so we fixed the big ones by measuring s
 Left slightly off on purpose: goals run 3.4-3.6 (an attacking league, real top flights 2.7-3.3) and shots come at about 0.15 xG
 each (real 0.10); pass volume about 680 (real 700-900) and pass accuracy 0.77-0.78; striker share of shots 0.53.
 
+### Player brain v3 (why it looked random, and what changed)
+Watching a match exposed behaviour the aggregates could not: players paused with the ball in front of goal, four defenders
+swarmed one attacker while others were free, and attackers stayed 20-30 m from the ball so the carrier had no support.
+Causes found by sampling frames (not by guessing): a random 1-3 s "thinking pause" after every touch; a softmax choice with
+noise that made close options look arbitrary; attackers only taking up box positions once the ball was already there; every
+defender collapsing on the ball because nobody near goal needed marking.
+Changes, each with a measurable proxy in `scripts/brain_metrics.py`:
+- decision timing: short reaction time that shrinks under pressure, first-time passes/shots, a fading patience term so an
+  unpressed player carries a bit before releasing (time on the ball 2.1 s, first-time big chances 55 %);
+- a clear sight of goal is taken (xG above a threshold) unless a teammate is clearly better placed;
+- near the box every role has a job (near post, far post, edge of the box, overlap, cover) and the team moves up with the
+  ball's path (4 attackers near the box when the ball is there, real about 4-6);
+- defenders mark by threat (attackers closest to goal first, firmly inside the box), keep 7 m between non-engaged defenders and
+  use one cover player instead of three (an attacker with 3+ defenders within 5 m: 0.6 % of frames).
+Aggregates were re-balanced by sweeping tempo, shot cost and tackle rate; playback is smoothed with Catmull-Rom interpolation.
+Known gap: players still follow targets rather than a full tactical model; fluidity of the raw 5 Hz data is limited.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
