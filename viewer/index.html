@@ -65,6 +65,7 @@ function draw(){
   const m = Math.floor(t/60), s = Math.floor(t%60);
   $('clock').textContent = `${m}:${String(s).padStart(2,'0')}`;
   const line = e => e.type === 'substitution' ? `${e.minute}' SUB ${D.meta[e.team ? 'away' : 'home'].code}: ${e.off_name} → ${e.on_name} (${e.reason})`
+    : e.type === 'formation_change' ? `${e.minute}' FORMATION ${D.meta[e.team ? 'away' : 'home'].code}: ${e.previous} → ${e.formation} (${e.reason})`
     : e.type === 'tactic_change' ? `${e.minute}' TACTICS ${D.meta[e.team ? 'away' : 'home'].code}: ${e.reason}`
     : `${e.minute}' ${e.type}${e.player ? ' – '+(names[e.player]?.name||e.player) : ''}${e.outcome ? ' ('+e.outcome+')' : ''}${e.card ? ' '+e.card : ''}${e.xg ? ' xG '+e.xg.toFixed(2) : ''}`;
   $('log').innerHTML = ev.filter(e => !['pressure','carry','possession_change','take_on'].includes(e.type)).slice(-6).reverse().map(line).join('<br>');

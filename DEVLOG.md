@@ -94,6 +94,21 @@ so mean xG per shot is about 0.1 and headers about 0.07.
 | 3 | 24 | 3.74 | 2.67 | after accuracy and shot-share parameters; 14 parameters, 1 round |
 | 4 | 40 | 2.75 | 2.29 | 20 workers, stopped after round 0 (diminishing returns). Validated on 96 fresh matches: goals 3.04, shots 24.6, xG 3.08, offsides 6.1; still off: pass accuracy 0.76, throw-ins 27, open-play crosses 11.6, aerial duels 41.5, striker shot share 0.53 |
 
+### Completeness over decimals (decision)
+After the aggregates were in band we stopped chasing them and added what a real feed contains, even where numbers are
+slightly off: keeper actions (catch / parry / tip over, throws and kicks, claims, punches, sweeps, outfield keeper),
+free kicks with takers and walls, corner routines (short, near/far post, penalty spot, edge of box), throw-ins tagged
+with hands, formation changes (11- and 10-man shapes), VAR for penalties and red cards, advantage play. Each is an event
+type or event field in `EVENTS.md`, so downstream agents see the full vocabulary.
+Bugs found on the way: two sent-off players with the same slot index were parked at the same point (zero distance in
+the separation step gave NaN); fixed with distinct parking spots and a distance floor. A free-kick xG that counted wall
+players as open-play blockers made direct free kicks worthless; set balls now use a separate xG with a fixed wall block.
+
+### Speed of the tuning loop
+One evaluation is 24-40 full matches at about 10 s each. We used 6 workers on a 24-core machine for a day. Using 20 workers
+cut a tuner step from 80 s to 52 s. Next: faster engine hot paths (60 % of time is the movement targets), half-match tuning,
+and a surrogate-regression tuner (fit metric ~ parameters from perturbation runs, then gradient descent on the surrogate).
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

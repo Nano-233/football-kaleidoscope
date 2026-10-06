@@ -13,13 +13,14 @@ Home attacks +x for the whole match (no side swap; ponytail: invisible to analyt
 import collections
 import dataclasses
 import numpy as np
-from .teams import L, W, ATTRS, ROLE_IDX, TRAITS, team_meta, make_match_info
+from scipy.optimize import linear_sum_assignment
+from .teams import L, W, ATTRS, ROLE_IDX, TRAITS, FORMATIONS, team_meta, make_match_info
 from . import movement
 from .movement import _tf, _unit
 
 DT = 0.2
 # Single tuning table (calibrated by scripts/calibrate.py against real-football norms).
-TUNE = dict(pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.4, fk_bonus=0.6, long_bonus=0.523, prog_base=0.654, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=0.98, gk_long=.5, box_foul=.08, home_edge=1.2, shot_cost=0.35, shot_k=3.15, shot_k_dir=5.0,
+TUNE = dict(pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.4, fk_bonus=0.05, long_bonus=0.523, prog_base=0.654, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=0.98, gk_long=.5, box_foul=.08, home_edge=1.2, shot_cost=0.35, shot_k=3.15, shot_k_dir=5.0,
             carry_base=.1, carry_prog=.2, carry_streak=.3, dwell_base=1.04, dwell_shape=2.4, dwell_scale=1.61,
             tackle_rate=0.164, wide_error=2.6, off_miss=0.55, off_mult=.5)
 sig = lambda x: 1 / (1 + np.exp(-x))
@@ -27,9 +28,15 @@ GOAL_HALF = 3.66
 _MULT = ("shot", "runs", "follow", "prog", "loss", "cruise", "commit", "foul", "tackle")
 _ADD = ("range", "carry", "takeon", "sweep", "fk")
 ROLE_SHOT = np.array([0., .6, .7, .9, 1.15, 1.1, 1.25, .85])  # shot appetite by role (GK CB FB DM CM WG AM ST)
+# manager's formation switches (11 players) and the ten-man shape after a red card
+ATTACK = {"4-4-2": "4-3-3", "4-5-1": "4-3-3", "4-1-4-1": "4-2-3-1", "5-3-2": "3-5-2", "5-4-1": "4-4-2", "3-5-2": "3-4-3", "4-2-3-1": "4-3-3", "4-3-3": "3-4-3"}
+DEFEND = {"4-3-3": "4-5-1", "4-4-2": "4-5-1", "4-2-3-1": "4-1-4-1", "3-5-2": "5-3-2", "3-4-3": "5-4-1", "4-1-4-1": "5-4-1", "4-5-1": "5-4-1"}
+TEN_MAN = {"4-4-2": "4-4-1", "4-3-3": "4-3-2", "4-2-3-1": "4-4-1", "3-5-2": "5-3-1", "5-3-2": "5-3-1", "4-5-1": "4-4-1", "3-4-3": "5-3-1", "5-4-1": "5-3-1", "4-1-4-1": "4-4-1"}
+_ROLE_NEAR = {frozenset(p): c for p, c in {("CB", "FB"): 1.5, ("CB", "DM"): 2., ("FB", "WG"): 1.5, ("DM", "CM"): 1., ("CM", "AM"): 1., ("CM", "WG"): 1.8,
+                                          ("AM", "WG"): 1., ("AM", "ST"): 1.5, ("WG", "ST"): 1.8, ("FB", "DM"): 3., ("FB", "CM"): 2.5}.items()}
 _PRESET_X = {"GK": .03, "CB": .20, "FB": .22, "DM": .37, "CM": .43, "WG": .66, "AM": .57, "ST": .70}
 _ROLE_NAME = {v: k for k, v in ROLE_IDX.items()}
-PARK = np.array([[L / 2, -40. - 2 * (i % 11)] for i in range(22)])  # sent-off players wait off the pitch
+PARK = np.array([[L / 2 + 6 * (i // 11), -40. - 2 * (i % 11)] for i in range(22)])  # distinct spots so parked players never coincide  # sent-off players wait off the pitch
 
 
 class Match:
@@ -61,6 +68,8 @@ class Match:
         s.bench = [list(home["bench"]), list(away["bench"])]
         s.yellow, s.off = np.zeros(22, int), np.zeros(22, bool)
         s.subs = [0, 0]
+        s.formation = [home["formation"], away["formation"]]
+        s.last_form_t, s.forms_used, s.want_form = [-9999., -9999.], [0, 0], [None, None]
         s.windows = [[(s.rng.uniform(9, 16), 2), (s.rng.uniform(24, 30), 2), (s.rng.uniform(34, 40), 1)] for _ in (0, 1)]
         s.mark = [-np.ones(11, int), -np.ones(11, int)]
         s.run_until, s.run_cool = np.zeros(22), np.zeros(22)
@@ -263,6 +272,7 @@ class Match:
             s._manage()
         if s.state == "dead":
             s._do_subs()
+            s._do_formation()
         s._record()
         s.t += s.dt
         s.tick += 1
@@ -308,7 +318,7 @@ class Match:
         s.vel += dv * np.minimum(1, s.acc * dt / np.maximum(n, 1e-6))[:, None]
         s.pos = s.pos + s.vel * dt
         r = s.pos[:, None] - s.pos[None]
-        dd = np.linalg.norm(r, axis=2) + np.eye(22) * 99
+        dd = np.maximum(np.linalg.norm(r, axis=2), 1e-3) + np.eye(22) * 99
         s.pos += (r / dd[..., None] * ((1.6 - dd).clip(0))[..., None]).sum(1) * .35
         s.pos = np.clip(s.pos, [-1, -1], [L + 1, W + 1])
         if s.off.any():
@@ -422,14 +432,32 @@ class Match:
         if s.t >= s.next_dec:
             s._decide()
 
+    def _penalty_spot(s, t):
+        spot = np.array([L - 11, W / 2])
+        return _tf(spot) if t else spot
+
+    def _var_review(s, team, player, reason):
+        dur = float(s.rng.uniform(70, 150))
+        s.stop[s.period - 1] += dur
+        s.emit("var_check", team=team, player=player, reason=reason, duration=dur)
+        return dur
+
     def _foul(s, o, c):
         t = c // 11
         s.stop[s.period - 1] += 4
         pt0 = _tf(s.pos[c]) if t else s.pos[c]
-        if pt0[0] > L - 16.5 and abs(pt0[1] - W / 2) < 20.16 and s.rng.random() > TUNE["box_foul"]:
-            # contact in the box that is not given: play on after a tackle
+        in_box = bool(pt0[0] > L - 16.5 and abs(pt0[1] - W / 2) < 20.16)
+        if in_box and s.rng.random() > TUNE["box_foul"]:
+            # contact in the box that is not given; now and then VAR sends the referee to the screen
             s.emit("tackle", player=o, pos=s.pos[c], target=s.ids[c], outcome="won")
             s.emit("dispossessed", player=c, pos=s.pos[c])
+            if s.rng.random() < .05:
+                dur = s._var_review(t, o, "missed foul in the box")
+                s.emit("foul", player=o, pos=s.pos[c], target=s.ids[c], reason="tackle", var=True)
+                s.emit("var_overturned", team=t, reason="penalty awarded after review")
+                s._end_spell()
+                s.emit("penalty", team=t, pos=s._penalty_spot(t))
+                return s._set_dead("penalty", t, s._penalty_spot(t), 45 + dur)
             s.block_until[c] = s.t + .8
             s.last_touch = o
             return s._loose_ball(_unit(s.vel[o] + s.rng.normal(0, 1, 2)) * 2.5)
@@ -437,11 +465,19 @@ class Match:
         s.emit("foul", player=o, pos=s.pos[c], target=s.ids[c], reason=reason)
         u = s.rng.random()
         k = .7 + .6 * s.ref
-        if u < .005 * k and s.role[o] != 0:
+        card = "red" if (u < .005 * k and s.role[o] != 0) else ("yellow" if u < .13 * k else None)
+        if card == "red" and s.rng.random() < .3:  # VAR looks at the challenge
+            s._var_review(o // 11, o, "possible red card")
+            if s.rng.random() < .3:
+                s.emit("var_overturned", team=o // 11, reason="red card downgraded to yellow")
+                card = "yellow"
+            else:
+                s.emit("var_confirmed", team=o // 11, player=o)
+        if card == "red":
             s.emit("card", player=o, card="red")
             s.stop[s.period - 1] += 40
             s._send_off(o)
-        elif u < .13 * k:
+        elif card == "yellow":
             s.yellow[o] += 1
             s.stop[s.period - 1] += 10
             if s.yellow[o] >= 2 and s.role[o] != 0:
@@ -452,14 +488,24 @@ class Match:
         if s.rng.random() < .012:
             s._injury(c, "foul")
         p = s.pos[c].copy()
-        pt = _tf(p) if t else p
+        if not in_box and card != "red" and s.state == "held" and s.carrier == c and s.rng.random() < .14:
+            # the referee plays advantage: the fouled side keeps the ball and runs on
+            s.emit("advantage", team=t, pos=p)
+            s.block_until[o] = s.t + 2.
+            s.protect_until = s.t + 2.
+            return
         s._end_spell()
-        if pt[0] > L - 16.5 and abs(pt[1] - W / 2) < 20.16:
-            spot = np.array([L - 11, W / 2])
-            s.emit("penalty", team=t, pos=_tf(spot) if t else spot)
-            s._set_dead("penalty", t, _tf(spot) if t else spot, 45)
+        if in_box:
+            if s.rng.random() < .08:  # VAR checks the penalty award
+                dur = s._var_review(t, o, "penalty review")
+                if s.rng.random() < .25:
+                    s.emit("var_overturned", team=t, reason="penalty cancelled")
+                    return s._set_dead("drop_ball", 1 - t, np.clip(p, [1, 1], [L - 1, W - 1]), dur + 8)
+                s.emit("var_confirmed", team=t, player=o)
+            s.emit("penalty", team=t, pos=s._penalty_spot(t))
+            s._set_dead("penalty", t, s._penalty_spot(t), 45)
         else:
-            s.emit("free_kick", team=t, pos=p)
+            s.emit("free_kick", team=t, pos=p, direct=bool(np.hypot((L - pt0[0]), pt0[1] - W / 2) < 40), distance_to_goal=round(float(np.hypot((L - pt0[0]), pt0[1] - W / 2)), 1))
             s._set_dead("free_kick", t, p, 20 + s.rng.random() * 20)
 
     # ------------------------------------------------------------------ decision
@@ -821,6 +867,51 @@ class Match:
                 s.last_tact_emit[t].update(new)
                 s.last_tact_t[t] = s.t
             s.tact[t] = dataclasses.replace(cur, **new)
+            if s.want_form[t] is None and s.forms_used[t] < 3 and s.t - s.last_form_t[t] > 900:
+                choice = s._choose_formation(t, gd, mins, down)
+                if choice:
+                    s.want_form[t] = choice
+
+    def _choose_formation(s, t, gd, mins, down):
+        cur, n_on = s.formation[t], int(11 - s.off[s._own(t)].sum())
+        if n_on == 10:
+            new = TEN_MAN.get(cur) if cur not in ("4-4-1", "4-3-2", "5-3-1") else None
+            return (new, "man down") if new else None
+        if n_on < 10:
+            return None
+        if down < 0 and mins > 20 and s.rng.random() < .25:
+            new = ATTACK.get(cur)
+            return (new, "man advantage") if new else None
+        if gd <= -1 and mins >= 60 and s.rng.random() < .06:
+            new = ATTACK.get(cur)
+            return (new, "chasing the game") if new else None
+        if gd >= 1 and mins >= 75 and s.rng.random() < .06:
+            new = DEFEND.get(cur)
+            return (new, "protecting the lead") if new else None
+        return None
+
+    def _do_formation(s):
+        for t in (0, 1):
+            if s.want_form[t] is None:
+                continue
+            name, reason = s.want_form[t]
+            s.want_form[t] = None
+            own = [i for i in range(11 * t, 11 * t + 11) if not s.off[i]]
+            slots = FORMATIONS.get(name)
+            if slots is None or len(slots) != len(own) or name == s.formation[t]:
+                continue
+            cost = np.array([[100. if (s.role[i] == 0) != (sl[1] == "GK") else
+                              (0. if _ROLE_NAME[s.role[i]] == sl[1] else _ROLE_NEAR.get(frozenset((_ROLE_NAME[s.role[i]], sl[1])), 4.)) + 3 * abs(s.anchor[i][1] / W - sl[3])
+                              for sl in slots] for i in own])
+            rows, cols = linear_sum_assignment(cost)
+            moves = []
+            for r_, c_ in zip(rows, cols):
+                i, (lab, role, ax, ay) = own[r_], slots[c_]
+                if _ROLE_NAME[s.role[i]] != role:
+                    moves.append(dict(player=s.ids[i], role_from=_ROLE_NAME[s.role[i]], role_to=role))
+                s.role[i], s.anchor[i] = ROLE_IDX[role], [ax * L, ay * W]
+            s.emit("formation_change", team=t, formation=name, previous=s.formation[t], reason=reason, moves=moves)
+            s.formation[t], s.last_form_t[t], s.forms_used[t] = name, s.t, s.forms_used[t] + 1
 
     def _do_subs(s):
         if s.period != 2:

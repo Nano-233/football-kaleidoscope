@@ -31,6 +31,11 @@ DOC = {  # one line per type for the agents reading this
     "corner": "Corner awarded.", "throw_in": "Throw-in awarded.", "goal_kick": "Goal kick awarded.",
     "injury": "Injury with severity knock (plays on)|substitution|serious, cause.", "play_stopped": "Referee stops play (injury treatment, duration).",
     "injury_off": "Injured player leaves and cannot be replaced.", "substitution": "Substitution: off, on, reason (fresh legs|chasing the game|protecting the lead|injury), stamina of the departing player.",
+    "formation_change": "Manager switches shape: formation, previous, reason (chasing the game|protecting the lead|man down|man advantage) and the role moves.",
+    "advantage": "Referee plays advantage after a foul; the fouled side keeps the ball.",
+    "var_overturned": "VAR changes the decision (penalty awarded or cancelled, red card downgraded).",
+    "keeper_claim": "Keeper claims a cross or collects a ball played into his box.", "keeper_punch": "Keeper punches a cross clear.",
+    "keeper_sweep": "Keeper comes off his line to clear a ball played in behind.", "outfield_keeper": "No keeper left: an outfield player takes the gloves.",
     "tactic_change": "Manager adjusts tactics: reason and the changed dials [old, new].",
 }
 
