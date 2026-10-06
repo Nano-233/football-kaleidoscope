@@ -98,11 +98,17 @@ def team_targets(m, t):
     tx = np.maximum(tx, MIN_X[role])
     cx = tx[out_f].mean()  # compact the block around its own centre
     tx = np.where(out_f, cx + (tx - cx) * (.9 - .2 * tc.compactness), tx)
+    if has and B[0] > .62 * L:  # midfielders arrive late at the edge of the box; wingers tuck in when the ball is on the far side
+        late = (role == CM) | (role == AM)
+        tx = np.where(late, np.maximum(tx, np.minimum(B[0] - 3, L - 20)), tx)
     if has:  # forwards hover around the last defender's shoulder: well timed they stay onside, mistimed they are flagged
         line = max(np.sort(O[:, 0])[-2], L / 2)
         att = (role == ST) | (role == WG) | (role == AM)
         if B[0] > .35 * L:
             tx = np.where(att, np.maximum(tx, line + SHOULDER[role] + 2. * np.sin(.5 * m.t + m.phase[sl])), tx)
+    if has and B[0] > .55 * L:
+        far = (role == WG) & (np.abs(B[1] - A[:, 1]) > 25)
+        ty = np.where(far, W / 2 + np.sign(A[:, 1] - W / 2) * 9, ty)
     zone = np.stack([np.clip(tx, 2, L - 2), np.clip(ty, 2, W - 2)], 1)
 
     carrier = m.carrier if m.state == "held" else -1
@@ -171,7 +177,7 @@ def team_targets(m, t):
             start = elig & (m.rng.random(11) < (.07 + .15 * tc.directness) * m.mod["runs"][sl] * m.dt)
             for i in np.nonzero(start)[0]:
                 line = max(np.sort(O[:, 0])[-2], L / 2)
-                m.run_tgt[11 * t + i] = (min(line + m.rng.uniform(-.8, 2.2), C[0] + 40), np.clip(A[i, 1] + m.rng.uniform(-9, 9), 4, W - 4))
+                m.run_tgt[11 * t + i] = (min(line + m.rng.uniform(-1.4, 1.0), C[0] + 40), np.clip(A[i, 1] + m.rng.uniform(-9, 9), 4, W - 4))
                 m.run_until[11 * t + i] = m.t + m.rng.uniform(2.5, 4.0)
                 m.run_cool[11 * t + i] = m.t + m.rng.uniform(6, 12)
             if abs(C[1] - W / 2) > 15 and C[0] > .62 * L:  # ball wide in the final third: get bodies into the box

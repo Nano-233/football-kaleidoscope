@@ -17,7 +17,7 @@ BANDS = {
     "pass_fwd": (.30, .45), "pass_back": (.18, .32), "pass_len": (16.5, 21), "long_share": (.06, .13), "through": (.005, .03),
     "open_crosses": (25, 50), "head_share": (.10, .20), "box_share": (.66, .82), "penalties": (.15, .45),
     "ball_in_play": (.55, .68), "pressures": (200, 450), "ppda": (8, 14), "interceptions": (14, 30), "aerial_duels": (50, 110),
-    "goals": (2.4, 3.1), "shots": (20, 30), "shots_ST": (.2, .38), "shots_CB": (.02, .1), "pass_per_poss": (3.5, 6.5),
+    "goals": (2.4, 3.1), "shots": (20, 30), "shots_ST": (.3, .5), "shots_mid": (.18, .35), "shots_CB": (.02, .1), "pass_per_poss": (3.5, 6.5),
 }
 
 
@@ -51,7 +51,7 @@ def stats(m, r):
     roles = {p["id"]: p["role"] for tm in ("home", "away") for p in r["meta"][tm]["players"] + r["meta"][tm]["bench"]}
     role_share = lambda evs, ro: np.mean([roles[e["player"]] == ro for e in evs]) if evs else 0
     return dict(
-        shots_ST=role_share(shots, "ST"), shots_CB=role_share(shots, "CB"), pass_per_poss=len(passes) / max(c["possession_change"], 1),
+        shots_ST=role_share(shots, "ST"), shots_mid=sum(role_share(shots, ro) for ro in ("CM", "DM", "AM")), shots_CB=role_share(shots, "CB"), pass_per_poss=len(passes) / max(c["possession_change"], 1),
         pass_fwd=sum(e["gain"] > 5 for e in passes) / n, pass_back=sum(e["gain"] < -5 for e in passes) / n,
         pass_len=np.mean([e["length"] for e in passes]), long_share=sum(e["length"] > 32 for e in passes) / n,
         through=sum(e["technique"] == "through_ball" for e in passes) / n,
