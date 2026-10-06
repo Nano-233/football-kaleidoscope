@@ -29,6 +29,10 @@ python scripts/tune.py 24 2        # auto-tune TUNE so every metric sits inside 
 python tests/test_sim.py           # determinism + invariants
 ```
 
+## How it was built
+
+[DEVLOG.md](DEVLOG.md) documents the tuning method, debugging case studies and tuning runs.
+
 ## How the engine works
 
 See [DESIGN.md](DESIGN.md). In short: decisions are event-driven and based on real geometry (lane interception,
