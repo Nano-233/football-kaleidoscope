@@ -53,7 +53,8 @@ def refresh_marking(m, t):
     O, zone = f(m.pos[osl]), f(m.tgt[sl])
     D = np.nonzero((m.role[sl] >= CB) & (m.role[sl] <= CM))[0]
     Oo = np.nonzero(m.role[osl] > GK)[0]
-    r, c = linear_sum_assignment(cdist(zone[D], O[Oo]))
+    threat = np.exp(-nrm(O[Oo] - GOAL) / 22)  # attackers closer to our goal matter more
+    r, c = linear_sum_assignment(cdist(zone[D], O[Oo]) - 14 * threat[None, :])
     mk = -np.ones(11, int)
     mk[D[r]] = Oo[c]
     m.mark[t] = mk
@@ -144,7 +145,7 @@ def team_targets(m, t):
                     break
                 i = min(free, key=lambda j: float(nrm(zone[j] - np.array(spot))))
                 free.remove(i)
-                tgt_ = np.array([min(spot[0], line_t), spot[1]])
+                tgt_ = np.array([min(spot[0], line_t - 1.4 + 1.6 * np.sin(.5 * m.t + m.phase[11 * t + i])), spot[1]])  # on the shoulder of the last defender, now and then mistimed
                 zone[i] = zone[i] * (1 - w) + tgt_ * w
 
     mine = 11 * t <= carrier < 11 * t + 11
@@ -157,7 +158,14 @@ def team_targets(m, t):
         man = o + _unit(GOAL - o) * (1.2 + 1.8 * (1 - tc.marking))
         gate = clip(1.4 - nrm(zone - o, axis=1) / 22, 0, 1) * tc.marking * ok
         gate = np.where(ok & (o[:, 0] < 20) & (np.abs(o[:, 1] - W / 2) < 22) & (role > GK), np.maximum(gate, .85), gate)  # attackers in the box are marked, not watched
+        thr = np.exp(-nrm(o - GOAL) / 22)
+        gate = np.where(ok, np.maximum(gate, clip((thr - .25) * 1.6, 0, .8)), gate)  # and so is anyone within about 30 m of goal
         zone = zone * (1 - gate[:, None]) + man * gate[:, None]
+        free = out_f & (gate < .5)  # defenders holding a zone keep their distance from each other: no bunching, no gaps
+        dz = zone[:, None] - zone[None]
+        dd = np.maximum(nrm(dz), 1e-3) + np.eye(11) * 99
+        push = dz / dd[..., None] * np.maximum(7. - dd, 0)[..., None] * (free[:, None] & free[None])[..., None] * .5
+        zone = zone + push.sum(1) * free[:, None]
         # pressing the opposing ball carrier
         if m.poss == 1 - t and carrier >= 0:
             C, Cv = O[carrier - 11 * (1 - t)], fv(m.vel[carrier])
@@ -172,7 +180,7 @@ def team_targets(m, t):
             danger = clip((.45 * L - C[0]) / (.3 * L), 0, 1)
             if danger > 0:  # shot-blocking cover: the next three defenders drop onto the ball-goal line
                 gv = _unit(GOAL - C)
-                for k, i in enumerate(near[n:n + 2]):
+                for k, i in enumerate(near[n:n + 1]):
                     if d[i] < 22:
                         zone[i] = C + gv * (3.2 + 2.2 * k) + np.array([-gv[1], gv[0]]) * (1.8 * k * (1 if k % 2 else -1))
                         urgent[i] = True

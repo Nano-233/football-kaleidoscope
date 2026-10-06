@@ -45,9 +45,22 @@ function pitch(){
     g.strokeRect(px(s ? L : -2),py(W/2-3.66),2*SX,7.32*SY); }
 }
 function who(k){ let p = slots[k]; for (const e of D.events) { if (e.t > t) break; if ((e.type === 'substitution' || e.type === 'outfield_keeper') && e.slot === k) p = info[e.on] || p; } return p; }
+// Playback smoothing: the engine records at 5 Hz, so draw an interpolated frame (Catmull-Rom through the players, linear for the ball)
+const F_SM = new Float32Array(50);
+function smooth(i, u){
+  const f0 = frames[Math.max(0, i - 1)], f1 = frames[i], f2 = frames[Math.min(frames.length - 1, i + 1)], f3 = frames[Math.min(frames.length - 1, i + 2)];
+  F_SM[1] = f1[1] + (f2[1] - f1[1]) * u; F_SM[2] = f1[2] + (f2[2] - f1[2]) * u;
+  F_SM[3] = u < .5 ? f1[3] : f2[3]; F_SM[4] = f1[4]; F_SM[49] = f1[49] || 0;
+  for (let j = 5; j < 49; j++) {
+    const p0 = f0[j], p1 = f1[j], p2 = f2[j], p3 = f3[j];
+    if (Math.abs(p2 - p1) > 14) { F_SM[j] = p1; continue; }  // substitution or half-time reset: no sweep across the pitch
+    F_SM[j] = .5 * ((2 * p1) + (-p0 + p2) * u + (2 * p0 - 5 * p1 + 4 * p2 - p3) * u * u + (-p0 + 3 * p1 - 3 * p2 + p3) * u * u * u);
+  }
+  return F_SM;
+}
 function draw(){
   if (!D) return;
-  const i = Math.min(frames.length-1, Math.max(0, Math.round(t/dt))), f = frames[i];
+  const fi = Math.min(frames.length - 1.001, Math.max(0, t / dt)), i = Math.floor(fi), u = fi - i, f = smooth(i, u);
   pitch();
   const carrier = f[3];
   for (let k = 0; k < 22; k++) {

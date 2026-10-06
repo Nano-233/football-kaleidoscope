@@ -20,9 +20,9 @@ from .movement import _tf, _unit, nrm, clip
 
 DT = 0.2
 # Single tuning table (calibrated by scripts/calibrate.py against real-football norms).
-TUNE = dict(react=1.0, patience=.6, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.4, fk_bonus=0.05, long_bonus=0.523, prog_base=0.654, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=2.2, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=0.3, shot_k=3.15, shot_k_dir=5.0,
+TUNE = dict(shoot_min=.1, react=3.0, patience=.6, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.4, fk_bonus=0.05, long_bonus=0.523, prog_base=0.654, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=2.2, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=1.05, shot_k=3.15, shot_k_dir=5.0,
             carry_base=.3, carry_prog=.2, carry_streak=.3, dwell_base=0.9, dwell_shape=2.4, dwell_scale=1.61,
-            tackle_rate=0.164, wide_error=3.2, off_miss=0.55, off_mult=.5)
+            tackle_rate=0.3, wide_error=3.2, off_miss=0.55, off_mult=.5)
 sig = lambda x: 1 / (1 + np.exp(-x))
 GOAL_HALF = 3.66
 _MULT = ("shot", "runs", "follow", "prog", "loss", "cruise", "commit", "foul", "tackle")
@@ -369,7 +369,7 @@ class Match:
         xg_here, _ = s._xg(f(s.pos[i]), [])
         if xg_here > .08 and s.role[i] > 0:  # in front of goal: hit it first time
             return float(s.rng.uniform(.05, .2))
-        if s.rng.random() < clip(.1 + .4 * pr + .02 * (s.attr["passing"][i] - 10), 0, .75) * s.first_time_ok:
+        if s.rng.random() < clip(.2 + .5 * pr + .02 * (s.attr["passing"][i] - 10), 0, .8) * s.first_time_ok:
             return float(s.rng.uniform(.05, .22))  # one touch
         return float(max(.12, react + s.rng.normal(0, .05)))
 
@@ -567,6 +567,7 @@ class Match:
         if rk == "corner":
             return s._corner(c, f)
         U, K, X = [], [], []
+        best_mate = 0.  # value of the best chance he could set up for a teammate (his xG x pass success)
         # -- passes
         mates = np.array([i for i in range(11) if i != ci])
         hv = fv(s.vel[c])
@@ -614,6 +615,9 @@ class Match:
             off_m &= s.rng.random(len(off_m)) > TUNE["off_miss"] - .012 * a["vision"][c]  # now and then the passer misjudges the line
             p_s = p_s * np.where(off_m, TUNE["off_mult"], 1.)
             u = p_s * (prog_w * np.maximum(Vf(tgt) - VC, -.05) + TUNE["keep"]) - (1 - p_s) * loss_at(tgt[:, 0]) - .001 * d2 - TUNE["usage"] * s.recent[11 * t + m_]
+            inbox_m = np.nonzero((tgt[:, 0] > L - 24) & (np.abs(tgt[:, 1] - W / 2) < 22))[0]
+            for j_ in inbox_m[np.argsort(-Vf(tgt[inbox_m]))][:4]:  # could a teammate get a better chance than mine?
+                best_mate = max(best_mate, float(p_s[j_]) * s._xg(tgt[j_], O[s.role[s._opp(t)] > 0])[0])
             u = u + TUNE["long_bonus"] * (.3 + tc.directness) * ((d2 > 28) & (Vf(tgt) - VC > .06))  # direct teams go long
             if rk == "goal_kick":  # keepers go long when the team plays direct
                 u = u + TUNE["gk_long"] * tc.directness * (d2 > 30)
@@ -627,7 +631,8 @@ class Match:
                 xg, _ = s._xg(C, [])
                 xg = float(clip(xg * 2.2 * (1 + .25 * s.mod["fk"][c] + .02 * (a["finishing"][c] - 10)), 0, .5))
                 nb = 2
-            U.append((TUNE["shot_k"] + TUNE["shot_k_dir"] * tc.shoot) * s.mod["shot"][c] * ROLE_SHOT[s.role[c]] * (TUNE["shot_mid"] if s.role[c] in (3, 4, 6) else 1.) * xg * (.8 + .02 * a["finishing"][c]) - TUNE["shot_cost"] + (TUNE["fk_bonus"] if rk == "free_kick" and dg < 28 else 0)); K.append("shot"); X.append((xg, nb))
+            take = rk in (None, "free_kick") and s.role[c] > 0 and xg >= TUNE["shoot_min"] * (1.6 if dg > 22 else 1.) / (.6 + .4 * ROLE_SHOT[s.role[c]]) and best_mate < 1.5 * xg
+            U.append((100. if take else 0.) + (TUNE["shot_k"] + TUNE["shot_k_dir"] * tc.shoot) * s.mod["shot"][c] * ROLE_SHOT[s.role[c]] * (TUNE["shot_mid"] if s.role[c] in (3, 4, 6) else 1.) * xg * (.8 + .02 * a["finishing"][c]) - TUNE["shot_cost"] + (TUNE["fk_bonus"] if rk == "free_kick" and dg < 28 else 0)); K.append("shot"); X.append((xg, nb))
         # -- cross from a wide position into the box
         if rk is None and abs(C[1] - W / 2) > 13 and C[0] > .58 * L:
             boxm = [i for i in range(11) if i != ci and P[i][0] > L - 22 and abs(P[i][1] - W / 2) < 15 and not s.off[11 * t + i]]

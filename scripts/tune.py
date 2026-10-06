@@ -18,9 +18,9 @@ from matchsim import engine
 BANDS = {**calibrate.BANDS, **realism.BANDS}
 BANDS.update({"goals": (2.4, 3.1), "shots": (20, 30), "passes": (750, 950)})
 # parameter: (low, high)
-PARAMS = {"pass_sigma": (1.0, 2.0), "intercept": (.15, .5), "long_bonus": (0., 1.2), "cross_v": (.8, 3.), "dwell_base": (.4, 1.3), "dwell_scale": (.8, 2.),
-          "shot_cost": (.2, .9), "shot_k": (2.5, 7.), "shot_mid": (.8, 2.5), "usage": (.1, .8), "tackle_rate": (.06, .22), "prog_base": (.4, 2.0),
-          "prog_dir": (.2, 1.6), "keep": (.2, .7)}
+PARAMS = {"react": (1.2, 5.), "patience": (.2, 2.), "shoot_min": (.06, .16), "off_miss": (.15, 1.2), "off_mult": (.2, 1.), "pass_sigma": (1.0, 2.0), "intercept": (.15, .5),
+          "long_bonus": (0., 1.2), "cross_v": (.8, 3.), "dwell_scale": (.8, 2.), "shot_k": (2.5, 7.), "shot_mid": (.8, 2.5), "usage": (.1, .8), "tackle_rate": (.06, .4),
+          "prog_base": (.4, 2.0), "prog_dir": (.2, 1.6), "keep": (.2, .7)}
 
 
 def _init(tune):
