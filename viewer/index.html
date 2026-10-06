@@ -13,8 +13,8 @@
 </style></head><body>
 <div id="bar">
   <span id="score">loading…</span>
-  <button id="play">Play</button>
-  <select id="speed"><option>1</option><option>2</option><option selected>5</option><option>10</option><option>30</option></select>x
+  <button id="play">Play</button><button id="next" title="jump to the next key moment (n)">Next moment ⏭</button>
+  <select id="speed"><option>1</option><option>2</option><option selected>5</option><option>10</option><option>30</option><option>60</option><option>120</option></select>x
   <input id="seek" type="range" min="0" max="1" step="0.1" value="0">
   <span id="clock"></span>
 </div>
@@ -80,6 +80,9 @@ function tick(now){
   last = now; draw(); requestAnimationFrame(tick);
 }
 $('play').onclick = () => { playing = !playing; $('play').textContent = playing ? 'Pause' : 'Play'; };
+const KEY = e => ['goal','own_goal','penalty','sent_off','var_check','goal_disallowed','substitution','formation_change','injury'].includes(e.type) || (e.type === 'shot' && e.xg > .15) || (e.type === 'card' && e.card !== 'yellow');
+$('next').onclick = () => { const e = D.events.find(e => e.t > t + 1 && KEY(e)); if (e) { t = Math.max(0, e.t - 6); draw(); } };
+document.onkeydown = e => { if (e.key === 'n') $('next').click(); if (e.key === ' ') { e.preventDefault(); $('play').click(); } };
 $('seek').oninput = e => { t = +e.target.value; draw(); };
 cv.onmousemove = e => { const r = cv.getBoundingClientRect(); mouse = [(e.clientX-r.left)*cv.width/r.width, (e.clientY-r.top)*cv.height/r.height, e.clientX, e.clientY]; draw(); };
 cv.onmouseleave = () => { mouse = null; draw(); };
