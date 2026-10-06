@@ -20,7 +20,7 @@ from .movement import _tf, _unit, nrm, clip
 
 DT = 0.2
 # Single tuning table (calibrated by scripts/calibrate.py against real-football norms).
-TUNE = dict(adv_lin=.6, pack=.04, shoot_min=.12, react=3.0, patience=.6, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.4, fk_bonus=0.05, long_bonus=0.523, prog_base=0.654, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=1.3, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=1.3, shot_k=3.15, shot_k_dir=5.0,
+TUNE = dict(wide_v=.35, ctrl_marked=.45, shoot_hold=.5, shoot_slope=2.5, shoot_ref=.10, shoot_press=.8, adv_lin=.6, pack=.04, shoot_min=.12, react=3.0, patience=.6, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.4, fk_bonus=0.05, long_bonus=0.523, prog_base=0.654, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=1.3, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=1.3, shot_k=3.15, shot_k_dir=5.0,
             carry_base=.3, carry_prog=.2, carry_streak=.3, dwell_base=0.9, dwell_shape=2.4, dwell_scale=1.61,
             tackle_rate=0.22, wide_error=3.2, off_miss=.2, off_mult=.25)
 sig = lambda x: 1 / (1 + np.exp(-x))
@@ -28,6 +28,8 @@ GOAL_HALF = 3.66
 _MULT = ("shot", "runs", "follow", "prog", "loss", "cruise", "commit", "foul", "tackle")
 _ADD = ("range", "carry", "takeon", "sweep", "fk")
 CARRY_ROLE = np.array([0., 0., .1, 0., .05, .25, .15, .05])  # wingers and attacking midfielders take defenders on more (GK CB FB DM CM WG AM ST)
+LANE = np.array([.5, .6, .9, .6, .5, .85, .4, .25])  # how much of his lateral position a carrier keeps (GK CB FB DM CM WG AM ST)
+SHOT_PROP = np.array([.2, .5, .7, .8, 1., 1., 1.15, 1.3])  # how readily each role shoots (GK CB FB DM CM WG AM ST)
 ROLE_SHOT = np.array([0., .6, .7, .9, 1.15, 1.1, 1.25, .72])  # shot appetite by role (GK CB FB DM CM WG AM ST)
 # manager's formation switches (11 players) and the ten-man shape after a red card
 ATTACK = {"4-4-2": "4-3-3", "4-5-1": "4-3-3", "4-1-4-1": "4-2-3-1", "5-3-2": "3-5-2", "5-4-1": "4-4-2", "3-5-2": "3-4-3", "4-2-3-1": "4-3-3", "4-3-3": "3-4-3"}
@@ -575,7 +577,8 @@ class Match:
         dnear = dn.min()
         pr = float(clip(1 - dnear / 5, 0, 1))
         Vf = lambda p: np.exp(-np.hypot(L - p[..., 0], W / 2 - p[..., 1]) / 22)
-        Tf = lambda p: TUNE["adv_lin"] * p[..., 0] / L + Vf(p)  # territory: a little linear progress everywhere plus closeness to goal
+        Vw = lambda p: TUNE["wide_v"] * np.exp(-np.minimum(np.hypot(L - 8 - p[..., 0], W / 2 + 24 - p[..., 1]), np.hypot(L - 8 - p[..., 0], W / 2 - 24 - p[..., 1])) / 14)  # a wide delivery position is worth something too
+        Tf = lambda p: TUNE["adv_lin"] * p[..., 0] / L + np.maximum(Vf(p), Vw(p))  # territory: a little linear progress everywhere plus the better of 'close to goal' and 'in a crossing position'
         VC = Vf(C)
         TC = Tf(C)
         prog_w = (TUNE["prog_base"] + TUNE["prog_dir"] * tc.directness) * s.mod["prog"][c]
@@ -623,7 +626,7 @@ class Match:
             p_int = np.where(lofted, .08, 1 - np.prod(1 - .9 * pk, axis=1))
             dn_r = nrm(O[None] - tgt[:, None], axis=2).min(1)
             tech = (a["dribbling"][11 * t + m_] + a["composure"][11 * t + m_]) / 2
-            p_ctrl = clip(.84 + .13 * sig(.7 * (dn_r - 2.2)) + .004 * (tech - 10), .35, .98)
+            p_ctrl = clip(.97 - TUNE["ctrl_marked"] * np.exp(-(dn_r - .5) / 1.6) + .004 * (tech - 10), .25, .98)  # a defender on the receiver contests the first touch
             p_air = clip(.55 + .02 * (a["aerial"][11 * t + m_] - a["aerial"][s._opp(t)].mean()), .2, .85)
             p_ctrl = np.where(lofted, p_air, p_ctrl)
             sg = (.5 + .05 * d2) * (TUNE["pass_sigma"] * (1 - .0353 * a["passing"][c])) * (1 + .35 * pr) * np.where(lofted, 1.5, 1)
@@ -652,7 +655,15 @@ class Match:
                 xg, _ = s._xg(C, [])
                 xg = float(clip(xg * 2.2 * (1 + .25 * s.mod["fk"][c] + .02 * (a["finishing"][c] - 10)), 0, .5))
                 nb = 2
-            take = rk in (None, "free_kick") and s.role[c] > 0 and xg >= TUNE["shoot_min"] * (1.6 if dg > 22 else 1.) / (.6 + .4 * ROLE_SHOT[s.role[c]]) and best_mate < 1.5 * xg
+            take = False
+            if rk is None and s.role[c] > 0:
+                # willingness to shoot follows where he is (a clean-look xG from distance and angle), not whether a defender happens to be in the way:
+                # real shooters take it through traffic (about two defenders in the shot triangle) and the defence blocks a third of them
+                xg0, _ = s._xg(C, [])
+                z = TUNE["shoot_slope"] * np.log(xg0 / TUNE["shoot_ref"]) + 1.5 * np.log(SHOT_PROP[s.role[c]]) + 1.2 * (tc.shoot - .5) + np.log(s.mod["shot"][c]) + TUNE["shoot_press"] * pr - TUNE["shoot_hold"] * (s.t - s.ctrl_t)  # the chance is taken early: a player who keeps carrying has passed it up
+                take = bool(s.rng.random() < sig(z)) and best_mate < 1.5 * xg
+            elif rk == "free_kick":
+                take = s.role[c] > 0 and xg >= .08
             U.append((100. if take else 0.) + (TUNE["shot_k"] + TUNE["shot_k_dir"] * tc.shoot) * s.mod["shot"][c] * ROLE_SHOT[s.role[c]] * (TUNE["shot_mid"] if s.role[c] in (3, 4, 6) else 1.) * xg * (.8 + .02 * a["finishing"][c]) - TUNE["shot_cost"] + (TUNE["fk_bonus"] if rk == "free_kick" and dg < 28 else 0)); K.append("shot"); X.append((xg, nb))
         # -- cross from a wide position into the box
         if rk is None and abs(C[1] - W / 2) > 13 and C[0] > .58 * L:
@@ -671,7 +682,7 @@ class Match:
                 K.append("cross"); X.append((11 * t + tgt_i, aim, p_c))
         # -- carry / clearance
         if rk is None:
-            toward = _unit(np.array([L, W / 2]) - C)
+            toward = _unit(np.array([L, W / 2 + (C[1] - W / 2) * LANE[s.role[c]]]) - C)  # wide players keep their lane, central players head for goal
             near = dn < 8
             away = (_unit(C - O[near]) * ((8 - dn[near]) / 8)[:, None]).sum(0) if near.any() else 0
             dirv = _unit(toward + .8 * away)
@@ -1077,7 +1088,7 @@ class Match:
         opp = s._opp(i // 11)
         dn = nrm(s.pos[opp] - at, axis=1).min()
         tech = (a["dribbling"][i] + a["composure"][i]) / 2
-        return float(clip(.985 - .012 * max(0, speed - 12) + .012 * (tech - 10) - .1 * clip(1 - dn / 4, 0, 1), .3, .995))
+        return float(clip(.985 - .012 * max(0, speed - 12) + .012 * (tech - 10) - TUNE["ctrl_marked"] * np.exp(-(dn - .5) / 1.6), .25, .995))  # a defender on the receiver contests the first touch
 
     def _flight(s):
         f = s.flight

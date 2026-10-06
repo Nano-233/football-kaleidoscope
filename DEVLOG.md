@@ -157,6 +157,76 @@ Changes, each with a measurable proxy in `scripts/brain_metrics.py`:
 Aggregates were re-balanced by sweeping tempo, shot cost and tackle rate; playback is smoothed with Catmull-Rom interpolation.
 Known gap: players still follow targets rather than a full tactical model; fluidity of the raw 5 Hz data is limited.
 
+## Logic first, numbers second: calibrating against real event data (Oct 2026)
+
+**Why.** Tuning to aggregate bands hid logic errors: a wrong behaviour can still average out right. After the user watched
+the viewer (players pass back with a free forward pass on, no shot when through on goal) the rule became: fix the
+decision logic and positioning, then re-tune numbers once at the end.
+
+**New measurement tools (all in `scripts/`, none of them tune anything).**
+- `logic_audit.py` records every on-ball decision with the options considered (engine hook `Match.audit`) and checks
+  common-sense rules: through on goal and no shot, back pass with a free forward option, pass into a marked player while a
+  free one existed, dribbling into a defender with a safe pass available, and so on.
+- `norms.py real|sim` reduces real StatsBomb open data (Premier League 2015/16, 70 matches, 140 team-matches) and simulated
+  matches to the same neutral records and prints about 80 behavioural metrics side by side (`<<<` = outside 0.75-1.3x).
+  Only the aggregates are committed (`reference/norms_real.json`); the raw files stay outside the repository. StatsBomb Open
+  Data is used for calibration targets only and never inside the app. `norms360.py` does the same for shape using the 360
+  freeze frames (Euro 2020 sample) and compares positions around every pass in the final third.
+- Probes: `defence_probe.py`, `shot_chains.py` (reads the event chain behind a shot), `snapshot.py`, `sequence.py`,
+  `shot_snaps.py` (PNG pitch pictures: look at them, a single picture beat many tables), `entry_profile.py`, `shot_profile.py`.
+
+**What the real data told us (per team per match, real vs sim at the time).**
+- Possessions 88 vs 92, possessions reaching the final third 59 vs 61, reaching the box 27 vs 24: the funnel is right.
+- Shots 12.9 vs about 32 (2.5x). P(shot | possession reaches the box) 0.35 vs 0.81; P(shot | final third, not box) 0.07 vs 0.23.
+- The probability of shooting *given a location* matches almost exactly (0.04 / 0.15 / 0.33 / 0.56 / 0.61 / 0.85 / 0.94 across
+  xG-by-location bins). So the shooting decision is fine; the **supply of actions in the central lane near goal is 3-5x real**.
+- Real completion of passes into the box: centre 32%, half-spaces 45%, wide 68%. Sim 55% / 67% / 75%. Real teams attempt
+  7.8 / 14.4 / 17.9 passes into those three zones; the sim attempts 19.7 / 7.5 / 7.4. Same total, mirrored distribution:
+  real teams are forced wide, the sim goes straight through the middle.
+- At the moment of a shot real shooters have about 1.8 defenders inside the shot triangle (only 1% have none); in the sim 70-90%
+  had a free look. Defenders in the box at a shot: 6.3 real, 5.2 sim. Nearest two defenders are goal-side (within 45 degrees of the
+  line to goal) 47% of the time in real data and 21-25% in the sim.
+- Hold time before a pass: median 1.0 s real, 2.2-2.6 s sim. Carries of 4 m or more: 154 vs 255 per team; into the box 5.6 vs 9-12.
+
+**What worked (kept).**
+- The xG model was too flat at close range and too steep with distance; refitted to real anchor points (`z = -2.08 - .07 d + 1.89 angle`).
+- Shot-taking is now location driven and probabilistic (`shoot_slope`, `shoot_ref`, pressure, time on the ball), not "wait for
+  xG >= threshold with no blocker", which made the sim shoot only from free looks.
+- Territory value for passes and carries now counts forward progress everywhere (`adv_lin`), has a packing term (opponents a
+  pass takes out of the game) and no longer clamps backward passes to zero cost. Raising `prog_base` from 0.65 to 1.3 cut
+  back passes that ignored a free forward option from 13.5% to 6% (not baked in yet: it pushes own-third passing to 81%
+  forward, real 66%; needs the rest of the model first).
+- Defence: the block follows the ball a fixed distance behind it near its own goal (`LAG`), defenders stay goal-side of the
+  ball (`GS_CAP`), defenders who are not marking fill the lanes between ball and goal and the posts (`box_defence`), players
+  well behind the play sprint back (recovery runs) and attackers well behind sprint up, man-markers stand goal-side of where
+  the attacker is going (velocity lead) at the attacker's pace. Defenders in the box at a shot went 3.1 to 5.2-5.9.
+- A defender next to the receiver now contests the first touch much more strongly (`ctrl_marked`).
+
+**What did NOT work (do not repeat).**
+- Raising `tackle_rate` to stop dribblers: 1.5 cut carries into the box from 70 to 35 but produced 260 tackles and 66 fouls per match
+  (real about 41 tackles, 24 fouls). Duels at a fixed rate are the wrong lever.
+- Sweeping decision knobs (`carry_base`, `patience`, `pass_sigma`, `intercept`, `adv_lin`, `shoot_min`, `carry_prog`) one at a time
+  against box entries: carries into the box stayed 60-70. The cause is geometry (where players stand), not utility weights.
+- Sweeping `shoot_ref`, `shoot_slope`, `shoot_hold` jointly: shots never went below about 25 per team without wrecking the shot-distance
+  mix (too many close shots, too few from 20 m+). Real volume cannot be reached by shot propensity alone; it is a supply problem.
+- Lowering `MIN_X` (how deep a role may drop) without more: the defenders' *targets* were already deep (about 10 m with the ball in
+  the area); the actual positions lagged by 5-10 m because non-urgent players only jog (`CRUISE`). Deeper floors alone did nothing
+  and, with the ball 25 m out, put the back line on the goal line and gave shooters time.
+- Making defenders commit to tackles less near goal (`COMMIT_DANGER` 2 to -0.7): no change in any geometry metric.
+- Raising `wide_v` (value of a crossing position) alone: only at 1.1 did attempts start to move wide, and the central lane at
+  x 70-88 stayed 3x real. Moving the far-side winger's template spot wide did not move his average width either (he is pulled
+  inside by `seek_space`, which scores threat by distance to goal centre, and by the ball-side shift).
+- Pulling the forwards' reference closer to the last defender (`SHOULDER`): targets were right, positions still lagged; only the
+  sprint-up rule helped, and only a little.
+- Judging geometry by eye from tables: the shot-snapshot PNGs looked fine (crowded box, defenders around the shooter) while the
+  numbers said otherwise. Use both, and count rather than look.
+
+**Open problem and next idea (from the user).** Defending is too reactive. Real defenders cut passing lanes from the middle
+(cover shadows) and show the carrier outside, which is why central passes into the box complete only 32% and the ball ends up
+wide for crosses. In the sim defenders hold zones/men and press the ball, but nobody stands on the lane between the carrier and
+the central targets. Next: lane-cutting and "force wide" positioning for the nearest defenders and the midfield screen, then
+re-measure with `norms.py sim`, `norms360.py` and `logic_audit.py`. Bake in `prog_base` and re-balance last.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
