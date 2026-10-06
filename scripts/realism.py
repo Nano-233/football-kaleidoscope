@@ -12,6 +12,7 @@ from multiprocessing import Pool
 import numpy as np
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 WORKERS = max(1, (os.cpu_count() or 8) - 4)  # leave a few cores for the machine
+from matchsim import engine, teams
 from matchsim.engine import Match
 from matchsim.teams import make_team, Tactics, LEAGUE, L, W
 
@@ -19,8 +20,13 @@ BANDS = {
     "pass_fwd": (.30, .45), "pass_back": (.18, .32), "pass_len": (16.5, 21), "long_share": (.06, .13), "through": (.005, .03),
     "open_crosses": (25, 50), "head_share": (.10, .20), "box_share": (.66, .82), "penalties": (.15, .45),
     "ball_in_play": (.55, .68), "pressures": (200, 450), "ppda": (8, 14), "interceptions": (14, 30), "aerial_duels": (50, 110),
-    "goals": (2.4, 3.1), "shots": (20, 30), "shots_ST": (.3, .5), "shots_mid": (.18, .35), "shots_CB": (.02, .1), "pass_per_poss": (3.5, 6.5),
+    "goals": (2.4, 3.1), "shots": (20, 30), "take_ons": (18, 45), "shots_ST": (.3, .5), "shots_mid": (.18, .35), "shots_CB": (.02, .1), "pass_per_poss": (3.5, 6.5),
 }
+
+
+def _init(over):
+    for k, v in over.items():
+        (setattr(teams, "SPREAD", v) if k == "spread" else engine.TUNE.__setitem__(k, v))
 
 
 def one(args):
@@ -59,7 +65,7 @@ def stats(m, r):
         through=sum(e["technique"] == "through_ball" for e in passes) / n,
         open_crosses=sum(1 for e in ev if e["type"] == "cross" and e.get("source") == "open_play"),
         head_share=np.mean([e["body_part"] == "head" for e in shots]) if shots else 0, box_share=np.mean([in_box(e) for e in shots]) if shots else 0,
-        penalties=c["penalty"], ball_in_play=r["meta"]["ball_in_play"], pressures=c["pressure"], ppda=np.mean(ppda),
+        penalties=c["penalty"], take_ons=c["take_on"], ball_in_play=r["meta"]["ball_in_play"], pressures=c["pressure"], ppda=np.mean(ppda),
         interceptions=c["interception"], aerial_duels=c["duel"], goals=sum(r["meta"]["score"]), shots=len(shots), score=tuple(r["meta"]["score"]))
 
 
@@ -68,7 +74,8 @@ if __name__ == "__main__":
     mode = "home" if "--home" in args else "balance" if "--balance" in args else "mix"
     nums = [a for a in args if a.isdigit()]
     n = int(nums[0]) if nums else (100 if mode != "mix" else 48)
-    with Pool(WORKERS) as p:
+    over = {a.split("=")[0]: float(a.split("=")[1]) for a in args if "=" in a}
+    with Pool(WORKERS, initializer=_init, initargs=(over,)) as p:
         rows = p.map(one, [(1000 + i, mode) for i in range(n)])
     sc = np.array([r["score"] for r in rows])
     if mode == "home":

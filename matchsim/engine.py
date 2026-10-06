@@ -20,14 +20,15 @@ from .movement import _tf, _unit, nrm, clip
 
 DT = 0.2
 # Single tuning table (calibrated by scripts/calibrate.py against real-football norms).
-TUNE = dict(pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.4, fk_bonus=0.05, long_bonus=0.523, prog_base=0.654, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=0.98, gk_long=.5, box_foul=.08, home_edge=1.2, shot_cost=0.35, shot_k=3.15, shot_k_dir=5.0,
-            carry_base=.1, carry_prog=.2, carry_streak=.3, dwell_base=1.04, dwell_shape=2.4, dwell_scale=1.61,
-            tackle_rate=0.164, wide_error=2.6, off_miss=0.55, off_mult=.5)
+TUNE = dict(pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.4, fk_bonus=0.05, long_bonus=0.523, prog_base=0.654, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=2.2, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=0.3, shot_k=3.15, shot_k_dir=5.0,
+            carry_base=.3, carry_prog=.2, carry_streak=.3, dwell_base=0.9, dwell_shape=2.4, dwell_scale=1.61,
+            tackle_rate=0.164, wide_error=3.2, off_miss=0.55, off_mult=.5)
 sig = lambda x: 1 / (1 + np.exp(-x))
 GOAL_HALF = 3.66
 _MULT = ("shot", "runs", "follow", "prog", "loss", "cruise", "commit", "foul", "tackle")
 _ADD = ("range", "carry", "takeon", "sweep", "fk")
-ROLE_SHOT = np.array([0., .6, .7, .9, 1.15, 1.1, 1.25, .85])  # shot appetite by role (GK CB FB DM CM WG AM ST)
+CARRY_ROLE = np.array([0., 0., .1, 0., .05, .25, .15, .05])  # wingers and attacking midfielders take defenders on more (GK CB FB DM CM WG AM ST)
+ROLE_SHOT = np.array([0., .6, .7, .9, 1.15, 1.1, 1.25, .72])  # shot appetite by role (GK CB FB DM CM WG AM ST)
 # manager's formation switches (11 players) and the ten-man shape after a red card
 ATTACK = {"4-4-2": "4-3-3", "4-5-1": "4-3-3", "4-1-4-1": "4-2-3-1", "5-3-2": "3-5-2", "5-4-1": "4-4-2", "3-5-2": "3-4-3", "4-2-3-1": "4-3-3", "4-3-3": "3-4-3"}
 DEFEND = {"4-3-3": "4-5-1", "4-4-2": "4-5-1", "4-2-3-1": "4-1-4-1", "3-5-2": "5-3-2", "3-4-3": "5-4-1", "4-1-4-1": "5-4-1", "4-5-1": "5-4-1"}
@@ -176,7 +177,7 @@ class Match:
         dx, dy = L - C[0], C[1] - W / 2
         d = np.hypot(dx, dy)
         ang = abs(np.arctan2(W / 2 + GOAL_HALF - C[1], dx) - np.arctan2(W / 2 - GOAL_HALF - C[1], dx))
-        z = -1.5 - .13 * d + 2.0 * ang - (.2 if header else 0)
+        z = -1.95 - .13 * d + 2.0 * ang - (.2 if header else 0)
         a, b = np.array([L, W / 2 - GOAL_HALF]), np.array([L, W / 2 + GOAL_HALF])
         cr = lambda p, q, r: (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
         nb = 0
@@ -188,6 +189,8 @@ class Match:
             if (s1 >= 0 and s2 >= 0 and s3 >= 0) or (s1 <= 0 and s2 <= 0 and s3 <= 0):
                 nb += 1
         odds = np.exp(z) * .72 ** nb
+        if len(defenders):  # a defender breathing down his neck: closing-down matters as well as bodies in the way
+            odds *= .75 + .25 * float(min(1., np.min(np.hypot(*(np.asarray(defenders) - C).T)) / 3.))
         return float(odds / (1 + odds)), nb
 
     # ------------------------------------------------------------------ set pieces / restarts
@@ -477,7 +480,7 @@ class Match:
             # contact in the box that is not given; now and then VAR sends the referee to the screen
             s.emit("tackle", player=o, pos=s.pos[c], target=s.ids[c], outcome="won")
             s.emit("dispossessed", player=c, pos=s.pos[c])
-            if s.rng.random() < .05:
+            if s.rng.random() < .03:
                 dur = s._var_review(t, o, "missed foul in the box")
                 s.emit("foul", player=o, pos=s.pos[c], target=s.ids[c], reason="tackle", var=True)
                 s.emit("var_overturned", team=t, reason="penalty awarded after review")
@@ -649,7 +652,7 @@ class Match:
             else:
                 j, o, p_beat = -1, -1, 1.
             p_keep = p_beat * (1 - .15 * np.exp(-dnear / 2.3))
-            U.append(p_keep * (TUNE["carry_base"] + TUNE["carry_prog"] * prog_w * (Vf(cpos) - VC)) - (1 - p_keep) * .5 - TUNE["carry_streak"] * s.carry_streak + s.mod["carry"][c]); K.append("carry"); X.append((cpos, o, p_beat))
+            U.append(p_keep * (TUNE["carry_base"] + TUNE["carry_prog"] * prog_w * (Vf(cpos) - VC)) - (1 - p_keep) * .5 - TUNE["carry_streak"] * s.carry_streak + s.mod["carry"][c] + CARRY_ROLE[s.role[c]]); K.append("carry"); X.append((cpos, o, p_beat))
             if C[0] < .2 * L and dnear < 3.5:
                 U.append(.2 + .35 * pr); K.append("clear"); X.append(np.array([C[0] + 40, clip(C[1] + s.rng.choice([-1, 1]) * 18, 5, W - 5)]))
         if not U:
@@ -765,8 +768,8 @@ class Match:
         a = s.attr
         f = _tf if t else (lambda x: x)
         fin, gk = a["finishing"][c], a["gk"][s._opp(t)][0]
-        odds = xg / (1 - xg + 1e-9) * np.exp(.05 * (fin - 10) + .02 * (a["composure"][c] - 10)) * np.exp(-.05 * (gk - 10))
-        p_goal = float(odds / (1 + odds)) if kind != "penalty" else .76 * (.9 + .01 * fin) * (1.1 - .01 * gk)
+        odds = xg / (1 - xg + 1e-9) * np.exp(.05 * (fin - 12.5) + .02 * (a["composure"][c] - 12.5)) * np.exp(-.05 * (gk - 12.5))  # the xG model is for an average finisher / keeper (about 12.5 in this league)
+        p_goal = float(odds / (1 + odds)) if kind != "penalty" else .76 * (.9 + .01 * (fin - 2.5)) * (1.1 - .01 * (gk - 2.5))
         u = s.rng.random()
         if u < p_goal:
             res = "goal"
@@ -1105,7 +1108,7 @@ class Match:
         s.ball = pt.copy()
         pt_t = _tf(pt) if t else pt
         if t == f["team"]:
-            if pt_t[0] > .7 * L and abs(pt_t[1] - W / 2) < 18 and s.rng.random() < .14:
+            if pt_t[0] > .7 * L and abs(pt_t[1] - W / 2) < 18 and s.rng.random() < .18:
                 s._gain_control(i, pt)
                 C = pt_t
                 O = _tf(s.pos[s._opp(t)]) if t else s.pos[s._opp(t)]

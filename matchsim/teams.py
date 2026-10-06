@@ -72,6 +72,7 @@ _SUR = ["Hart", "Voss", "Lund", "Ward", "Brandt", "Okoro", "Silva", "Marsh", "Ke
         "Ferro", "Novak", "Reyes", "Tamm", "Wolfe", "Ibarra", "Kovac", "Mercer", "Sato", "Quill"]
 _SUR_END = ["", "son", "ton", "ley", "er", "ini", "ez", "ova"]
 
+SPREAD = .5  # how much of a club's quality gap is kept (real leagues are more balanced than raw attribute gaps suggest)
 LEAGUE = {  # code: (name, quality 1-20)
     "NBR": ("Northbridge Rovers", 13.5), "HAR": ("Harlow Athletic", 12.0),
     "KES": ("Kestrel United", 14.5), "ASH": ("Ashmere Town", 10.5),
@@ -158,7 +159,7 @@ def make_team(code, formation="4-3-3", tactics=None, quality=None, rng=None):
     rng = rng or np.random.default_rng()
     name, q = LEAGUE[code]
     q = quality if quality is not None else q
-    q = 12.8 + (q - 12.8) * .8  # compress the spread: real leagues are more balanced than raw attribute gaps suggest
+    q = 12.8 + (q - 12.8) * SPREAD  # compress the spread: real leagues are more balanced than raw attribute gaps suggest
     slots = FORMATIONS[formation]
     # stars: the best forward, one creative midfielder/winger and one defender or the keeper
     pick = lambda roles: [i for i, s_ in enumerate(slots) if s_[1] in roles]

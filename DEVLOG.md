@@ -126,6 +126,20 @@ estimated (use max(band width, 2 x standard error) as the denominator), evaluati
 table is more useful than the optimiser. Kept the baked parameters (score 2.47) and stopped tuning; the realism work is
 now finished and frozen as engine-v2.
 
+### Final gap fixes (engine v2.1)
+Fresh 96-match battery showed real gaps, so we fixed the big ones by measuring sensitivity first instead of guessing:
+- **Home advantage** had vanished (equal teams 33/35/33). Measured goal difference vs `home_edge` (1.2: +0.10, 3.0: +0.81,
+  about 0.39 goals per unit) and set 1.7. Equal teams now 44% / 28% / 29% (real about 44 / 25 / 31).
+- **Competitive balance** was too steep (3 points stronger: +1.43 goals, 71% wins). Compressed the league's quality spread
+  (`teams.SPREAD` 0.8 to 0.5): +1.14 goals, 62% wins (real about +0.9, 55-65%).
+- **Wide play**: open-play crosses 11 to 30 (`cross_v`), headed-shot conversion lifted, aerial duels 39 to 51.
+- **Take-ons** were 11 per match after the passing rewrite; wingers and attacking midfielders now carry and take on more (role
+  bonus), 19-20 per match.
+- **Pressure events** 166 to 230 (commit rate), **penalties** 0.58 to 0.39 (fewer given in the box, fewer VAR awards).
+- xG model centred on an average finisher/keeper and given a closing-down factor.
+Left slightly off on purpose: goals run 3.4-3.6 (an attacking league, real top flights 2.7-3.3) and shots come at about 0.15 xG
+each (real 0.10); pass volume about 680 (real 700-900) and pass accuracy 0.77-0.78; striker share of shots 0.53.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

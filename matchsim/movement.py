@@ -17,11 +17,11 @@ GK, CB, FB, DM, CM, WG, AM, ST = range(8)
 PUSH = np.array([0, 3, 9, 2, 4, 8, 7, 6.])        # metres forward when we have the ball
 DROP = np.array([0, -2, -3, -1, -3, -6, -7, -10.])  # metres back when we do not
 FOLLOW = np.array([.1, .5, .55, .55, .55, .5, .5, .45])  # how strongly the role follows the ball's x
-CRUISE = np.array([1.3, 1.5, 1.4, 1.35, 1.75, 1.1, 1.1, .8])  # jogging speed by role (box-to-box midfielders cover more ground)
+CRUISE = np.array([1.7, 1.5, 1.55, 1.35, 1.75, 1.1, 1.1, .8])  # jogging speed by role (box-to-box midfielders cover more ground)
 SHOULDER = np.array([0, 0, 0, 0, 0, -9., -13., -6.])  # where each attacking role stands relative to the last defender (m)
 MIN_X = np.array([0, 12, 11, 17, 21, 24, 26, 30.])  # deepest a role will drop (defenders hold the box edge, they do not hug the goal line)
 GOAL = np.array([0., W / 2])
-TUNE_COMMIT = .04
+TUNE_COMMIT = .08
 
 
 _OFF = np.array([L, W])
