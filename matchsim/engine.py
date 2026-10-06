@@ -20,7 +20,7 @@ from .movement import _tf, _unit, nrm, clip
 
 DT = 0.2
 # Single tuning table (calibrated by scripts/calibrate.py against real-football norms).
-TUNE = dict(pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.4, fk_bonus=0.05, long_bonus=0.523, prog_base=0.654, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=2.2, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=0.3, shot_k=3.15, shot_k_dir=5.0,
+TUNE = dict(react=1.0, patience=.6, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.4, fk_bonus=0.05, long_bonus=0.523, prog_base=0.654, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=2.2, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=0.3, shot_k=3.15, shot_k_dir=5.0,
             carry_base=.3, carry_prog=.2, carry_streak=.3, dwell_base=0.9, dwell_shape=2.4, dwell_scale=1.61,
             tackle_rate=0.164, wide_error=3.2, off_miss=0.55, off_mult=.5)
 sig = lambda x: 1 / (1 + np.exp(-x))
@@ -85,6 +85,7 @@ class Match:
         s.added = [None, None]
         s.injured, s.pending_inj = np.zeros(22, bool), []
         s.ctrl_t = 0.
+        s.first_time_ok = 1.0
         s._tg = s._urg = None
         s.turnover, s.sched = None, []
         s.state_ticks = collections.Counter()
@@ -359,9 +360,18 @@ class Match:
 
     # ------------------------------------------------------------------ possession
     def _dwell(s, i):
+        """Seconds until this player decides: a reaction time that shrinks under pressure; a first-time ball when
+        the chance is obvious (a shooting position) or the defender is on him and he is a good passer."""
         t = i // 11
+        f = _tf if t else (lambda x: x)
         pr = clip(1 - nrm(s.pos[s._opp(t)] - s.pos[i], axis=1).min() / 5, 0, 1)
-        return (TUNE["dwell_base"] + s.rng.gamma(TUNE["dwell_shape"], TUNE["dwell_scale"]) * (1 - .6 * pr)) * (1.25 - .025 * s.attr["composure"][i])
+        react = TUNE["react"] * (1.4 - .015 * (s.attr["composure"][i] + s.attr["vision"][i])) * (1 - .55 * pr)
+        xg_here, _ = s._xg(f(s.pos[i]), [])
+        if xg_here > .08 and s.role[i] > 0:  # in front of goal: hit it first time
+            return float(s.rng.uniform(.05, .2))
+        if s.rng.random() < clip(.1 + .4 * pr + .02 * (s.attr["passing"][i] - 10), 0, .75) * s.first_time_ok:
+            return float(s.rng.uniform(.05, .22))  # one touch
+        return float(max(.12, react + s.rng.normal(0, .05)))
 
     def _gain_control(s, i, at):
         t = i // 11
@@ -652,12 +662,13 @@ class Match:
             else:
                 j, o, p_beat = -1, -1, 1.
             p_keep = p_beat * (1 - .15 * np.exp(-dnear / 2.3))
-            U.append(p_keep * (TUNE["carry_base"] + TUNE["carry_prog"] * prog_w * (Vf(cpos) - VC)) - (1 - p_keep) * .5 - TUNE["carry_streak"] * s.carry_streak + s.mod["carry"][c] + CARRY_ROLE[s.role[c]]); K.append("carry"); X.append((cpos, o, p_beat))
+            U.append(p_keep * (TUNE["carry_base"] + TUNE["carry_prog"] * prog_w * (Vf(cpos) - VC)) - (1 - p_keep) * .5 - TUNE["carry_streak"] * s.carry_streak + s.mod["carry"][c] + CARRY_ROLE[s.role[c]]
+                     + TUNE["patience"] * np.exp(-(s.t - s.ctrl_t) / 2.0) * (1 - pr) * (dnear > 4)); K.append("carry"); X.append((cpos, o, p_beat))
             if C[0] < .2 * L and dnear < 3.5:
                 U.append(.2 + .35 * pr); K.append("clear"); X.append(np.array([C[0] + 40, clip(C[1] + s.rng.choice([-1, 1]) * 18, 5, W - 5)]))
         if not U:
             U, K, X = [0.], ["carry"], [(clip(C + 7 * np.array([1., 0.]), [1, 1], [L - 1, W - 1]), -1, 1.)]
-        tau = .08 + .12 * (1 - a["composure"][c] / 20)
+        tau = .02 + .04 * (1 - a["composure"][c] / 20)
         U = np.array(U)
         pr_ = np.exp((U - U.max()) / tau)
         k = s.rng.choice(len(U), p=pr_ / pr_.sum())
@@ -696,7 +707,7 @@ class Match:
                 s.block_until[o] = s.t + 1.2
             s.carry_tgt = f(cpos)
             s.carry_streak += 1
-            s.next_dec = s.t + s.rng.uniform(.8, 1.6)
+            s.next_dec = s.t + s.rng.uniform(.35, .6)  # keep carrying and look again shortly
 
     # ------------------------------------------------------------------ actions
     def _pass(s, c, rcv, aim, lofted, spd, est, kind="pass", sigma_scale=1.0, why=None, source=None, hands_ok=True):
@@ -725,7 +736,7 @@ class Match:
         elif source == "throw_in":
             technique = "throw_in"
         ev = s.emit(kind, player=c, pos=start, end=aim, length=d, speed=spd, lofted=lofted, height="high" if lofted else "ground",
-                    body_part="hands" if (hands or source == "throw_in") else "foot", technique=technique, receiver=None if rcv is None else s.ids[rcv], p_success=est,
+                    body_part="hands" if (hands or source == "throw_in") else "foot", technique=technique, hold=round(float(s.t - s.ctrl_t), 2), receiver=None if rcv is None else s.ids[rcv], p_success=est,
                     difficulty=1 - est, progressive=bool(fwd >= 10), gain=round(float(fwd), 1), source=source, outcome=None, why=why)
         s._end_spell()
         if offside:
@@ -797,7 +808,7 @@ class Match:
             pen_kw = dict(placement=side, keeper_dive=side if res == "saved" else (str(s.rng.choice(other)) if s.rng.random() < .85 else side))
         ev = s.emit("shot", player=c, pos=start, end=end, xg=xg, speed=spd, outcome=res, kind=kind, why=why, **pen_kw,
                     assist=None if assist_ev is None else assist_ev["player"], body_part="head" if kind == "header" else "foot",
-                    first_time=bool(s.t - s.ctrl_t < 1.0), under_pressure=bool(nd < 2.5), big_chance=bool(xg >= .25),
+                    first_time=bool(s.t - s.ctrl_t < .6), hold=round(float(s.t - s.ctrl_t), 2), under_pressure=bool(nd < 2.5), big_chance=bool(xg >= .25),
                     freeze_frame=[[round(float(x), 1), round(float(y), 1)] for x, y in s.pos])
         err_ev = None
         te = s.turnover

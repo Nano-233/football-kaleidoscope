@@ -127,8 +127,26 @@ def team_targets(m, t):
         far = (role == WG) & (np.abs(B[1] - A[:, 1]) > 25)
         ty = np.where(far, W / 2 + np.sign(A[:, 1] - W / 2) * 9, ty)
     zone = np.stack([clip(tx, 2, L - 2), clip(ty, 2, W - 2)], 1)
-
     carrier = m.carrier if m.state == "held" else -1
+    if has and B[0] > .6 * L:
+        # attacking shape near the box: every role has a job (near post, far post, edge of the box, overlap, cover),
+        # mirrored to the side the ball is on. Blended in as the ball gets closer to goal.
+        sd = 1 if B[1] > W / 2 else -1
+        w = float(clip((B[0] - .6 * L) / (.15 * L), 0, 1)) * .9
+        line_t = max(np.sort(O[:, 0])[-2], L / 2) + .5
+        templ = {ST: [(L - 9, W / 2 - sd * 2.5), (L - 11, W / 2 + sd * 6)], WG: [(L - 13, W / 2 + sd * 22), (L - 9, W / 2 - sd * 11)],
+                 AM: [(L - 19, W / 2 + sd * 2), (L - 21, W / 2 - sd * 7)], CM: [(L - 21, W / 2 + sd * 9), (L - 23, W / 2 - sd * 8), (L - 31, W / 2)],
+                 FB: [(L - 18, W / 2 + sd * 29), (L - 33, W / 2 - sd * 22)], DM: [(L - 32, W / 2)], CB: [(L - 44, W / 2 + 8), (L - 44, W / 2 - 8), (L - 46, W / 2)]}
+        for r, spots in templ.items():
+            free = [i for i in idx if role[i] == r and 11 * t + i != carrier]
+            for spot in spots:
+                if not free:
+                    break
+                i = min(free, key=lambda j: float(nrm(zone[j] - np.array(spot))))
+                free.remove(i)
+                tgt_ = np.array([min(spot[0], line_t), spot[1]])
+                zone[i] = zone[i] * (1 - w) + tgt_ * w
+
     mine = 11 * t <= carrier < 11 * t + 11
 
     if not has:
@@ -138,6 +156,7 @@ def team_targets(m, t):
         o = O[np.where(ok, mk, 0)]
         man = o + _unit(GOAL - o) * (1.2 + 1.8 * (1 - tc.marking))
         gate = clip(1.4 - nrm(zone - o, axis=1) / 22, 0, 1) * tc.marking * ok
+        gate = np.where(ok & (o[:, 0] < 20) & (np.abs(o[:, 1] - W / 2) < 22) & (role > GK), np.maximum(gate, .85), gate)  # attackers in the box are marked, not watched
         zone = zone * (1 - gate[:, None]) + man * gate[:, None]
         # pressing the opposing ball carrier
         if m.poss == 1 - t and carrier >= 0:
@@ -153,7 +172,7 @@ def team_targets(m, t):
             danger = clip((.45 * L - C[0]) / (.3 * L), 0, 1)
             if danger > 0:  # shot-blocking cover: the next three defenders drop onto the ball-goal line
                 gv = _unit(GOAL - C)
-                for k, i in enumerate(near[n:n + 3]):
+                for k, i in enumerate(near[n:n + 2]):
                     if d[i] < 22:
                         zone[i] = C + gv * (3.2 + 2.2 * k) + np.array([-gv[1], gv[0]]) * (1.8 * k * (1 if k % 2 else -1))
                         urgent[i] = True

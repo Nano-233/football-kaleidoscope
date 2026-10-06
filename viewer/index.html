@@ -2,17 +2,17 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Match Viewer</title>
 <style>
-  :root{--bg:#0f1720;--fg:#e8eef5;--mut:#8aa0b4;--home:#3b82f6;--away:#ef4444}
+  :root{color-scheme:dark;--bg:#0f1720;--fg:#e8eef5;--mut:#8aa0b4;--home:#3b82f6;--away:#ef4444}
   body{margin:0;background:var(--bg);color:var(--fg);font:14px system-ui,sans-serif;display:flex;flex-direction:column;align-items:center}
   #bar{display:flex;gap:12px;align-items:center;padding:8px 16px;flex-wrap:wrap;width:100%;box-sizing:border-box;max-width:1100px}
   #score{font-size:20px;font-weight:700;min-width:240px}
   input[type=range]{flex:1;min-width:200px}
-  canvas{height:calc(100vh - 150px);max-width:100vw;aspect-ratio:1100/720;background:#1b6b3a;display:block}
+  canvas{width:min(calc(100% - 32px),calc((100vh - 170px) * 1.528),1100px);height:auto;aspect-ratio:1100/720;background:#1b6b3a;display:block;margin-inline:16px}
   #log{width:100%;max-width:1100px;box-sizing:border-box;padding:8px 16px;color:var(--mut);font-size:12px;height:90px;overflow:hidden}
   button,select{background:#22303f;color:var(--fg);border:1px solid #33475c;border-radius:6px;padding:4px 10px}
 </style></head><body>
 <div id="bar">
-  <span id="score">loading…</span>
+  <span id="score">loading match…</span>
   <button id="play">Play</button><button id="next" title="jump to the next key moment (n)">Next moment ⏭</button>
   <select id="speed"><option>1</option><option>2</option><option selected>5</option><option>10</option><option>30</option><option>60</option><option>120</option></select>x
   <input id="seek" type="range" min="0" max="1" step="0.1" value="0">
@@ -27,7 +27,7 @@ const L = 105, W = 68, PAD = 30, SX = (cv.width - 2*PAD)/L, SY = (cv.height - 2*
 const px = x => PAD + x*SX, py = y => PAD + y*SY;
 let D, frames, dt, t = 0, playing = false, last = 0, names = {}, info = {}, slots = [], mouse = null;
 const src = new URLSearchParams(location.search).get('src') || '../out/match_1.json';
-(window.__EMBED__ ? Promise.resolve(window.__EMBED__()) : fetch(src).then(r => r.json())).then(d => {
+(window.__EMBED__ ? Promise.resolve(window.__EMBED__()) : fetch(src).then(r => r.json())).catch(err => { $('score').textContent = 'Could not load the match: ' + err; throw err; }).then(d => {
   D = d; frames = d.frames; dt = d.meta.dt;
   [...d.meta.home.players, ...d.meta.away.players, ...d.meta.home.bench, ...d.meta.away.bench].forEach(p => { names[p.id] = p; info[p.id] = p; });
   slots = [...d.meta.home.players, ...d.meta.away.players];

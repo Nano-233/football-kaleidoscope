@@ -1,10 +1,12 @@
 """Bundle a match and the viewer into ONE self-contained HTML file (shareable, works offline, no server).
 
-    python scripts/bundle_viewer.py out/match_12.json            -> out/match_12_viewer.html
+    python scripts/bundle_viewer.py out/match_12.json
+        -> out/match_12_viewer.html    full page
+        -> out/match_12_artifact.html  same page as a fragment (no doctype/head/body tags) for hosts that add their own
 
 Frames are stored as int16 (0.05 m resolution) in base64 and heavy event fields (freeze frames, rationale) are dropped.
 """
-import sys, json, base64, pathlib
+import sys, re, json, base64, pathlib
 import numpy as np
 
 src = pathlib.Path(sys.argv[1])
@@ -17,7 +19,9 @@ blob = base64.b64encode(q.tobytes()).decode()
 embed = f"""<script>
 window.__EMBED__ = () => {{
   const meta = {json.dumps(meta, separators=(',', ':'))}, events = {json.dumps(slim, separators=(',', ':'))}, n = {len(q)};
-  const raw = Uint8Array.from(atob("{blob}"), c => c.charCodeAt(0)), q = new Int16Array(raw.buffer), F = new Float32Array(n * 49), frames = [];
+  const bin = atob("{blob}"), raw = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) raw[i] = bin.charCodeAt(i);
+  const q = new Int16Array(raw.buffer), F = new Float32Array(n * 49), frames = [];
   for (let i = 0; i < n; i++) {{
     const o = i * 49, k = i * 48;
     F[o] = i * meta.dt; F[o + 1] = q[k] / 20; F[o + 2] = q[k + 1] / 20; F[o + 3] = q[k + 2]; F[o + 4] = q[k + 3];
@@ -29,6 +33,13 @@ window.__EMBED__ = () => {{
 </script>
 """
 html = (pathlib.Path(__file__).resolve().parents[1] / "viewer" / "index.html").read_text(encoding="utf-8")
+marker = "<script>\nconst $ ="
+assert marker in html
+full = html.replace(marker, embed + marker, 1)
 out = src.with_name(src.stem + "_viewer.html")
-out.write_text(html.replace("<script>\nconst $ =", embed + "<script>\nconst $ =", 1), encoding="utf-8")
-print(out, f"{out.stat().st_size / 1e6:.1f} MB")
+out.write_text(full, encoding="utf-8")
+m = re.search(r"<head>(.*?)</head>\s*<body>(.*)</body>", full, flags=re.S | re.I)
+frag = re.sub(r"<meta[^>]*>", "", m.group(1)) + m.group(2)
+out2 = src.with_name(src.stem + "_artifact.html")
+out2.write_text(frag, encoding="utf-8")
+print(out, f"{out.stat().st_size / 1e6:.1f} MB", "|", out2.name, f"{out2.stat().st_size / 1e6:.1f} MB")
