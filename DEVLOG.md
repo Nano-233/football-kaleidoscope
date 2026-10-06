@@ -109,6 +109,13 @@ One evaluation is 24-40 full matches at about 10 s each. We used 6 workers on a 
 cut a tuner step from 80 s to 52 s. Next: faster engine hot paths (60 % of time is the movement targets), half-match tuning,
 and a surrogate-regression tuner (fit metric ~ parameters from perturbation runs, then gradient descent on the surrogate).
 
+### Engine speed (9.5 s -> 5.8 s per match)
+Profile (cProfile, sorted by own time): 60 % in `movement.team_targets`, 22 % in `_steer`; the cost was call overhead on
+tiny arrays, not arithmetic. Three changes, none altering behaviour: `np.clip` / `np.linalg.norm` / `np.stack` replaced by
+two-ufunc `clip`, an einsum `nrm` and a plain subtraction for the frame flip (same match, 16 % faster); movement
+targets recomputed every other tick unless the ball is in flight or loose (players already lag their targets by about
+0.25 s; 30 % faster). Calibration unchanged within noise. Further options if needed: numba on `team_targets`.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

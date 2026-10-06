@@ -16,7 +16,7 @@ import numpy as np
 from scipy.optimize import linear_sum_assignment
 from .teams import L, W, ATTRS, ROLE_IDX, TRAITS, FORMATIONS, team_meta, make_match_info
 from . import movement
-from .movement import _tf, _unit
+from .movement import _tf, _unit, nrm, clip
 
 DT = 0.2
 # Single tuning table (calibrated by scripts/calibrate.py against real-football norms).
@@ -84,6 +84,7 @@ class Match:
         s.added = [None, None]
         s.injured, s.pending_inj = np.zeros(22, bool), []
         s.ctrl_t = 0.
+        s._tg = s._urg = None
         s.state_ticks = collections.Counter()
         s.phase = s.rng.uniform(0, 6.28, 22)
         s.recent = np.zeros(22)  # recent touches, decays; the ball gets spread around instead of feeding one man
@@ -206,10 +207,10 @@ class Match:
                     cand = own[np.isin(s.role[own], [ROLE_IDX["WG"], ROLE_IDX["FB"], ROLE_IDX["AM"], ROLE_IDX["CM"]]) & ~s.off[own]]
                     cand = cand if len(cand) else own[(s.role[own] > 0) & ~s.off[own]]
                 if kind in ("corner", "free_kick"):  # best deliverer among the three nearest
-                    near3 = cand[np.argsort(np.linalg.norm(s.pos[cand] - pos, axis=1))[:3]]
+                    near3 = cand[np.argsort(nrm(s.pos[cand] - pos, axis=1))[:3]]
                     taker = near3[np.argmax(s.attr["passing"][near3] + .5 * s.attr["vision"][near3] + 3 * s.mod["fk"][near3])]
                 else:
-                    taker = cand[np.argmin(np.linalg.norm(s.pos[cand] - pos, axis=1))]
+                    taker = cand[np.argmin(nrm(s.pos[cand] - pos, axis=1))]
         s.state, s.poss, s.carrier, s.flight = "dead", team, -1, None
         s.ball, s.ball_v = np.array(pos, float), np.zeros(2)
         s.dead = dict(kind=kind, team=team, pos=np.array(pos, float), taker=int(taker), ready=s.t + delay)
@@ -217,7 +218,7 @@ class Match:
             own = np.arange(11 * team, 11 * team + 11)
             helpers = [j for j in own if s.role[j] in (ROLE_IDX["FB"], ROLE_IDX["CM"], ROLE_IDX["WG"], ROLE_IDX["AM"]) and not s.off[j] and j != taker]
             s.dead["short"] = bool(helpers and s.rng.random() < .16)
-            s.dead["sup"] = int(min(helpers, key=lambda j: np.linalg.norm(s.pos[j] - pos))) if helpers else -1
+            s.dead["sup"] = int(min(helpers, key=lambda j: nrm(s.pos[j] - pos))) if helpers else -1
 
     def _out(s, b):
         x, y = b
@@ -225,7 +226,7 @@ class Match:
         if s.pending_pass is not None:
             s.pending_pass["outcome"], s.pending_pass = "out", None
         if y < 0 or y > W:
-            kind, team, pos, d = "throw_in", 1 - tl, np.array([np.clip(x, 1, L - 1), 0. if y < 0 else W]), 14 + s.rng.random() * 10
+            kind, team, pos, d = "throw_in", 1 - tl, np.array([clip(x, 1, L - 1), 0. if y < 0 else W]), 14 + s.rng.random() * 10
         else:
             owner = 0 if x < 0 else 1
             if tl == owner:
@@ -246,9 +247,13 @@ class Match:
         if s.tick % 5 == 0:
             for t in (0, 1):
                 movement.refresh_marking(s, t)
-        tg, urg = np.empty((22, 2)), np.zeros(22, bool)
-        for t in (0, 1):
-            tg[s._own(t)], urg[s._own(t)] = movement.team_targets(s, t)
+        if s.tick % 2 == 0 or s.state in ("flight", "loose") or s._tg is None:  # targets move slowly: recompute every other tick unless the ball is in the air or loose
+            tg, urg = np.empty((22, 2)), np.zeros(22, bool)
+            for t in (0, 1):
+                tg[s._own(t)], urg[s._own(t)] = movement.team_targets(s, t)
+            s._tg, s._urg = tg, urg
+        else:
+            tg, urg = s._tg.copy(), s._urg.copy()
         if s.state == "held":
             tg[s.carrier], urg[s.carrier] = s.carry_tgt, True
         elif s.state == "dead":
@@ -280,11 +285,11 @@ class Match:
 
     def _clock(s):
         if s.period == 1 and s.added[0] is None and s.t >= 2700:
-            n = int(np.clip(np.ceil(.7 * (s.stop[0] + 25) / 60 + s.rng.normal(.4, .6)), 1, 7))
+            n = int(clip(np.ceil(.7 * (s.stop[0] + 25) / 60 + s.rng.normal(.4, .6)), 1, 7))
             s.added[0], s.h1 = n, 2700 + n * 60 + float(s.rng.uniform(0, 30))
             s.emit("added_time", minutes=n)
         elif s.period == 2 and s.added[1] is None and s.t >= s.h1 + 2700:
-            n = int(np.clip(np.ceil(.7 * (s.stop[1] + 60) / 60 + s.rng.normal(.6, .8)), 2, 10))
+            n = int(clip(np.ceil(.7 * (s.stop[1] + 60) / 60 + s.rng.normal(.6, .8)), 2, 10))
             s.added[1], s.end_t = n, s.h1 + 2700 + n * 60 + float(s.rng.uniform(0, 30))
             s.emit("added_time", minutes=n)
         if s.period == 1 and s.t >= s.h1 and (s.state == "dead" or s.t >= s.h1 + 40):
@@ -306,7 +311,7 @@ class Match:
         a = np.where(urg, 1., 1 - np.exp(-dt / tau))[:, None]
         s.tsm = s.tsm + (tg - s.tsm) * a
         d = s.tsm - s.pos
-        dist = np.linalg.norm(d, axis=1)
+        dist = nrm(d, axis=1)
         vmax = s.vmax * (1 - .15 * (1 - s.stam))
         energy = s.mod["cruise"] * movement.CRUISE[s.role]  # role/trait work rate: how much ground a player covers
         cap = np.where(urg, vmax, np.minimum(vmax, (4.3 + .07 * s.attr["work_rate"]) * energy))
@@ -314,26 +319,26 @@ class Match:
             cap[s.carrier] = min(cap[s.carrier], .85 * vmax[s.carrier])
         vdes = d / np.maximum(dist, 1e-6)[:, None] * np.minimum(cap, np.maximum(dist - .4, 0) * 1.1 * np.where(urg, 1., energy))[:, None]
         dv = vdes - s.vel
-        n = np.linalg.norm(dv, axis=1)
+        n = nrm(dv, axis=1)
         s.vel += dv * np.minimum(1, s.acc * dt / np.maximum(n, 1e-6))[:, None]
         s.pos = s.pos + s.vel * dt
         r = s.pos[:, None] - s.pos[None]
-        dd = np.maximum(np.linalg.norm(r, axis=2), 1e-3) + np.eye(22) * 99
+        dd = np.maximum(nrm(r, axis=2), 1e-3) + np.eye(22) * 99
         s.pos += (r / dd[..., None] * ((1.6 - dd).clip(0))[..., None]).sum(1) * .35
-        s.pos = np.clip(s.pos, [-1, -1], [L + 1, W + 1])
+        s.pos = clip(s.pos, [-1, -1], [L + 1, W + 1])
         if s.off.any():
             s.pos[s.off], s.vel[s.off] = PARK[s.off], 0
-        sp = np.linalg.norm(s.vel, axis=1)
-        s.stam = np.clip(s.stam - dt * (1.5e-5 + 6e-4 * (sp / s.vmax) ** 3) * (1.35 - .035 * s.attr["stamina"]) * s.heat, 0, 1)
+        sp = nrm(s.vel, axis=1)
+        s.stam = clip(s.stam - dt * (1.5e-5 + 6e-4 * (sp / s.vmax) ** 3) * (1.35 - .035 * s.attr["stamina"]) * s.heat, 0, 1)
 
     def _ball_z(s):
         """Ball height in metres: parabola for lofted passes and shots, zero otherwise."""
         f = s.flight
         if s.state != "flight" or f is None:
             return 0.
-        u = float(np.clip((s.t - f["t0"]) / f["dur"], 0, 1))
+        u = float(clip((s.t - f["t0"]) / f["dur"], 0, 1))
         if f["kind"] == "lofted":
-            return 4 * float(np.clip(.1 * np.linalg.norm(f["end"] - f["start"]), 2, 12)) * u * (1 - u)
+            return 4 * float(clip(.1 * nrm(f["end"] - f["start"]), 2, 12)) * u * (1 - u)
         if f["kind"] == "shot":
             return 4 * (3.5 if f.get("res") == "off_target" else 1.6) * u * (1 - u)
         return 0.
@@ -345,7 +350,7 @@ class Match:
     # ------------------------------------------------------------------ possession
     def _dwell(s, i):
         t = i // 11
-        pr = np.clip(1 - np.linalg.norm(s.pos[s._opp(t)] - s.pos[i], axis=1).min() / 5, 0, 1)
+        pr = clip(1 - nrm(s.pos[s._opp(t)] - s.pos[i], axis=1).min() / 5, 0, 1)
         return (TUNE["dwell_base"] + s.rng.gamma(TUNE["dwell_shape"], TUNE["dwell_scale"]) * (1 - .6 * pr)) * (1.25 - .025 * s.attr["composure"][i])
 
     def _gain_control(s, i, at):
@@ -362,7 +367,7 @@ class Match:
                 own_box = (at[0] < 16.5 if t == 0 else at[0] > L - 16.5) and abs(at[1] - W / 2) < 20.16
                 s.emit("keeper_claim" if own_box else "keeper_sweep", player=i, pos=at)
             elif s.state == "flight":
-                if np.linalg.norm(np.asarray(at) - s.flight["start"]) < 5:  # right next to the passer: a block, not a read of the pass
+                if nrm(np.asarray(at) - s.flight["start"]) < 5:  # right next to the passer: a block, not a read of the pass
                     s.emit("block", player=i, pos=at, shooter=pp["player"], kind="pass")
                 else:
                     s.emit("interception", player=i, pos=at)
@@ -384,7 +389,7 @@ class Match:
     def _end_spell(s):
         if s.spell is not None:
             t0, p0, i = s.spell
-            d = np.linalg.norm(s.pos[i] - p0)
+            d = nrm(s.pos[i] - p0)
             if d > 4:
                 s.emit("carry", player=i, pos=p0, end=s.pos[i], distance=d, duration=s.t - t0)
             s.spell = None
@@ -399,18 +404,18 @@ class Match:
         c = s.carrier
         t = c // 11
         v = s.vel[c]
-        face = v / np.linalg.norm(v) if np.linalg.norm(v) > .5 else np.array([1., 0.] if t == 0 else [-1., 0.])
+        face = v / nrm(v) if nrm(v) > .5 else np.array([1., 0.] if t == 0 else [-1., 0.])
         s.ball, s.ball_v = s.pos[c] + face * .5, v.copy()
         opp = np.arange(11 * (1 - t), 11 * (1 - t) + 11)
-        d = np.linalg.norm(s.pos[opp] - s.pos[c], axis=1)
+        d = nrm(s.pos[opp] - s.pos[c], axis=1)
         for k in np.nonzero((d < 3.0) & (s.commit_until[opp] > s.t))[0]:  # a defender commits to closing the carrier down
             if s.t - s.last_press[opp[k]] > 2.5:
                 s.emit("pressure", player=opp[k], pos=s.pos[opp[k]], target=s.ids[c])
                 s.last_press[opp[k]] = s.t
         if s.t >= s.protect_until:
             xt = s.pos[c][0] if t == 0 else L - s.pos[c][0]
-            danger = np.clip((xt - .65 * L) / (.3 * L), 0, 1)
-            att = np.nonzero(s.rng.random(11) < TUNE["tackle_rate"] * s.mod["tackle"][opp] * (1 + 1.5 * danger) * np.clip(1 - d / 2.2, 0, 1) * s.dt)[0]
+            danger = clip((xt - .65 * L) / (.3 * L), 0, 1)
+            att = np.nonzero(s.rng.random(11) < TUNE["tackle_rate"] * s.mod["tackle"][opp] * (1 + 1.5 * danger) * clip(1 - d / 2.2, 0, 1) * s.dt)[0]
             if len(att):
                 o = opp[att[np.argmin(d[att])]]
                 a = s.attr
@@ -500,7 +505,7 @@ class Match:
                 dur = s._var_review(t, o, "penalty review")
                 if s.rng.random() < .25:
                     s.emit("var_overturned", team=t, reason="penalty cancelled")
-                    return s._set_dead("drop_ball", 1 - t, np.clip(p, [1, 1], [L - 1, W - 1]), dur + 8)
+                    return s._set_dead("drop_ball", 1 - t, clip(p, [1, 1], [L - 1, W - 1]), dur + 8)
                 s.emit("var_confirmed", team=t, player=o)
             s.emit("penalty", team=t, pos=s._penalty_spot(t))
             s._set_dead("penalty", t, s._penalty_spot(t), 45)
@@ -520,9 +525,9 @@ class Match:
         P, O = f(s.pos[s._own(t)]), f(s.pos[s._opp(t)])
         Vp = fv(s.vel[s._own(t)])
         C = P[ci]
-        dn = np.linalg.norm(O - C, axis=1)
+        dn = nrm(O - C, axis=1)
         dnear = dn.min()
-        pr = float(np.clip(1 - dnear / 5, 0, 1))
+        pr = float(clip(1 - dnear / 5, 0, 1))
         Vf = lambda p: np.exp(-np.hypot(L - p[..., 0], W / 2 - p[..., 1]) / 22)
         VC = Vf(C)
         prog_w = (TUNE["prog_base"] + TUNE["prog_dir"] * tc.directness) * s.mod["prog"][c]
@@ -537,9 +542,9 @@ class Match:
         # -- passes
         mates = np.array([i for i in range(11) if i != ci])
         hv = fv(s.vel[c])
-        face = hv / np.linalg.norm(hv) if np.linalg.norm(hv) > .5 else np.array([1., 0.])
+        face = hv / nrm(hv) if nrm(hv) > .5 else np.array([1., 0.])
         dv = P[mates] - C
-        dist = np.linalg.norm(dv, axis=1)
+        dist = nrm(dv, axis=1)
         cosang = dv @ face / np.maximum(dist, 1e-6)
         vis = (dist > 3.5) & (dist < 18 + 2.2 * a["vision"][c]) & (cosang > np.cos(np.radians(min(180, 100 + 4 * a["vision"][c]))))
         if rk in ("throw_in", "drop_ball", "indirect_free_kick"):
@@ -552,25 +557,25 @@ class Match:
         if vis.any():
             m_ = mates[vis]
             Pm, Vm = P[m_], Vp[m_]
-            dist = np.linalg.norm(Pm - C, axis=1)
+            dist = nrm(Pm - C, axis=1)
             lofted = (dist > 30) & (s.rng.random(len(m_)) < .35 + .5 * tc.directness)
-            spd = np.clip(11 + .3 * dist, 11, 24)
+            spd = clip(11 + .3 * dist, 11, 24)
             runner = s.t < s.run_until[11 * t + m_]  # a runner is played into space well ahead of him: through ball
-            tgt = np.clip(Pm + Vm * (np.minimum(dist / spd, 1.5) * np.where(runner, 1.3, .8))[:, None], [1, 1], [L - 1, W - 1])
+            tgt = clip(Pm + Vm * (np.minimum(dist / spd, 1.5) * np.where(runner, 1.3, .8))[:, None], [1, 1], [L - 1, W - 1])
             ab = tgt - C
-            d2 = np.linalg.norm(ab, axis=1)
+            d2 = nrm(ab, axis=1)
             ap = O[None] - C
-            sp = np.clip((ap * ab[:, None]).sum(2) / np.maximum((ab * ab).sum(1), 1e-6)[:, None], 0, 1)
+            sp = clip((ap * ab[:, None]).sum(2) / np.maximum((ab * ab).sum(1), 1e-6)[:, None], 0, 1)
             q = C + sp[..., None] * ab[:, None]
-            dperp = np.linalg.norm(O[None] - q, axis=2)
+            dperp = nrm(O[None] - q, axis=2)
             tb = sp * d2[:, None] / spd[:, None]
             to = np.maximum(dperp - 1, 0) / (s.vmax[s._opp(t)] * .85)[None] + .4
-            pk = sig(4 * (tb - to) - 1.2) * (dperp < 14) * np.clip((.95 - sp) / .15, 0, 1)  # markers next to the receiver contest control (p_ctrl), not the lane
+            pk = sig(4 * (tb - to) - 1.2) * (dperp < 14) * clip((.95 - sp) / .15, 0, 1)  # markers next to the receiver contest control (p_ctrl), not the lane
             p_int = np.where(lofted, .08, 1 - np.prod(1 - .9 * pk, axis=1))
-            dn_r = np.linalg.norm(O[None] - tgt[:, None], axis=2).min(1)
+            dn_r = nrm(O[None] - tgt[:, None], axis=2).min(1)
             tech = (a["dribbling"][11 * t + m_] + a["composure"][11 * t + m_]) / 2
-            p_ctrl = np.clip(.84 + .13 * sig(.7 * (dn_r - 2.2)) + .004 * (tech - 10), .35, .98)
-            p_air = np.clip(.55 + .02 * (a["aerial"][11 * t + m_] - a["aerial"][s._opp(t)].mean()), .2, .85)
+            p_ctrl = clip(.84 + .13 * sig(.7 * (dn_r - 2.2)) + .004 * (tech - 10), .35, .98)
+            p_air = clip(.55 + .02 * (a["aerial"][11 * t + m_] - a["aerial"][s._opp(t)].mean()), .2, .85)
             p_ctrl = np.where(lofted, p_air, p_ctrl)
             sg = (.5 + .05 * d2) * (TUNE["pass_sigma"] * (1 - .0353 * a["passing"][c])) * (1 + .35 * pr) * np.where(lofted, 1.5, 1)
             p_acc = 1 - np.exp(-(2.5 ** 2) / (2 * sg ** 2))
@@ -592,7 +597,7 @@ class Match:
             xg, nb = s._xg(C, O[s.role[s._opp(t)] > 0])
             if rk == "free_kick":  # a set ball over the wall: no open-play blockers, specialists bend it round
                 xg, _ = s._xg(C, [])
-                xg = float(np.clip(xg * 2.2 * (1 + .25 * s.mod["fk"][c] + .02 * (a["finishing"][c] - 10)), 0, .5))
+                xg = float(clip(xg * 2.2 * (1 + .25 * s.mod["fk"][c] + .02 * (a["finishing"][c] - 10)), 0, .5))
                 nb = 2
             U.append((TUNE["shot_k"] + TUNE["shot_k_dir"] * tc.shoot) * s.mod["shot"][c] * ROLE_SHOT[s.role[c]] * (TUNE["shot_mid"] if s.role[c] in (3, 4, 6) else 1.) * xg * (.8 + .02 * a["finishing"][c]) - TUNE["shot_cost"] + (TUNE["fk_bonus"] if rk == "free_kick" and dg < 28 else 0)); K.append("shot"); X.append((xg, nb))
         # -- cross from a wide position into the box
@@ -600,13 +605,13 @@ class Match:
             boxm = [i for i in range(11) if i != ci and P[i][0] > L - 22 and abs(P[i][1] - W / 2) < 15 and not s.off[11 * t + i]]
             if boxm:
                 gk_a = a["aerial"][s._opp(t)].mean()
-                sc = np.array([a["aerial"][11 * t + i] + .4 * a["finishing"][11 * t + i] - 2.0 * (np.linalg.norm(O - P[i], axis=1) < 2.5).sum() for i in boxm])
+                sc = np.array([a["aerial"][11 * t + i] + .4 * a["finishing"][11 * t + i] - 2.0 * (nrm(O - P[i], axis=1) < 2.5).sum() for i in boxm])
                 pw = np.exp((sc - sc.max()) / 3.0)
                 tgt_i = int(boxm[s.rng.choice(len(boxm), p=pw / pw.sum())])
-                aim = np.clip(P[tgt_i] + Vp[tgt_i] * .6, [1, 1], [L - 1, W - 1])
-                d_c = float(np.linalg.norm(aim - C))
+                aim = clip(P[tgt_i] + Vp[tgt_i] * .6, [1, 1], [L - 1, W - 1])
+                d_c = float(nrm(aim - C))
                 p_acc = 1 - np.exp(-(3.0 ** 2) / (2 * (2.0 + .07 * d_c) ** 2 * (1.9 - .06 * a["passing"][c]) ** 2))
-                p_air = float(np.clip(.5 + .02 * (a["aerial"][11 * t + tgt_i] - gk_a), .2, .8))
+                p_air = float(clip(.5 + .02 * (a["aerial"][11 * t + tgt_i] - gk_a), .2, .8))
                 p_c = p_acc * p_air
                 U.append(p_c * (TUNE["cross_v"] + TUNE["keep"]) - (1 - p_c) * loss_eff * .4 + s.mod["carry"][c] * .5)
                 K.append("cross"); X.append((11 * t + tgt_i, aim, p_c))
@@ -616,7 +621,7 @@ class Match:
             near = dn < 8
             away = (_unit(C - O[near]) * ((8 - dn[near]) / 8)[:, None]).sum(0) if near.any() else 0
             dirv = _unit(toward + .8 * away)
-            cpos = np.clip(C + 7 * dirv, [1, 1], [L - 1, W - 1])
+            cpos = clip(C + 7 * dirv, [1, 1], [L - 1, W - 1])
             rel = O - C
             ahead = rel @ dirv
             lat = np.abs(rel[:, 0] * dirv[1] - rel[:, 1] * dirv[0])
@@ -631,9 +636,9 @@ class Match:
             p_keep = p_beat * (1 - .15 * np.exp(-dnear / 2.3))
             U.append(p_keep * (TUNE["carry_base"] + TUNE["carry_prog"] * prog_w * (Vf(cpos) - VC)) - (1 - p_keep) * .5 - TUNE["carry_streak"] * s.carry_streak + s.mod["carry"][c]); K.append("carry"); X.append((cpos, o, p_beat))
             if C[0] < .2 * L and dnear < 3.5:
-                U.append(.2 + .35 * pr); K.append("clear"); X.append(np.array([C[0] + 40, np.clip(C[1] + s.rng.choice([-1, 1]) * 18, 5, W - 5)]))
+                U.append(.2 + .35 * pr); K.append("clear"); X.append(np.array([C[0] + 40, clip(C[1] + s.rng.choice([-1, 1]) * 18, 5, W - 5)]))
         if not U:
-            U, K, X = [0.], ["carry"], [(np.clip(C + 7 * np.array([1., 0.]), [1, 1], [L - 1, W - 1]), -1, 1.)]
+            U, K, X = [0.], ["carry"], [(clip(C + 7 * np.array([1., 0.]), [1, 1], [L - 1, W - 1]), -1, 1.)]
         tau = .08 + .12 * (1 - a["composure"][c] / 20)
         U = np.array(U)
         pr_ = np.exp((U - U.max()) / tau)
@@ -679,16 +684,16 @@ class Match:
     def _pass(s, c, rcv, aim, lofted, spd, est, kind="pass", sigma_scale=1.0, why=None, source=None, hands_ok=True):
         t = c // 11
         start = s.ball.copy()
-        d = np.linalg.norm(aim - start)
+        d = nrm(aim - start)
         hands = bool(s.role[c] == 0 and kind == "pass" and hands_ok and d < 34 and s.rng.random() < .5)  # keeper throws it out
         if hands or source == "throw_in":
             spd, lofted = min(spd, 15. if hands else 13.), False
-        pr = np.clip(1 - np.linalg.norm(s.pos[s._opp(t)] - s.pos[c], axis=1).min() / 5, 0, 1)
+        pr = clip(1 - nrm(s.pos[s._opp(t)] - s.pos[c], axis=1).min() / 5, 0, 1)
         sg = (.5 + .05 * d) * (TUNE["pass_sigma"] * (1 - .0353 * s.attr["passing"][c])) * (1 + .35 * pr) * (1.8 if lofted else 1) * sigma_scale
         sg *= s.rain
         wide = min(aim[1], W - aim[1]) < 9
         end = aim + s.rng.normal(0, sg * (1 + TUNE["wide_error"] * wide), 2)
-        dur = max(np.linalg.norm(end - start) / spd, .3)
+        dur = max(nrm(end - start) / spd, .3)
         gx = L if t == 0 else 0
         fwd = abs(gx - start[0]) - abs(gx - aim[0])  # metres gained towards the opposition goal
         f_ = _tf if t else (lambda x: x)
@@ -711,7 +716,7 @@ class Match:
             s.emit("offside", player=rcv, pos=spot, passer=s.ids[c], line_x=round(float(f_(np.array([line, 0.]))[0]), 1))
             s.stop[s.period - 1] += 8
             s.last_touch = c
-            return s._set_dead("indirect_free_kick", 1 - t, np.clip(spot, [1, 1], [L - 1, W - 1]), 16 + s.rng.random() * 10)
+            return s._set_dead("indirect_free_kick", 1 - t, clip(spot, [1, 1], [L - 1, W - 1]), 16 + s.rng.random() * 10)
         s.state, s.carrier = "flight", -1
         s.flight = dict(start=start, end=end, aim=aim, t0=s.t, dur=dur, speed=spd, kind="lofted" if lofted else "ground",
                         team=t, passer=c, rcv=-1 if rcv is None else rcv)
@@ -734,7 +739,7 @@ class Match:
         zc = {"near_post": (L - 6, W / 2 - 4), "far_post": (L - 6, W / 2 + 4), "penalty_spot": (L - 11, W / 2), "edge_of_box": (L - 18, W / 2)}[zone_name]
         side = 1 if P[ci := c - 11 * t][1] > W / 2 else -1  # near/far are relative to the corner taker's side
         zc = (zc[0], W / 2 + (zc[1] - W / 2) * side)
-        j = max(box, key=lambda i: s.attr["aerial"][11 * t + i] - .2 * np.linalg.norm(P[i] - np.array(zc)))
+        j = max(box, key=lambda i: s.attr["aerial"][11 * t + i] - .2 * nrm(P[i] - np.array(zc)))
         aim = np.array(zc) * .5 + P[j] * .5
         ev = s._pass(c, 11 * t + j, f(aim), True, 19., .35, kind="cross", sigma_scale=.8, source="corner")
         if s.pending_pass is not None:
@@ -753,7 +758,7 @@ class Match:
         else:
             r = s.rng.random()
             p_block = 0 if kind == "penalty" else min(.5, .12 + .12 * nb)
-            p_off = np.clip(.55 - 1.0 * xg - .01 * (fin - 10), .2, .6)
+            p_off = clip(.55 - 1.0 * xg - .01 * (fin - 10), .2, .6)
             res = "blocked" if r < p_block else ("off_target" if r < p_block + p_off else "saved")
         start = s.ball.copy()
         wy = s.rng.uniform(-3.2, 3.2)
@@ -761,12 +766,12 @@ class Match:
                 "off_target": [L + .5, W / 2 + s.rng.choice([-1, 1]) * s.rng.uniform(4, 8)],
                 "blocked": list(C + _unit(np.array([L, W / 2]) - C) * s.rng.uniform(1.5, 3))}[res]
         end = f(np.array(endt))
-        spd = float(np.clip(20 + .5 * fin + s.rng.normal(0, 2), 16, 33))
+        spd = float(clip(20 + .5 * fin + s.rng.normal(0, 2), 16, 33))
         lp = s.last_pass_to.get(t)
         assist_ev = lp[3] if lp and lp[1] == c and s.t - lp[2] <= 8 else None
         if assist_ev is not None:
             assist_ev["key_pass"] = True
-        nd = float(np.linalg.norm(s.pos[s._opp(t)] - s.pos[c], axis=1).min())
+        nd = float(nrm(s.pos[s._opp(t)] - s.pos[c], axis=1).min())
         pen_kw = {}
         if kind == "penalty":
             side = str(s.rng.choice(["left", "centre", "right"], p=[.45, .1, .45]))
@@ -783,7 +788,7 @@ class Match:
         if s.pending_pass is not None:
             s.pending_pass = None
         s.state, s.carrier = "flight", -1
-        s.flight = dict(start=start, end=end, aim=end, t0=s.t, dur=max(np.linalg.norm(end - start) / spd, .25), speed=spd,
+        s.flight = dict(start=start, end=end, aim=end, t0=s.t, dur=max(nrm(end - start) / spd, .25), speed=spd,
                         kind="shot", team=t, passer=c, rcv=-1, res=res, ev=ev, var=var, assist_ev=assist_ev)
         s.ball_v = (end - start) / s.flight["dur"]
         s.last_touch = c
@@ -811,7 +816,7 @@ class Match:
         if s.state == "held":
             team = s.poss
             s._end_spell()
-            pos = np.clip(s.ball.copy(), [1, 1], [L - 1, W - 1])
+            pos = clip(s.ball.copy(), [1, 1], [L - 1, W - 1])
             s.emit("play_stopped", reason="injury", team=int(team), pos=pos, duration=treat)
             s._set_dead("drop_ball", team, pos, treat + 8)
         else:
@@ -847,17 +852,17 @@ class Match:
     def _manage(s):
         """Every 30 s: shift each team's tactics for the score, time and numbers, like a manager would."""
         mins = (s.t if s.period == 1 else 2700 + (s.t - s.h1)) / 60
-        late = float(np.clip((mins - 55) / 35, 0, 1))
+        late = float(clip((mins - 55) / 35, 0, 1))
         for t in (0, 1):
             gd = s.score[t] - s.score[1 - t]
             down = int(s.off[s._own(t)].sum() - s.off[s._opp(t)].sum())
-            need = float(np.clip(-gd, 0, 3)) * .12 * (.15 + .85 * late)
-            lead = float(np.clip(gd, 0, 3)) * .10 * late
+            need = float(clip(-gd, 0, 3)) * .12 * (.15 + .85 * late)
+            lead = float(clip(gd, 0, 3)) * .10 * late
             b, cur = s.base_tact[t], s.tact[t]
             goal = dict(press=b.press + need - lead - .15 * down, line_height=b.line_height + .8 * need - 1.2 * lead - .15 * down,
                         risk=b.risk + 1.2 * need - lead, directness=b.directness + need + .4 * lead, shoot=b.shoot + .5 * need,
                         compactness=b.compactness - .4 * need + .8 * lead + .15 * down, width=b.width - .1 * down)
-            new = {k: float(np.clip(getattr(cur, k) + .4 * (v - getattr(cur, k)), 0, 1)) for k, v in goal.items()}
+            new = {k: float(clip(getattr(cur, k) + .4 * (v - getattr(cur, k)), 0, 1)) for k, v in goal.items()}
             last = s.last_tact_emit[t]
             if sum(abs(new[k] - last[k]) for k in new) > .2 and s.t - s.last_tact_t[t] > 240:
                 reason = ("man down" if down > 0 else "man advantage" if down < 0 else "chasing the game" if gd < 0
@@ -956,7 +961,7 @@ class Match:
         anchor = None
         if on["role"] != _ROLE_NAME[s.role[i]]:  # tactical change: the newcomer takes up his natural line, same flank
             ay = s.anchor[i][1] / W
-            anchor = (_PRESET_X[on["role"]], ay if on["role"] in ("FB", "WG") else float(np.clip(ay, .35, .65)))
+            anchor = (_PRESET_X[on["role"]], ay if on["role"] in ("FB", "WG") else float(clip(ay, .35, .65)))
         off_id = s.ids[i]
         s.bench[t].remove(on)
         s.subs[t] += 1
@@ -972,9 +977,9 @@ class Match:
     def _claim_p(s, i, speed, t_team, at, receiver):
         a = s.attr
         opp = s._opp(i // 11)
-        dn = np.linalg.norm(s.pos[opp] - at, axis=1).min()
+        dn = nrm(s.pos[opp] - at, axis=1).min()
         tech = (a["dribbling"][i] + a["composure"][i]) / 2
-        return float(np.clip(.985 - .012 * max(0, speed - 12) + .012 * (tech - 10) - .1 * np.clip(1 - dn / 4, 0, 1), .3, .995))
+        return float(clip(.985 - .012 * max(0, speed - 12) + .012 * (tech - 10) - .1 * clip(1 - dn / 4, 0, 1), .3, .995))
 
     def _flight(s):
         f = s.flight
@@ -984,9 +989,9 @@ class Match:
         s.ball, s.ball_v = b, (f["end"] - f["start"]) / f["dur"]
         if f["kind"] == "ground":
             ab = b - a0
-            sp = np.clip(((s.pos - a0) @ ab) / max(ab @ ab, 1e-9), 0, 1)
+            sp = clip(((s.pos - a0) @ ab) / max(ab @ ab, 1e-9), 0, 1)
             q = a0 + sp[:, None] * ab
-            d = np.linalg.norm(s.pos - q, axis=1)
+            d = nrm(s.pos - q, axis=1)
             ok = (d < 1.0) & (s.block_until <= s.t)
             g_ = 11 * (1 - f["team"])  # the defending keeper reaches further and is better at it than outfield players
             ok[g_] = bool(d[g_] < 3.2 and s.block_until[g_] <= s.t)
@@ -1007,9 +1012,9 @@ class Match:
                     p = s._claim_p(i, f["speed"], f["team"], q[i], True)
                 else:
                     ar = s.attr
-                    p = float(np.clip(TUNE["intercept"] + .02 * (ar["positioning"][i] - 10) + .01 * (ar["tackling"][i] - 10) - .02 * (f["speed"] - 12), .15, .9)) * float(np.clip((s.t - f["t0"]) / .3, .35, 1))
+                    p = float(clip(TUNE["intercept"] + .02 * (ar["positioning"][i] - 10) + .01 * (ar["tackling"][i] - 10) - .02 * (f["speed"] - 12), .15, .9)) * float(clip((s.t - f["t0"]) / .3, .35, 1))
                 if s.role[i] == 0 and not mine:
-                    p = max(p, float(np.clip(.45 + .03 * (s.attr["gk"][i] - 10), .3, .85)))
+                    p = max(p, float(clip(.45 + .03 * (s.attr["gk"][i] - 10), .3, .85)))
                 if s.rng.random() < p:
                     s.ball = q[i]
                     return s._gain_control(i, q[i])
@@ -1039,7 +1044,7 @@ class Match:
 
     def _aerial(s, f):
         pt = f["end"]
-        d = np.linalg.norm(s.pos - pt, axis=1)
+        d = nrm(s.pos - pt, axis=1)
         ok = (d < 6.5) & (s.block_until <= s.t)
         for g in (0, 11):
             ok[g] = bool(d[g] < 10 and s.block_until[g] <= s.t)
@@ -1109,7 +1114,7 @@ class Match:
                     f["ev"]["outcome"] = "disallowed"
                     s.emit("goal_disallowed", player=c, pos=f["start"], xg=f["ev"]["xg"], reason=var["reason"])
                     s._end_spell()
-                    return s._set_dead("indirect_free_kick", 1 - t, np.clip(f["start"], [1, 1], [L - 1, W - 1]), dur + 8)
+                    return s._set_dead("indirect_free_kick", 1 - t, clip(f["start"], [1, 1], [L - 1, W - 1]), dur + 8)
                 s.emit("var_confirmed", team=t, player=c)
             if f.get("assist_ev") is not None:
                 f["assist_ev"]["assist"] = True
@@ -1121,7 +1126,7 @@ class Match:
             s._kickoff(1 - t, delay=65. + float(s.rng.uniform(0, 20)))
         elif res == "saved":
             xg_ = f["ev"]["xg"]
-            p_hold = float(np.clip(.5 + .02 * (s.attr["gk"][opp0] - 10) - 1.0 * xg_, .25, .8))
+            p_hold = float(clip(.5 + .02 * (s.attr["gk"][opp0] - 10) - 1.0 * xg_, .25, .8))
             u = s.rng.random()
             dive = "dive" if (f["speed"] > 24 or xg_ > .2) else "stand"
             if u < p_hold:
@@ -1146,7 +1151,7 @@ class Match:
         else:  # blocked: a defender gets in the way
             opp_f = np.arange(11 * (1 - t), 11 * (1 - t) + 11)
             opp_f = opp_f[(s.role[opp_f] > 0) & ~s.off[opp_f]]
-            blocker = int(opp_f[np.argmin(np.linalg.norm(s.pos[opp_f] - f["end"], axis=1))])
+            blocker = int(opp_f[np.argmin(nrm(s.pos[opp_f] - f["end"], axis=1))])
             s.emit("block", player=blocker, pos=f["end"], shooter=s.ids[c], kind="shot")
             if s.rng.random() < .02:  # deflects past his own keeper
                 s.score[t] += 1
@@ -1165,7 +1170,7 @@ class Match:
 
     # ------------------------------------------------------------------ loose ball
     def _loose(s):
-        sp = np.linalg.norm(s.ball_v)
+        sp = nrm(s.ball_v)
         a0 = s.ball.copy()
         nsp = max(0., sp - 2.2 * s.dt)
         s.ball_v = s.ball_v * (nsp / sp) if sp > 1e-6 else s.ball_v
@@ -1174,9 +1179,9 @@ class Match:
         if not (0 <= b[0] <= L and 0 <= b[1] <= W):
             return s._out(b)
         ab = b - a0
-        spn = np.clip(((s.pos - a0) @ ab) / max(ab @ ab, 1e-9), 0, 1) if ab @ ab > 1e-9 else np.zeros(22)
+        spn = clip(((s.pos - a0) @ ab) / max(ab @ ab, 1e-9), 0, 1) if ab @ ab > 1e-9 else np.zeros(22)
         q = a0 + spn[:, None] * ab
-        d = np.linalg.norm(s.pos - q, axis=1)
+        d = nrm(s.pos - q, axis=1)
         for i in np.argsort(d / (s.vmax * .5 + 1)):
             if d[i] > 1.3 or s.block_until[i] > s.t:
                 continue
@@ -1189,7 +1194,7 @@ class Match:
         d = s.dead
         s.ball, s.ball_v = d["pos"].copy(), np.zeros(2)
         k = d["taker"]
-        if s.t >= d["ready"] and np.linalg.norm(s.pos[k] - d["pos"]) < 1.3:
+        if s.t >= d["ready"] and nrm(s.pos[k] - d["pos"]) < 1.3:
             s.last_ctrl_team = d["team"] if s.last_ctrl_team is None else s.last_ctrl_team
             s._gain_control(k, d["pos"])
             s.rk = d["kind"] if d["kind"] != "kickoff" else None
