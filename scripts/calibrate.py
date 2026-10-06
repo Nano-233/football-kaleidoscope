@@ -27,19 +27,22 @@ def _init(tune):
     engine.TUNE.update(tune)
 
 
-def one(seed):
+def run(seed):
     rng = np.random.default_rng(seed)
     codes = list(LEAGUE)
     h, a = rng.choice(codes, 2, replace=False)
     home = make_team(h, rng.choice(["4-3-3", "4-4-2", "4-2-3-1"]), Tactics(*rng.uniform(.3, .7, 8)), rng=rng)
     away = make_team(a, rng.choice(["4-3-3", "4-4-2", "4-2-3-1", "3-5-2"]), Tactics(*rng.uniform(.3, .7, 8)), rng=rng)
     m = Match(home, away, seed=seed)
-    r = m.run()
+    return m, m.run()
+
+
+def stats(m, r):
     ev = r["events"]
     cnt = lambda ty, **kw: sum(1 for e in ev if e["type"] == ty and all(e.get(k) == v for k, v in kw.items()))
     passes = [e for e in ev if e["type"] in ("pass", "cross")]
     fr = np.array(r["frames"])
-    pos = fr[:, 5:].reshape(len(fr), 22, 2)
+    pos = fr[:, 5:49].reshape(len(fr), 22, 2)
     poss = fr[:, 4]
     dt = r["meta"]["dt"]
     sp = np.linalg.norm(np.diff(pos, axis=0), axis=2) / dt
@@ -61,6 +64,10 @@ def one(seed):
         centroid_ball_corr=corr, team_depth=depth, team_width=width,
         yellow=cnt("card", card="yellow"), red=cnt("card", card="red"), score=tuple(r["meta"]["score"]),
         stamina_end=float(m.stam[outfield].mean()))
+
+
+def one(seed):
+    return stats(*run(seed))
 
 
 if __name__ == "__main__":

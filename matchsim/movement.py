@@ -21,7 +21,7 @@ CRUISE = np.array([1.3, 1.5, 1.4, 1.35, 1.75, 1.1, 1.1, .8])  # jogging speed by
 SHOULDER = np.array([0, 0, 0, 0, 0, -9., -13., -6.])  # where each attacking role stands relative to the last defender (m)
 MIN_X = np.array([0, 12, 11, 17, 21, 24, 26, 30.])  # deepest a role will drop (defenders hold the box edge, they do not hug the goal line)
 GOAL = np.array([0., W / 2])
-TUNE_COMMIT = .12
+TUNE_COMMIT = .04
 
 
 def _tf(a):
@@ -120,12 +120,12 @@ def team_targets(m, t):
         if m.poss == 1 - t and carrier >= 0:
             C, Cv = O[carrier - 11 * (1 - t)], fv(m.vel[carrier])
             depth = C[0] / L
-            R = (4 + 14 * tc.press) * (1.5 if m.t < m.trans_until[t] else 1.0)
+            R = (3 + 9 * tc.press) * (1.5 if m.t < m.trans_until[t] else 1.0)
             if depth > .5:
                 R *= max(.15, 1 - (depth - .5) * 2 * (1 - tc.press) * .9)
             d = np.linalg.norm(P - C, axis=1)
             d[role == GK] = 1e9
-            n = 1 + (tc.press > .65)
+            n = 1 + (tc.press > .8)
             near = np.argsort(d)
             danger = np.clip((.45 * L - C[0]) / (.3 * L), 0, 1)
             if danger > 0:  # shot-blocking cover: the next three defenders drop onto the ball-goal line
@@ -138,7 +138,7 @@ def team_targets(m, t):
                 if d[i] < R:
                     g = 11 * t + i  # jockey goal-side; occasionally commit to the tackle
                     danger = np.clip((.4 * L - C[0]) / (.3 * L), 0, 1)  # defenders commit more as the ball nears their goal
-                    if m.t >= m.commit_until[g] and m.rng.random() < (TUNE_COMMIT + .3 * tc.press) * m.mod["commit"][g] * (1 + 2 * danger) * m.dt:
+                    if m.t >= m.commit_until[g] and m.rng.random() < (TUNE_COMMIT + .12 * tc.press) * m.mod["commit"][g] * (1 + 2 * danger) * m.dt:
                         m.commit_until[g] = m.t + m.rng.uniform(1., 2.)
                     zone[i] = C + Cv * .2 if m.t < m.commit_until[g] else C + _unit(GOAL - C) * (1.8 + 1.6 * (1 - tc.press)) + Cv * .2
                     urgent[i] = True
@@ -174,6 +174,14 @@ def team_targets(m, t):
                 m.run_tgt[11 * t + i] = (min(line + m.rng.uniform(-.8, 2.2), C[0] + 40), np.clip(A[i, 1] + m.rng.uniform(-9, 9), 4, W - 4))
                 m.run_until[11 * t + i] = m.t + m.rng.uniform(2.5, 4.0)
                 m.run_cool[11 * t + i] = m.t + m.rng.uniform(6, 12)
+            if abs(C[1] - W / 2) > 15 and C[0] > .62 * L:  # ball wide in the final third: get bodies into the box
+                sd = 1 if C[1] > W / 2 else -1
+                line_ = max(np.sort(O[:, 0])[-2], L / 2)
+                order = ([i for i in idx if role[i] == ST] + [i for i in idx if role[i] == AM]
+                         + [i for i in idx if role[i] == WG and (P[i][1] - W / 2) * sd < 0] + [i for i in idx if role[i] == CM])
+                spots = [(L - 8, W / 2 - sd * 2.5), (L - 9.5, W / 2 + sd * 5.5), (L - 18, W / 2 - sd * 1), (L - 20, W / 2 + sd * 3), (L - 19, W / 2 - sd * 8)]
+                for i, sp_ in zip([i for i in order if 11 * t + i != carrier][:5], spots):
+                    zone[i], urgent[i] = (min(sp_[0], line_ + .5), sp_[1]), True
             # support triangles around the carrier
             pr = np.clip(1 - np.min(np.linalg.norm(O - C, axis=1)) / 5, 0, 1)
             cand = np.nonzero(out_f & (idx != carrier - 11 * t))[0]

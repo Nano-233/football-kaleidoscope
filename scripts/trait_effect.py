@@ -21,7 +21,7 @@ def one(seed):
     r = m.run()
     meta = {p["id"]: p for tm in ("home", "away") for p in r["meta"][tm]["players"]}
     ev = r["events"]
-    pos = np.array(r["frames"])[:, 5:].reshape(-1, 22, 2)
+    pos = np.array(r["frames"])[:, 5:49].reshape(-1, 22, 2)
     sp = np.linalg.norm(np.diff(pos, axis=0), axis=2) / r["meta"]["dt"]
     sp[sp > 15] = 0
     out = []

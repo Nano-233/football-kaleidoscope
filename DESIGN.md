@@ -68,6 +68,11 @@ xG, passes, pass accuracy, fouls, set pieces, distance covered, top speed, team 
 `scripts/tactics_effect.py` varies one tactic and checks the behaviour moves the right way (e.g. press 0.1 to 0.9:
 pressures +44%, opponent passes -27%, possession rises; line height raises the centre-back line by ~6 m; width widens the team by ~10 m).
 
+`scripts/realism.py` measures the gap list: pass direction and length, long balls and through-balls, open-play
+crosses and headers, shots in the box, penalties, ball-in-play time, pressing (pressure events and passes per defensive
+action), interceptions and aerial duels, plus home advantage (`--home`) and competitive balance (`--balance`).
+`scripts/tune.py` coordinate-searches the `TUNE` table so all of those land inside their real-world bands at once.
+
 ## Known simplifications
 
 - No side swap at half time; no VAR for penalties or red cards; offside is called on release against the defensive line as the passer last saw it.

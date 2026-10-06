@@ -18,7 +18,7 @@ def one(seed):
     home_f, away_f = [("4-3-3", "4-4-2"), ("4-2-3-1", "3-5-2")][seed % 2]
     m = Match(make_team("KES", home_f, Tactics(), rng=rng), make_team("NBR", away_f, Tactics(), rng=rng), seed=seed)
     r = m.run()
-    pos = np.array(r["frames"])[:, 5:].reshape(-1, 22, 2)
+    pos = np.array(r["frames"])[:, 5:49].reshape(-1, 22, 2)
     dt = r["meta"]["dt"]
     sp = np.linalg.norm(np.diff(pos, axis=0), axis=2) / dt
     sp[sp > 15] = 0

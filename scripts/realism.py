@@ -17,7 +17,7 @@ BANDS = {
     "pass_fwd": (.30, .45), "pass_back": (.18, .32), "pass_len": (16.5, 21), "long_share": (.06, .13), "through": (.005, .03),
     "open_crosses": (25, 50), "head_share": (.10, .20), "box_share": (.66, .82), "penalties": (.15, .45),
     "ball_in_play": (.55, .68), "pressures": (200, 450), "ppda": (8, 14), "interceptions": (14, 30), "aerial_duels": (50, 110),
-    "goals": (2.4, 3.1), "shots": (20, 30),
+    "goals": (2.4, 3.1), "shots": (20, 30), "shots_ST": (.2, .38), "shots_CB": (.02, .1), "pass_per_poss": (3.5, 6.5),
 }
 
 
@@ -32,7 +32,10 @@ def one(args):
         qa, qb = 14.5, 11.5
     f1, f2 = rng.choice(["4-3-3", "4-4-2", "4-2-3-1"]), rng.choice(["4-3-3", "4-4-2", "4-2-3-1", "3-5-2"])
     m = Match(make_team(a, f1, Tactics(*rng.uniform(.3, .7, 8)), quality=qa, rng=rng), make_team(b, f2, Tactics(*rng.uniform(.3, .7, 8)), quality=qb, rng=rng), seed=seed)
-    r = m.run()
+    return stats(m, m.run())
+
+
+def stats(m, r):
     ev = r["events"]
     c = collections.Counter(e["type"] for e in ev)
     passes = [e for e in ev if e["type"] == "pass" and e.get("outcome")]
@@ -45,7 +48,10 @@ def one(args):
         opp = sum(1 for e in passes if e["team"] == 1 - t and xt(e) < .6 * L)
         act = sum(1 for e in ev if e["type"] in ("tackle", "interception", "foul") and e.get("team") == t and xt(e) > .4 * L)
         ppda.append(opp / max(act, 1))
+    roles = {p["id"]: p["role"] for tm in ("home", "away") for p in r["meta"][tm]["players"] + r["meta"][tm]["bench"]}
+    role_share = lambda evs, ro: np.mean([roles[e["player"]] == ro for e in evs]) if evs else 0
     return dict(
+        shots_ST=role_share(shots, "ST"), shots_CB=role_share(shots, "CB"), pass_per_poss=len(passes) / max(c["possession_change"], 1),
         pass_fwd=sum(e["gain"] > 5 for e in passes) / n, pass_back=sum(e["gain"] < -5 for e in passes) / n,
         pass_len=np.mean([e["length"] for e in passes]), long_share=sum(e["length"] > 32 for e in passes) / n,
         through=sum(e["technique"] == "through_ball" for e in passes) / n,

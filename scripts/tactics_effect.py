@@ -18,7 +18,7 @@ def run(args):
     m = Match(home, away, seed=seed)
     r = m.run()
     fr = np.array(r["frames"])
-    pos = fr[:, 5:].reshape(len(fr), 22, 2)
+    pos = fr[:, 5:49].reshape(len(fr), 22, 2)
     cb = [i for i in range(11) if m.role[i] == 1]
     out = [i for i in range(11) if m.role[i] > 0]
     opp_has = fr[:, 4] == 1
