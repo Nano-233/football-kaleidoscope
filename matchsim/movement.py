@@ -76,6 +76,10 @@ def team_targets(m, t):
             for i, s in zip(order, spots):
                 tg[i] = s
             tg[0] = (35, W / 2)
+            sup = m.dead.get("sup", -1) - 11 * t
+            if m.dead.get("short") and 0 <= sup < 11:
+                cor = f(m.dead["pos"])
+                tg[sup] = cor + _unit(np.array([L / 2, W / 2]) - cor) * 9
         else:
             order = [i for i in idx if role[i] > GK]
             spots = [(5, 30), (5, 38), (8, 27), (8, 41), (11, 34), (6, 34), (13, 30), (13, 38)]
@@ -148,6 +152,15 @@ def team_targets(m, t):
                         m.commit_until[g] = m.t + m.rng.uniform(1., 2.)
                     zone[i] = C + Cv * .2 if m.t < m.commit_until[g] else C + _unit(GOAL - C) * (1.8 + 1.6 * (1 - tc.press)) + Cv * .2
                     urgent[i] = True
+        elif m.state == "dead" and kind == "free_kick" and np.hypot(B[0], B[1] - W / 2) < 32:  # wall on the line to goal, 9.15 m back
+            dist = float(np.hypot(B[0], B[1] - W / 2))
+            n = 5 if dist < 19 else 4 if dist < 25 else 3
+            u = _unit(GOAL - B)
+            wc = B + u * 9.15
+            perp = np.array([-u[1], u[0]])
+            order = np.argsort(np.linalg.norm(P - wc, axis=1) + (role == GK) * 1e9)[:n]
+            for k, i in enumerate(order):
+                zone[i], urgent[i] = wc + perp * (k - (n - 1) / 2) * .85, True
         elif m.state == "loose":
             d = np.linalg.norm(P - B, axis=1)
             d[role == GK] = 1e9
@@ -155,7 +168,8 @@ def team_targets(m, t):
                 zone[i], urgent[i] = B + Bv * .6, True
         elif m.state == "flight" and m.flight["kind"] == "lofted":  # win the second ball / header
             d = np.linalg.norm(P - f(m.flight["end"]), axis=1)
-            d[role == GK] = 1e9
+            if f(m.flight["end"])[0] > 18:  # the keeper only comes for balls into his own area
+                d[role == GK] = 1e9
             for i in np.argsort(d)[:2]:
                 zone[i], urgent[i] = f(m.flight["end"]), True
         elif m.state == "flight" and m.flight["kind"] == "ground" and m.t - m.flight["t0"] > .35:  # defenders react ~.35 s after release; nearest-in-time one moves to the lane
@@ -165,7 +179,8 @@ def team_targets(m, t):
             s = np.clip(((P - a) @ ab) / max(ab @ ab, 1e-6), 0, 1)
             q = a + s[:, None] * ab
             slack = np.linalg.norm(P - q, axis=1) / (m.vmax[sl] * .9) - s * np.linalg.norm(ab) / fl["speed"]
-            slack[role == GK] = 1e9
+            if f(fl["end"])[0] > 30:  # the keeper only sweeps up balls played in behind towards his goal
+                slack[role == GK] = 1e9
             for i in np.argsort(slack)[:2]:
                 if slack[i] < 1.2:
                     zone[i], urgent[i] = q[i], True
@@ -198,6 +213,11 @@ def team_targets(m, t):
         running = has & (m.t < m.run_until[sl])
         for i in np.nonzero(running)[0]:
             zone[i], urgent[i] = m.run_tgt[11 * t + i], True
+        if kind == "free_kick" and B[0] > .6 * L:  # attackers into the box for a delivery
+            order = [i for r in (ST, CB, AM, CM, WG) for i in idx if role[i] == r and 11 * t + i != m.dead["taker"]]
+            spots = [(L - 9, W / 2 - 2), (L - 11, W / 2 + 4), (L - 13, W / 2), (L - 15, W / 2 - 6), (L - 16, W / 2 + 7)]
+            for i, sp_ in zip(order, spots):
+                zone[i], urgent[i] = sp_, True
         # open a passing lane: step away from a close marker
         D = cdist(P, O)
         j = D.argmin(1)
@@ -211,5 +231,13 @@ def team_targets(m, t):
 
     # ---- goalkeeper ---------------------------------------------------------------------
     sw = 1 + 1.2 * m.mod["sweep"][11 * t]  # sweeper keepers play higher
-    zone[0] = (np.clip(2.5 + (.12 if has else .05) * B[0] * sw, 2.5, 14 * sw), W / 2 + np.clip(by * .22, -8, 8))
+    if not urgent[0]:
+        if has:
+            gx, gy = np.clip(2.5 + .12 * B[0] * sw, 2.5, 14 * sw), W / 2 + np.clip(by * .22, -8, 8)
+        else:  # on the line between the ball and the goal centre, nearer the line the closer the ball
+            v = B - GOAL
+            db = max(float(np.linalg.norm(v)), 1e-6)
+            depth = np.clip(1.2 + .08 * db + 2 * (sw - 1), 1.5, 8 + 6 * (sw - 1))
+            gx, gy = v[0] / db * depth, W / 2 + np.clip(v[1] / db * depth, -7, 7)
+        zone[0] = (np.clip(gx, 1., 22.), gy)
     return f(np.stack([np.clip(zone[:, 0], 1, L - 1), np.clip(zone[:, 1], 1, W - 1)], 1)), urgent

@@ -96,14 +96,15 @@ TRAITS = {
     "target_man":     ("Holds the ball up, wins headers",       dict(aerial=4, follow=.65, cruise=.9, runs=.6)),
     "sweeper_keeper": ("Plays high, sweeps behind the line",    dict(sweep=1)),
     "low_workrate":   ("Conserves energy",                      dict(cruise=.88, follow=.8)),
+    "dead_ball":      ("Set-piece specialist",                  dict(fk=1)),
 }
 _ROLE_TRAITS = {
-    "ST": ["poacher", "target_man", "runner", "clinical", "long_shots", "dribbler"],
-    "WG": ["dribbler", "runner", "long_shots", "playmaker", "clinical", "low_workrate"],
-    "AM": ["playmaker", "long_shots", "dribbler", "runner", "clinical"],
-    "CM": ["box_to_box", "playmaker", "hard_tackler", "long_shots", "safe_passer", "low_workrate"],
+    "ST": ["poacher", "target_man", "runner", "clinical", "long_shots", "dribbler", "dead_ball"],
+    "WG": ["dribbler", "runner", "long_shots", "playmaker", "clinical", "low_workrate", "dead_ball"],
+    "AM": ["playmaker", "long_shots", "dribbler", "runner", "clinical", "dead_ball"],
+    "CM": ["box_to_box", "playmaker", "hard_tackler", "long_shots", "safe_passer", "low_workrate", "dead_ball"],
     "DM": ["hard_tackler", "safe_passer", "playmaker", "box_to_box"],
-    "FB": ["runner", "box_to_box", "safe_passer", "hard_tackler", "dribbler"],
+    "FB": ["runner", "box_to_box", "safe_passer", "hard_tackler", "dribbler", "dead_ball"],
     "CB": ["hard_tackler", "safe_passer", "target_man", "playmaker"],
     "GK": ["sweeper_keeper"],
 }

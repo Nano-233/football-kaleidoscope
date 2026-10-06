@@ -44,7 +44,7 @@ function pitch(){
     g.strokeRect(px(s ? L-5.5 : 0),py(W/2-9.16),5.5*SX,18.32*SY);
     g.strokeRect(px(s ? L : -2),py(W/2-3.66),2*SX,7.32*SY); }
 }
-function who(k){ let p = slots[k]; for (const e of D.events) { if (e.t > t) break; if (e.type === 'substitution' && e.slot === k) p = info[e.on]; } return p; }
+function who(k){ let p = slots[k]; for (const e of D.events) { if (e.t > t) break; if ((e.type === 'substitution' || e.type === 'outfield_keeper') && e.slot === k) p = info[e.on] || p; } return p; }
 function draw(){
   if (!D) return;
   const i = Math.min(frames.length-1, Math.max(0, Math.round(t/dt))), f = frames[i];
