@@ -41,7 +41,7 @@ control, so completion rates emerge from player positions instead of being dice 
 `scripts/calibrate.py` simulates N matches and compares aggregates with rough real-football norms (goals, shots,
 xG, passes, pass accuracy, fouls, set pieces, distance covered, top speed, team shape, centroid-ball correlation).
 `scripts/tactics_effect.py` varies one tactic and checks the behaviour moves the right way (e.g. press 0.1 to 0.9:
-pressures +44%, opponent passes -27%, possession +10 points; line height raises the centre-back line by ~6 m).
+pressures +44%, opponent passes -27%, possession rises; line height raises the centre-back line by ~6 m; width widens the team by ~10 m).
 
 ## Known simplifications
 
