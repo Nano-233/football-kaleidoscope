@@ -5,8 +5,8 @@ most have `team (0 home, 1 away)`, `player` (id), and `x, y` (pitch metres, 105 
 
 | type | per match | extra fields | notes |
 |---|---|---|---|
-| `pressure` | 954.3 | target | Defender closes within 3 m of the carrier. |
 | `pass` | 932.6 | assist, body_part, difficulty, height, key_pass, length, lofted, outcome, p_success, progressive, receiver, speed, technique, why | Pass attempt. outcome complete|intercepted|deflected|incomplete|out|offside; technique, height, key_pass, assist, p_success/difficulty, why. (height=ground/high; lofted=False/True; outcome=complete/deflected/incomplete/intercepted/offside/out; progressive=False/True; technique=backward/forward/long_ball/sideways/switch/through_ball) |
+| `pressure` | 780.8 | target | Defender closes within 3 m of the carrier. |
 | `carry` | 734.5 | distance, duration | Ball carried 4 m or more: start, end, distance, duration. |
 | `possession_change` | 194.3 |  | Team gains control from the opposition. |
 | `tackle` | 82.4 | outcome, target | Tackle attempt, outcome won|lost. (outcome=lost/won) |

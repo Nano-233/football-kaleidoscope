@@ -355,8 +355,8 @@ class Match:
         s.ball, s.ball_v = s.pos[c] + face * .5, v.copy()
         opp = np.arange(11 * (1 - t), 11 * (1 - t) + 11)
         d = np.linalg.norm(s.pos[opp] - s.pos[c], axis=1)
-        for k in np.nonzero(d < 2.2)[0]:
-            if s.t - s.last_press[opp[k]] > 7.0:  # one pressure event per defender per engagement
+        for k in np.nonzero((d < 3.0) & (s.commit_until[opp] > s.t))[0]:  # a defender commits to closing the carrier down
+            if s.t - s.last_press[opp[k]] > 2.5:
                 s.emit("pressure", player=opp[k], pos=s.pos[opp[k]], target=s.ids[c])
                 s.last_press[opp[k]] = s.t
         if s.t >= s.protect_until:
