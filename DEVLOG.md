@@ -116,6 +116,16 @@ two-ufunc `clip`, an einsum `nrm` and a plain subtraction for the frame flip (sa
 targets recomputed every other tick unless the ball is in flight or loose (players already lag their targets by about
 0.25 s; 30 % faster). Calibration unchanged within noise. Further options if needed: numba on `team_targets`.
 
+### Surrogate tuner: honest result (did not beat the baseline)
+`scripts/tune_rs.py` (regression surrogate over 18 parameters, gradient descent on it, verify with real runs) proposed
+settings that scored worse than the current ones in both rounds we ran (3.43 and 2.77 vs 2.47), and its half-steps were worse
+still (4.50, 5.64). Diagnosis: the score is noisy. A metric with a narrow band (penalties 0.15-0.45) has a sampling error
+of about one band width at 24 matches, and parameter changes reshuffle the random stream, so common random numbers do not
+hold. The coordinate-search "improvements" of earlier runs were partly seed-fitting. Lessons: score noise must be
+estimated (use max(band width, 2 x standard error) as the denominator), evaluations need 100+ matches, and the sensitivity
+table is more useful than the optimiser. Kept the baked parameters (score 2.47) and stopped tuning; the realism work is
+now finished and frozen as engine-v2.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
