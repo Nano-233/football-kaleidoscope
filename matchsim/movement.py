@@ -232,7 +232,7 @@ def defend_assign(m, t, zone, urgent, role, P, O, Ov, C, Cv, ci, tc, tgt1, cover
         add(spot, v, j, "mark")
     # lane, post, space
     if dgc < 30.:
-        add(C + _unit(GOAL - C) * max(4., .45 * dgc), TP.get("lane_k", 35.) * float(np.exp(-dgc / 12.)) * .4, 100, "lane")
+        add(C + _unit(GOAL - C) * max(4., .45 * dgc), TP.get("lane_job_k", 35.) * float(np.exp(-dgc / 12.)) * .4, 100, "lane")
     if dgc < 26.:
         add(np.array([1.6, W / 2 + side * 2.8]), TP.get("post_v", 5.) * float(clip((28. - dgc) / 12., 0, 1)), 101, "post")
     if dgc < 30. and abs(C[1] - W / 2) > 14.:
