@@ -20,9 +20,9 @@ from .movement import _tf, _unit, nrm, clip
 
 DT = 0.2
 # Single tuning table (calibrated by scripts/calibrate.py against real-football norms).
-TUNE = dict(ft_shot=.45, turn_cost=.55, turn_rate=3.2, face_k=1.5, pot=1.2, relief=1.0, ft_slow=.0, drive=.4,  cong_k=.5, risk_pow=1.6, first_touch=3., wide_v=.35, ctrl_marked=.45, shoot_hold=.5, shoot_slope=2.5, shoot_ref=.10, shoot_press=.8, adv_lin=.6, pack=.04, shoot_min=.12, react=1.6, patience=.2, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.4, fk_bonus=0.05, long_bonus=0.523, prog_base=1.2, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=1.3, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=1.3, shot_k=3.15, shot_k_dir=5.0,
-            carry_base=.1, carry_prog=.2, carry_streak=.3, dwell_base=0.9, dwell_shape=2.4, dwell_scale=1.61,
-            tackle_rate=2.0, wide_error=3.2, off_miss=.2, off_mult=.25)
+TUNE = dict(ft_shot=0.315, turn_cost=0.55, turn_rate=3.2, face_k=0.6, pot=2.19, relief=1.0, ft_slow=.0, drive=0.4,  cong_k=0.5, risk_pow=2.2, first_touch=3.0, wide_v=0.74, ctrl_marked=0.33, shoot_hold=0.5, shoot_slope=2.05, shoot_ref=0.168, shoot_press=0.56, adv_lin=.6, pack=.04, shoot_min=.12, react=1.84, patience=0.2, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.4, fk_bonus=0.05, long_bonus=0.163, prog_base=0.75, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=1.3, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=1.3, shot_k=3.15, shot_k_dir=5.0,
+            carry_base=0.22, carry_prog=.2, carry_streak=.3, dwell_base=0.9, dwell_shape=2.4, dwell_scale=1.61,
+            tackle_rate=2.84, wide_error=3.2, off_miss=.2, off_mult=.25)
 sig = lambda x: 1 / (1 + np.exp(-x))
 GOAL_HALF = 3.66
 _MULT = ("shot", "runs", "follow", "prog", "loss", "cruise", "commit", "foul", "tackle")
