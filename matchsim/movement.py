@@ -26,6 +26,8 @@ LAG = np.array([0, 8, 8, 2, 1, 0, 0, -10.])  # metres behind the ball each role 
 GS_CAP = np.array([0, 0, 0, 0, 0, 2, 2, 8.])  # how far past the ball (towards the opponent) each role may stand while defending: most men stay goal-side of it
 GOAL = np.array([0., W / 2])
 TUNE_COMMIT = .08
+DANGER_ZONE = 38.    # an attacker this close to goal who is unmarked gets picked up by a free defender
+PICK_UP = .8         # how much of his own place a defender gives up to take the free man
 SUPPORT_MIN = 8.     # the nearest supporting player stands at least this far from the carrier
 ATT_SPACING = 6.5    # attackers keep at least this far from each other (m)
 BACK_PRESS = 6.      # a centre-back or full-back only leaves the line to a carrier this close
@@ -157,6 +159,37 @@ def box_defence(m, B, zone, urgent, gate, role, P):
         zone[i] = zone[i] * (1 - .85 * wz) + j * (.85 * wz)
         if np.hypot(*(P[i] - j)) > 6:
             urgent[i] = True
+    return zone, urgent
+
+
+def pick_up_free(zone, urgent, gate, role, P, O, ci, tc):
+    """An attacker in a dangerous area with nobody near him is picked up by the nearest defender who is not busy: the 'who has him?' rule.
+
+    Dangerous = inside about 38 m of goal. 'Nobody near' = no defender within 3 m. Free defenders take such attackers by shortest
+    total distance and stand goal-side of where each is going."""
+    out = np.arange(1, 11)
+    att = [j for j in out if j != ci and nrm(O[j] - GOAL) < DANGER_ZONE]
+    if not att:
+        return zone, urgent
+    att = np.array(att)
+    dd = cdist(P[role > GK], O[att])
+    near_def = dd.min(0)
+    open_ = att[near_def > 3.0]
+    if not len(open_):
+        return zone, urgent
+    free = np.nonzero((role > GK) & (gate < .6) & ~urgent)[0]
+    if not len(free):
+        return zone, urgent
+    cost = cdist(P[free], O[open_])
+    r, c = linear_sum_assignment(cost)
+    for i_, j_ in zip(r, c):
+        if cost[i_, j_] > 20.:
+            continue
+        o = O[open_[j_]]
+        spot = o + _unit(GOAL - o) * (MARK_GAP + 1.4 * (1 - tc.marking))
+        zone[free[i_]] = zone[free[i_]] * (1 - PICK_UP) + spot * PICK_UP
+        if cost[i_, j_] > 5.:
+            urgent[free[i_]] = True
     return zone, urgent
 
 
@@ -410,6 +443,7 @@ def team_targets(m, t):
                 mx = zone[bl, 0].mean()
                 zone[bl, 0] = mx + LINE_FLAT2 * (zone[bl, 0] - mx)
             if m.poss == 1 - t and carrier >= 0:
+                zone, urgent = pick_up_free(zone, urgent, gate, role, P, O, carrier - 11 * (1 - t), tc)
                 zone, urgent = cut_lanes(zone, urgent, gate, role, P, O, O[carrier - 11 * (1 - t)], carrier - 11 * (1 - t))
             Bd = f(m.flight["end"]) if m.state == "flight" and m.flight["kind"] in ("ground", "lofted") and m.flight["team"] != t else B  # build the cone around where the ball is going
             zone, urgent = box_defence(m, Bd, zone, urgent, gate, role, P)
