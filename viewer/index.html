@@ -16,6 +16,7 @@
   <button id="play">Play</button><button id="next" title="jump to the next key moment (n)">Next moment ⏭</button>
   <select id="speed"><option>1</option><option>2</option><option selected>5</option><option>10</option><option>30</option><option>60</option><option>120</option></select>x
   <input id="seek" type="range" min="0" max="1" step="0.1" value="0">
+  <label title="draw an arrow where each player faces"><input id="arrows" type="checkbox" checked> facing</label>
   <span id="clock"></span>
 </div>
 <canvas id="c" width="1100" height="720"></canvas>
@@ -46,11 +47,15 @@ function pitch(){
 }
 function who(k){ let p = slots[k]; for (const e of D.events) { if (e.t > t) break; if ((e.type === 'substitution' || e.type === 'outfield_keeper') && e.slot === k) p = info[e.on] || p; } return p; }
 // Playback smoothing: the engine records at 5 Hz, so draw an interpolated frame (Catmull-Rom through the players, linear for the ball)
-const F_SM = new Float32Array(50);
+const F_SM = new Float32Array(72);
 function smooth(i, u){
   const f0 = frames[Math.max(0, i - 1)], f1 = frames[i], f2 = frames[Math.min(frames.length - 1, i + 1)], f3 = frames[Math.min(frames.length - 1, i + 2)];
   F_SM[1] = f1[1] + (f2[1] - f1[1]) * u; F_SM[2] = f1[2] + (f2[2] - f1[2]) * u;
   F_SM[3] = u < .5 ? f1[3] : f2[3]; F_SM[4] = f1[4]; F_SM[49] = f1[49] || 0;
+  for (let k = 0; k < 22; k++) {  // headings: turn the short way round
+    const a1 = f1[50 + k] || 0, a2 = f2[50 + k] || 0; let d = a2 - a1; d -= 2 * Math.PI * Math.round(d / (2 * Math.PI));
+    F_SM[50 + k] = a1 + d * u;
+  }
   for (let j = 5; j < 49; j++) {
     const p0 = f0[j], p1 = f1[j], p2 = f2[j], p3 = f3[j];
     if (Math.abs(p2 - p1) > 14) { F_SM[j] = p1; continue; }  // substitution or half-time reset: no sweep across the pitch
@@ -70,6 +75,11 @@ function draw(){
     g.lineWidth = k % 11 === 0 ? 3 : 1; g.strokeStyle = k % 11 === 0 ? '#facc15' : '#fff'; g.stroke();
     if (k === carrier) { g.beginPath(); g.arc(x,y,14,0,7); g.strokeStyle = '#fff'; g.lineWidth = 2; g.stroke(); }
     g.fillStyle = '#fff'; g.font = '10px sans-serif'; g.textAlign = 'center'; g.fillText(who(k).number, x, y+3.5);
+    if ($('arrows').checked && f[50+k] !== undefined) {  // an arrow where he faces
+      const a = f[50+k], ux = Math.cos(a), uy = Math.sin(a), x0 = x + ux*10, y0 = y + uy*10, x1 = x + ux*22, y1 = y + uy*22;
+      g.strokeStyle = 'rgba(255,255,255,.9)'; g.lineWidth = 2; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+      g.fillStyle = 'rgba(255,255,255,.95)'; g.beginPath(); g.moveTo(x1 + ux*4, y1 + uy*4); g.lineTo(x1 - uy*3.5, y1 + ux*3.5); g.lineTo(x1 + uy*3.5, y1 - ux*3.5); g.closePath(); g.fill();
+    }
   }
   g.beginPath(); g.arc(px(f[1]),py(f[2]),5,0,7); g.fillStyle = '#fff'; g.fill(); g.strokeStyle = '#000'; g.lineWidth = 1.5; g.stroke();
   const ev = D.events.filter(e => e.t <= t);
@@ -97,6 +107,7 @@ const KEY = e => ['goal','own_goal','penalty','sent_off','var_check','goal_disal
 $('next').onclick = () => { const e = D.events.find(e => e.t > t + 1 && KEY(e)); if (e) { t = Math.max(0, e.t - 6); draw(); } };
 document.onkeydown = e => { if (e.key === 'n') $('next').click(); if (e.key === ' ') { e.preventDefault(); $('play').click(); } };
 $('seek').oninput = e => { t = +e.target.value; draw(); };
+$('arrows').onchange = draw;
 cv.onmousemove = e => { const r = cv.getBoundingClientRect(); mouse = [(e.clientX-r.left)*cv.width/r.width, (e.clientY-r.top)*cv.height/r.height, e.clientX, e.clientY]; draw(); };
 cv.onmouseleave = () => { mouse = null; draw(); };
 requestAnimationFrame(tick);

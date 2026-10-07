@@ -26,6 +26,7 @@ LAG = np.array([0, 8, 8, 2, 1, 0, 0, -10.])  # metres behind the ball each role 
 GS_CAP = np.array([0, 0, 0, 0, 0, 2, 2, 8.])  # how far past the ball (towards the opponent) each role may stand while defending: most men stay goal-side of it
 GOAL = np.array([0., W / 2])
 TUNE_COMMIT = .08
+ATT_SPACING = 6.5    # attackers keep at least this far from each other (m)
 BACK_PRESS = 6.      # a centre-back or full-back only leaves the line to a carrier this close
 MOVE_BURST = 4.      # an attacker who picks a new spot further away than this gets there at pace
 REST_N = 3           # players kept back as rest defence while the team attacks (the deepest anchored)
@@ -117,7 +118,7 @@ def seek_space(m, t, P, O, C, zone, role, out_f, skip, line):
         dz = np.sqrt(((cand[:, :, None, :] - zone[None, None]) ** 2).sum(-1))  # distance to every team-mate's target
         dz[np.arange(n)[:, None], np.arange(K)[None, :], idx[:, None]] = 99.  # not to himself
         spacing = clip((7. - dz) / 7., 0, 1).sum(2)
-        att = np.isin(role[idx], (WG, AM, ST))[:, None]
+        att = np.isin(role[idx], (WG, AM, ST, CM))[:, None]
         offside = att * ((cand[..., 0] > line + .3) & (cand[..., 0] > C[0]))
         dev = np.sqrt(((cand - zone[idx][:, None]) ** 2).sum(-1)) / 8.
         marked = (near[idx] < 2.2)[:, None]
@@ -192,6 +193,7 @@ def cut_lanes(zone, urgent, gate, role, P, O, C, ci):
 def team_targets(m, t):
     """Returns (targets (11,2) in world coords, urgent (11,) bool) for team t."""
     sl, osl = slice(11 * t, 11 * t + 11), slice(11 * (1 - t), 11 * (1 - t) + 11)
+    m.sprint_hint[sl] = False
     f = _tf if t else (lambda a: a)
     fv = (lambda v: -v) if t else (lambda v: v)
     P, O, B, Bv = f(m.pos[sl]), f(m.pos[osl]), f(m.ball), fv(m.ball_v)
@@ -270,6 +272,8 @@ def team_targets(m, t):
         att = (role == ST) | (role == WG) | (role == AM)
         if B[0] > .35 * L:
             tx = np.where(att, np.maximum(tx, line + SHOULDER[role] + 2. * np.sin(.5 * m.t + m.phase[sl])), tx)
+        fw = att | (role == CM)  # nobody up front waits beyond the last defender and the ball (a timed run is a separate thing)
+        tx = np.where(fw, np.minimum(tx, max(line, B[0]) - .3 + 1.0 * np.sin(.5 * m.t + m.phase[sl])), tx)
     if has and B[0] > .55 * L:
         far = (role == WG) & (np.abs(B[1] - A[:, 1]) > 25)
         ty = np.where(far, W / 2 + np.sign(A[:, 1] - W / 2) * 21, ty)  # the far-side winger stays wide: he is the switch outlet
@@ -352,6 +356,7 @@ def team_targets(m, t):
                         m.commit_until[g] = m.t + m.rng.uniform(1., 2.)
                     zone[i] = C + Cv * .2 if m.t < m.commit_until[g] else tgt1
                     urgent[i] = True
+                    m.sprint_hint[g] = True  # the presser goes for the ball
         elif m.state == "dead" and kind == "free_kick" and np.hypot(B[0], B[1] - W / 2) < 32:  # wall on the line to goal, 9.15 m back
             dist = float(np.hypot(B[0], B[1] - W / 2))
             n = 5 if dist < 19 else 4 if dist < 25 else 3
@@ -366,12 +371,14 @@ def team_targets(m, t):
             d[role == GK] = 1e9
             for i in np.argsort(d)[:2]:
                 zone[i], urgent[i] = B + Bv * .6, True
+                m.sprint_hint[11 * t + i] = True  # a loose ball is chased flat out
         elif m.state == "flight" and m.flight["kind"] == "lofted":  # win the second ball / header
             d = nrm(P - f(m.flight["end"]), axis=1)
             if f(m.flight["end"])[0] > 18:  # the keeper only comes for balls into his own area
                 d[role == GK] = 1e9
             for i in np.argsort(d)[:2]:
                 zone[i], urgent[i] = f(m.flight["end"]), True
+                m.sprint_hint[11 * t + i] = True  # the contest for a ball in the air
         elif m.state == "flight" and m.flight["kind"] == "ground" and m.t - m.flight["t0"] > .35:  # defenders react ~.35 s after release; nearest-in-time one moves to the lane
             fl = m.flight
             a, b = B, f(fl["end"])
@@ -385,6 +392,7 @@ def team_targets(m, t):
             for i in np.argsort(slack)[:2]:
                 if slack[i] < 1.2:
                     zone[i], urgent[i] = q[i], True
+                    m.sprint_hint[11 * t + i] = True  # getting to the lane in time
                     taken.add(int(i))
             e_ = f(fl["end"])  # the nearest other defender closes the receiver so that he arrives with the ball
             de = nrm(P - e_, axis=1)
@@ -392,6 +400,7 @@ def team_targets(m, t):
             for i in np.argsort(de)[:2]:
                 if int(i) not in taken and de[i] < 12:
                     zone[i], urgent[i] = e_ + _unit(GOAL - e_) * 1.5, True
+                    m.sprint_hint[11 * t + i] = True  # closing the receiver
                     break
         if m.state != "dead":
             bl = ((role == CB) | (role == FB)) & ~urgent
@@ -402,7 +411,7 @@ def team_targets(m, t):
                 zone, urgent = cut_lanes(zone, urgent, gate, role, P, O, O[carrier - 11 * (1 - t)], carrier - 11 * (1 - t))
             Bd = f(m.flight["end"]) if m.state == "flight" and m.flight["kind"] in ("ground", "lofted") and m.flight["team"] != t else B  # build the cone around where the ball is going
             zone, urgent = box_defence(m, Bd, zone, urgent, gate, role, P)
-            urgent |= (gate > .6) & (nrm(zone - P, axis=1) > 1.0)  # a man-marker in the danger area stays with his man at the man's pace
+            urgent |= (gate > .6) & (nrm(zone - P, axis=1) > 2.5)  # a man-marker in the danger area stays with his man at the man's pace
             urgent |= out_f & (P[:, 0] - zone[:, 0] > 5.) & (B[0] < .65 * L)  # recovery run: well upfield of where he should be, ball in his half: sprint back, do not jog
     else:
         # runs in behind
@@ -444,9 +453,17 @@ def team_targets(m, t):
             zone = seek_space(m, t, P, O, P[holder] if mine else B, zone, role, out_f, skip, max(np.sort(O[:, 0])[-2], L / 2))
         urgent |= out_f & (zone[:, 0] - P[:, 0] > 6.) & (B[0] > .3 * L)  # joining the attack: well behind where he should be with the ball in the opposition half, he sprints up instead of jogging
         urgent |= m.space_burst[sl] & has & out_f & (m.t < m.space_until[sl] - .3)  # moving into space at pace, not drifting
+        if holder >= 0 and kind not in ("corner", "kickoff") and mine:
+            fwp = out_f & (idx != holder) & ~urgent
+            dz_ = zone[:, None] - zone[None]
+            dd_ = np.maximum(nrm(dz_), 1e-3) + np.eye(11) * 99
+            push_ = (dz_ / dd_[..., None] * np.maximum(ATT_SPACING - dd_, 0)[..., None] * (fwp[:, None] & fwp[None])[..., None] * .5).sum(1)
+            zone = zone + push_ * fwp[:, None]
+            zone[fwp, 0] = np.minimum(zone[fwp, 0], max(float(np.sort(O[:, 0])[-2]), L / 2, float(B[0])) + 1.0)  # and the push does not take anyone beyond the offside limit
         running = has & (m.t < m.run_until[sl])
         for i in np.nonzero(running)[0]:
             zone[i], urgent[i] = m.run_tgt[11 * t + i], True
+            m.sprint_hint[11 * t + i] = True  # a timed run in behind is flat out
         if kind == "free_kick" and B[0] > .6 * L:  # attackers into the box for a delivery
             order = [i for r in (ST, CB, AM, CM, WG) for i in idx if role[i] == r and 11 * t + i != m.dead["taker"]]
             spots = [(L - 9, W / 2 - 2), (L - 11, W / 2 + 4), (L - 13, W / 2), (L - 15, W / 2 - 6), (L - 16, W / 2 + 7)]
@@ -462,6 +479,7 @@ def team_targets(m, t):
             r = m.flight["rcv"] - 11 * t
             if 0 <= r < 11:
                 zone[r], urgent[r] = f(m.flight["end"]), True  # receiver tracks the real ball flight
+                m.sprint_hint[11 * t + r] = True
 
     # ---- goalkeeper ---------------------------------------------------------------------
     sw = 1 + 1.2 * m.mod["sweep"][11 * t]  # sweeper keepers play higher

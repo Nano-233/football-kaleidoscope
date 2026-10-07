@@ -20,7 +20,7 @@ from .movement import _tf, _unit, nrm, clip
 
 DT = 0.2
 # Single tuning table (calibrated by scripts/calibrate.py against real-football norms).
-TUNE = dict(press_dist=1.75, air_base=.5, head_on=.28, head_clear=.5, air_k=.5, gk_air=.6, block_base=0.12, block_nb=0.12, ft_shot=0.315, turn_cost=0.55, turn_rate=3.2, face_k=0.6, pot=2.19, relief=1.0, ft_slow=.0, drive=0.4,  cong_k=0.5, risk_pow=2.2, first_touch=3.0, wide_v=0.74, ctrl_marked=0.33, shoot_hold=0.98, shoot_slope=2.05, shoot_ref=0.168, shoot_press=0.56, adv_lin=.6, pack=.04, shoot_min=.12, react=2.32, patience=0.02, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.4, fk_bonus=0.05, long_bonus=0.163, prog_base=0.75, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=1.3, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=1.3, shot_k=3.15, shot_k_dir=5.0,
+TUNE = dict(cruise_k=.65, burst_hold=.4, run_frac=.7, press_dist=1.75, air_base=.5, head_on=.28, head_clear=.5, air_k=.5, gk_air=.6, block_base=0.12, block_nb=0.12, ft_shot=0.315, turn_cost=0.55, turn_rate=3.2, face_k=0.6, pot=2.19, relief=1.0, ft_slow=.0, drive=0.4,  cong_k=0.5, risk_pow=2.2, first_touch=3.0, wide_v=0.74, ctrl_marked=0.33, shoot_hold=0.98, shoot_slope=2.05, shoot_ref=0.168, shoot_press=0.56, adv_lin=.6, pack=.04, shoot_min=.12, react=2.32, patience=0.02, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.4, fk_bonus=0.05, long_bonus=0.163, prog_base=0.75, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=1.3, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=1.3, shot_k=3.15, shot_k_dir=5.0,
             carry_base=0.22, carry_prog=.2, carry_streak=.3, dwell_base=0.9, dwell_shape=2.4, dwell_scale=1.61,
             tackle_rate=2.84, wide_error=3.2, off_miss=.2, off_mult=.25)
 sig = lambda x: 1 / (1 + np.exp(-x))
@@ -91,6 +91,8 @@ class Match:
         s.injured, s.pending_inj = np.zeros(22, bool), []
         s.ctrl_t = 0.
         s.first_time_ok = 1.0
+        s.urg_until, s.cap_s = np.zeros(22), None
+        s.sprint_hint = np.zeros(22, bool)
         s.head = np.array([[1., 0.]] * 11 + [[-1., 0.]] * 11)  # which way each player's body faces
         s.carry_scale = 1.0
         s.audit = None  # a list switches on decision auditing (scripts/logic_audit.py)
@@ -349,15 +351,26 @@ class Match:
     def _steer(s, tg, urg):
         dt = s.dt
         tau = .45 - .014 * s.attr["positioning"]
-        a = np.where(urg, 1., 1 - np.exp(-dt / tau))[:, None]
+        u0 = urg.copy()
+        urg = u0 | (s.t < s.urg_until)  # a burst is held for a moment, not switched on and off from tick to tick
+        s.urg_until = np.where(u0, s.t + TUNE["burst_hold"], s.urg_until)
+        a = np.where(urg, 1 - np.exp(-dt / .12), 1 - np.exp(-dt / tau))[:, None]
         s.tsm = s.tsm + (tg - s.tsm) * a
         d = s.tsm - s.pos
         dist = nrm(d, axis=1)
         vmax = s.vmax * (1 - .15 * (1 - s.stam))
-        energy = s.mod["cruise"] * movement.CRUISE[s.role]  # role/trait work rate: how much ground a player covers
-        cap = np.where(urg, vmax, np.minimum(vmax, (4.3 + .07 * s.attr["work_rate"]) * energy))
+        energy = s.mod["cruise"] * movement.CRUISE[s.role] * TUNE["cruise_k"]  # role/trait work rate: how much ground a player covers
+        near_ball = nrm(tg - s.ball, axis=1) < 6.
+        if s.state == "flight":
+            near_ball |= nrm(tg - s.flight["end"], axis=1) < 6.
+        sprint = urg & s.sprint_hint  # all-out only when going for the ball (or running onto it); marking and recovering is a hard run
+        cap = np.where(sprint, vmax, np.where(urg, vmax * TUNE["run_frac"], np.minimum(vmax, (4.3 + .07 * s.attr["work_rate"]) * energy)))
         if s.state == "held":
             cap[s.carrier] = min(cap[s.carrier], s.carry_speed * s.carry_scale, .85 * vmax[s.carrier])
+        if s.cap_s is None:
+            s.cap_s = cap.copy()
+        s.cap_s += (cap - s.cap_s) * (1 - np.exp(-dt / np.where(cap > s.cap_s, .5, 1.0)))  # speed builds and fades over about a second, it does not jump
+        cap = s.cap_s
         vdes = d / np.maximum(dist, 1e-6)[:, None] * np.minimum(cap, np.maximum(dist - .4, 0) * 1.1 * np.where(urg, 1., energy))[:, None]
         dv = vdes - s.vel
         n = nrm(dv, axis=1)
@@ -390,7 +403,7 @@ class Match:
 
     def _record(s):
         s.frames.append(np.concatenate([[s.t, *s.ball, s.carrier, -1 if s.last_ctrl_team is None else s.last_ctrl_team],
-                                        s.pos.ravel(), [s._ball_z()]]))
+                                        s.pos.ravel(), [s._ball_z()], np.round(np.arctan2(s.head[:, 1], s.head[:, 0]), 2)]))
 
     # ------------------------------------------------------------------ possession
     def _dwell(s, i):
@@ -462,8 +475,12 @@ class Match:
         s.next_dec = s.t + s._dwell(i)
         s.protect_until = s.t + (.15 if float(nrm(s.pos[s._opp(t)] - s.pos[i], axis=1).min()) < 1.6 else .6)  # a defender on the receiver contests him at once; with space he gets a moment
         s.carry_tgt = s.pos[i] + np.array([1., 0.] if t == 0 else [-1., 0.]) * 5
-        s.carry_dir, s.carry_speed = np.array([1., 0.] if t == 0 else [-1., 0.]), 1.6 + 1.0 * float(clip(nrm(s.pos[s._opp(t)] - s.pos[i], axis=1).min() / 8, 0, 1))  # a jog with the ball, faster with space
-        if s._face_goal(i) < .5:  # back to goal: he shields and turns, he does not run
+        s.carry_dir, s.carry_speed = np.array([1., 0.] if t == 0 else [-1., 0.]), 2.4 + 1.8 * float(clip(nrm(s.pos[s._opp(t)] - s.pos[i], axis=1).min() / 8, 0, 1))  # a run with the ball: quicker with space, slower with a defender on him
+        v0 = float(nrm(s.vel[i]))
+        if v0 > 2.5:  # arrived on the move: he carries on in the same direction at nearly the same pace
+            s.carry_dir = _unit(s.vel[i])
+            s.carry_speed = float(min(max(s.carry_speed, .92 * v0), .85 * s.vmax[i]))
+        elif s._face_goal(i) < .5:  # back to goal and not moving: he shields and turns, he does not run
             s.carry_dir, s.carry_speed = s.head[i].copy(), .8
         s.spell = (s.t, s.pos[i].copy(), i)
 
@@ -672,13 +689,17 @@ class Match:
             m_ = mates[vis]
             dist0 = nrm(P[m_] - C, axis=1)
             air = np.nonzero((dist0 > 12.) & (dist0 < (68. if rk == "goal_kick" else 55.)))[0]  # any target further than a dozen metres can also be played in the air (chip, diagonal, long ball)
-            lofted = np.concatenate([np.zeros(len(m_), bool), np.ones(len(air), bool)])
-            m_ = np.concatenate([m_, m_[air]])
+            thr_i = np.nonzero((dist0 > 10.) & (dist0 < 42.) & (P[m_][:, 0] - C[0] > 6.) & (s.role[11 * t + m_] > 0) & (rk is None))[0]  # forward targets in open play can be played into the space ahead of them
+            lofted = np.concatenate([np.zeros(len(m_), bool), np.ones(len(air), bool), np.zeros(len(thr_i), bool)])
+            through = np.concatenate([np.zeros(len(m_) + len(air), bool), np.ones(len(thr_i), bool)])
+            m_ = np.concatenate([m_, m_[air], m_[thr_i]])
             Pm, Vm = P[m_], Vp[m_]
             dist = nrm(Pm - C, axis=1)
             spd = clip(11 + .3 * dist, 11, 24)
             runner = s.t < s.run_until[11 * t + m_]  # a runner is played into space well ahead of him: through ball
             tgt = clip(Pm + Vm * (np.minimum(dist / spd, 1.5) * np.where(runner, 1.3, .8))[:, None], [1, 1], [L - 1, W - 1])
+            gdir = _unit(_unit(np.array([L, W / 2]) - Pm) + .6 * _unit(Vm + 1e-6))
+            tgt = np.where(through[:, None], clip(Pm + gdir * (5. + 5. * runner)[:, None], [1, 1], [L - 1, W - 1]), tgt)  # into space: he must run onto it
             ab = tgt - C
             d2 = nrm(ab, axis=1)
             ap = O[None] - C
@@ -696,9 +717,13 @@ class Match:
             p_ctrl = clip((.97 - TUNE["ctrl_marked"] * np.exp(-(dn_r - .5) / 1.6) + .004 * (tech - 10)) * np.exp(-TUNE["cong_k"] * np.maximum(cong_r - 1., 0)), .2, .98)  # a defender on the receiver contests the first touch
             p_air = clip((.55 + .02 * (a["aerial"][11 * t + m_] - a["aerial"][s._opp(t)].mean())) * np.exp(-.3 * np.maximum(cong_r - .6, 0)), .15, .85)  # an aerial contest: his height against the defenders around him
             p_ctrl = np.where(lofted, p_air, p_ctrl)
-            sg = (.5 + .05 * d2) * (TUNE["pass_sigma"] * (1 - .0353 * a["passing"][c])) * (1 + .35 * pr) * np.where(lofted, 1.5, 1)
+            sg = (.5 + .05 * d2) * (TUNE["pass_sigma"] * (1 - .0353 * a["passing"][c])) * (1 + .35 * pr) * np.where(lofted, 1.5, np.where(through, 1.4, 1.))
             p_acc = 1 - np.exp(-(2.5 ** 2) / (2 * sg ** 2))
-            p_s = (1 - p_int) * p_acc * p_ctrl
+            # a ball into space is a race: the receiver against the defenders and the ball's own travel time
+            t_r = nrm(tgt - Pm, axis=1) / (s.vmax[11 * t + m_] * .85) + .2
+            t_def = (nrm(O[None] - tgt[:, None], axis=2) / (s.vmax[s._opp(t)] * .85)[None]).min(1) + .25
+            p_time = sig(2.5 * (t_def - np.maximum(t_r, d2 / spd)))
+            p_s = (1 - p_int) * p_acc * p_ctrl * np.where(through, p_time, 1.)
             line = s.line_hist[t][0]  # second-last defender as the passer last saw him; defenders may have stepped up since
             Pp = Pm - Vm * .5  # runners are seen where they were half a second ago, so mistimed runs end up offside
             off_m = (Pp[:, 0] > np.maximum(line, C[0]) + .3) & (Pp[:, 0] > L / 2)
@@ -873,6 +898,7 @@ class Match:
         wide = min(aim[1], W - aim[1]) < 9
         end = aim + s.rng.normal(0, sg * (1 + TUNE["wide_error"] * wide), 2)
         dur = max(nrm(end - start) / spd, .3)
+        beta = 0. if kind == "shot" else float(clip(.1 + .006 * nrm(end - start), .1, .5)) if not lofted else .12  # share of the average speed lost between launch and arrival
         gx = L if t == 0 else 0
         fwd = abs(gx - start[0]) - abs(gx - aim[0])  # metres gained towards the opposition goal
         f_ = _tf if t else (lambda x: x)
@@ -899,10 +925,10 @@ class Match:
             s.last_touch = c
             return s._set_dead("indirect_free_kick", 1 - t, clip(spot, [1, 1], [L - 1, W - 1]), 16 + s.rng.random() * 10)
         s.state, s.carrier = "flight", -1
-        s.flight = dict(start=start, end=end, aim=aim, t0=s.t, dur=dur, speed=spd, kind="lofted" if lofted else "ground",
+        s.flight = dict(start=start, end=end, aim=aim, t0=s.t, dur=dur, speed=spd, beta=beta, kind="lofted" if lofted else "ground",
                         team=t, passer=c, rcv=-1 if rcv is None else rcv)
         s.pending_pass = ev
-        s.ball_v = (end - start) / dur
+        s.ball_v = (end - start) / dur * (1 + beta)
         s.last_touch = c
         s.block_until[c] = s.t + .6
 
@@ -1186,8 +1212,9 @@ class Match:
         f = s.flight
         a0 = s.ball.copy()
         u = min(1., (s.t + s.dt - f["t0"]) / f["dur"])
-        b = f["start"] + (f["end"] - f["start"]) * u
-        s.ball, s.ball_v = b, (f["end"] - f["start"]) / f["dur"]
+        be = f.get("beta", 0.)
+        b = f["start"] + (f["end"] - f["start"]) * (u + be * u * (1 - u))  # decelerating: fast off the foot, slower on arrival
+        s.ball, s.ball_v = b, (f["end"] - f["start"]) / f["dur"] * (1 + be * (1 - 2 * u))
         if f["kind"] == "ground":
             ab = b - a0
             sp = clip(((s.pos - a0) @ ab) / max(ab @ ab, 1e-9), 0, 1)
@@ -1456,5 +1483,5 @@ class Match:
         return dict(
             meta=dict(seed=s.seed, dt=s.dt, pitch=[L, W], home=team_meta(s.teams[0]), away=team_meta(s.teams[1]),
                       score=s.score, dead_log=[[round(a, 1), round(b if b is not None else s.t, 1), k] for a, b, k in s.dead_log], ball_in_play=round(1 - s.state_ticks["dead"] / max(sum(s.state_ticks.values()), 1), 3), half_time=s.h1, added_time=s.added, duration=round(s.t, 1), info=s.info,
-                      frame_cols=["t", "ball_x", "ball_y", "carrier", "poss"] + [f"{c}{i}" for i in range(22) for c in "xy"] + ["ball_z"]),
+                      frame_cols=["t", "ball_x", "ball_y", "carrier", "poss"] + [f"{c}{i}" for i in range(22) for c in "xy"] + ["ball_z"] + [f"head{i}" for i in range(22)]),
             events=s.events, frames=fr.tolist())

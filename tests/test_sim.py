@@ -17,7 +17,7 @@ def test_deterministic_and_consistent():
     goals = [e for e in a["events"] if e["type"] in ("goal", "own_goal")]  # team = team credited with the goal
     assert [sum(e["team"] == t for e in goals) for t in (0, 1)] == a["meta"]["score"]
     fr = np.array(a["frames"])
-    assert fr.shape[1] == 5 + 44 + 1 and np.all(np.diff(fr[:, 0]) > 0)
+    assert fr.shape[1] == 5 + 44 + 1 + 22 and np.all(np.diff(fr[:, 0]) > 0)
     pos = fr[:, 5:49].reshape(len(fr), 22, 2)
     on = pos[..., 1] > -5  # sent-off players are parked off the pitch
     assert pos[on][:, 0].min() >= -1.5 and pos[on][:, 0].max() <= L + 1.5 and pos[on][:, 1].min() >= -1.5 and pos[on][:, 1].max() <= W + 1.5
