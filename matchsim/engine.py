@@ -20,7 +20,7 @@ from .movement import _tf, _unit, nrm, clip
 
 DT = 0.2
 # Single tuning table (calibrated by scripts/calibrate.py against real-football norms).
-TUNE = dict(ft_shot=0.315, turn_cost=0.55, turn_rate=3.2, face_k=0.6, pot=2.19, relief=1.0, ft_slow=.0, drive=0.4,  cong_k=0.5, risk_pow=2.2, first_touch=3.0, wide_v=0.74, ctrl_marked=0.33, shoot_hold=0.5, shoot_slope=2.05, shoot_ref=0.168, shoot_press=0.56, adv_lin=.6, pack=.04, shoot_min=.12, react=1.84, patience=0.2, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.4, fk_bonus=0.05, long_bonus=0.163, prog_base=0.75, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=1.3, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=1.3, shot_k=3.15, shot_k_dir=5.0,
+TUNE = dict(block_base=.12, block_nb=.12, ft_shot=0.315, turn_cost=0.55, turn_rate=3.2, face_k=0.6, pot=2.19, relief=1.0, ft_slow=.0, drive=0.4,  cong_k=0.5, risk_pow=2.2, first_touch=3.0, wide_v=0.74, ctrl_marked=0.33, shoot_hold=0.5, shoot_slope=2.05, shoot_ref=0.168, shoot_press=0.56, adv_lin=.6, pack=.04, shoot_min=.12, react=1.84, patience=0.2, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.4, fk_bonus=0.05, long_bonus=0.163, prog_base=0.75, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=1.3, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=1.3, shot_k=3.15, shot_k_dir=5.0,
             carry_base=0.22, carry_prog=.2, carry_streak=.3, dwell_base=0.9, dwell_shape=2.4, dwell_scale=1.61,
             tackle_rate=2.84, wide_error=3.2, off_miss=.2, off_mult=.25)
 sig = lambda x: 1 / (1 + np.exp(-x))
@@ -918,7 +918,7 @@ class Match:
             res = "goal"
         else:
             r = s.rng.random()
-            p_block = 0 if kind == "penalty" else min(.5, .12 + .12 * nb)
+            p_block = 0 if kind == "penalty" else min(.6, TUNE["block_base"] + TUNE["block_nb"] * nb)
             p_off = clip(.55 - 1.0 * xg - .01 * (fin - 10), .2, .6)
             res = "blocked" if r < p_block else ("off_target" if r < p_block + p_off else "saved")
         start = s.ball.copy()

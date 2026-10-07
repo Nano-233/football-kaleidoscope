@@ -21,10 +21,15 @@ CRUISE = np.array([1.7, .56, .56, .6, .7, .5, .6, .48])  # jogging speed by role
 SHOULDER = np.array([0, 0, 0, 0, 0, -3.5, -8., -1.5])  # where each attacking role stands relative to the last defender (m)
 WANDER = np.array([.4, 1.3, 1.8, 1.7, 2.2, 2.3, 2.4, 2.4])  # metres of constant drifting around the target: nobody stands still
 MIN_X = np.array([0, 6, 6, 9, 10, 11, 12, 16.])
-LAG = np.array([0, 8, 8, 5, 3, 1, 0, -10.])  # metres behind the ball each role stands when the ball is near its goal (a compact block that follows the ball)  # deepest a role will drop (defenders hold the box edge, they do not hug the goal line)
+COMPRESS = np.array([0, 1., 1., 1., .85, .45, .2, 0.])  # share of the 'get behind the ball' pull each role feels near his own goal (GK CB FB DM CM WG AM ST)
+LAG = np.array([0, 8, 8, 2, 1, 0, 0, -10.])  # metres behind the ball each role stands when the ball is near its goal (a compact block that follows the ball)  # deepest a role will drop (defenders hold the box edge, they do not hug the goal line)
 GS_CAP = np.array([0, 0, 0, 0, 0, 2, 2, 8.])  # how far past the ball (towards the opponent) each role may stand while defending: most men stay goal-side of it
 GOAL = np.array([0., W / 2])
 TUNE_COMMIT = .08
+REST_N = 3           # players kept back as rest defence while the team attacks (the deepest anchored)
+REST_LAG = 16.       # how far behind the ball they stay (m)
+REST_MAX = 54.       # and the furthest up the pitch they go (m from their own goal)
+ROT_COST = 7.        # extra metres of effort a player is charged for taking a template spot that belongs to another role
 FRONT_SHIFT = .0     # extra share of the ball's lateral offset that strikers and number tens follow
 OPEN_CAP = 6.        # separation (m) that counts as fully open when choosing where to stand
 OVERLAP_RATE = .5     # per second chance that a full-back with a team-mate wide in front of him overlaps
@@ -237,9 +242,9 @@ def team_targets(m, t):
         ty = W / 2 + (A[:, 1] - W / 2) * (1 - NARROW * tc.compactness) + by * (.28 + .22 * tc.compactness) * out_f
     tx = np.maximum(tx, MIN_X[role])
     if not has:  # defending: near our goal the block follows the ball, each line a fixed distance behind it
-        wn = float(clip((42. - B[0]) / 12., 0, 1))
+        wn = float(clip((42. - B[0]) / 12., 0, 1)) * COMPRESS[role]  # how far this role is pulled onto the ball: the back line fully, forwards hardly (they are the outlet)
         tx = np.where(out_f, tx * (1 - wn) + np.maximum(B[0] - LAG[role] * (1.25 - .5 * tc.press), MIN_X[role]) * wn, tx)
-        tx = np.where(out_f, np.minimum(tx, np.maximum(B[0] + GS_CAP[role] * (.6 + .8 * tc.press), MIN_X[role])), tx)
+        tx = np.where(out_f, np.minimum(tx, np.maximum(B[0] + GS_CAP[role] * (.6 + .8 * tc.press), MIN_X[role]) + (1 - COMPRESS[role]) * 40.), tx)
     if not has:
         bl = (role == CB) | (role == FB)
         cur = m.carrier if m.state == "held" and m.poss == 1 - t else -1
@@ -250,8 +255,9 @@ def team_targets(m, t):
                 step = LINE_STEP * (float(clip(1 - dn / 6., 0, 1)) - .4)
             lx = tx[bl].mean()
             tx = np.where(bl, lx + step + LINE_FLAT * (tx - lx), tx)  # one depth for the line, a little individual variation
-    cx = tx[out_f].mean()  # compact the block around its own centre
-    tx = np.where(out_f, cx + (tx - cx) * (.9 - .2 * tc.compactness), tx)
+    blk = out_f & (COMPRESS[role] > .5)  # compaction acts on the block (back line and midfield), not on the outlets up front
+    cx = tx[blk].mean() if blk.any() else tx[out_f].mean()  # compact the block around its own centre
+    tx = np.where(blk, cx + (tx - cx) * (.9 - .2 * tc.compactness), tx)
     if has and B[0] > .62 * L:  # midfielders arrive late at the edge of the box; wingers tuck in when the ball is on the far side
         late = (role == CM) | (role == AM)
         tx = np.where(late, np.maximum(tx, np.minimum(B[0] - 3, L - 20)), tx)
@@ -275,15 +281,20 @@ def team_targets(m, t):
         templ = {ST: [(L - 9, W / 2 - sd * 2.5), (L - 11, W / 2 + sd * 6)], WG: [(L - 13, W / 2 + sd * 22), (L - 17, W / 2 - sd * 21)],
                  AM: [(L - 19, W / 2 + sd * 2), (L - 21, W / 2 - sd * 7)], CM: [(L - 21, W / 2 + sd * 9), (L - 23, W / 2 - sd * 8), (L - 31, W / 2)],
                  FB: [(L - 18, W / 2 + sd * 29), (L - 33, W / 2 - sd * 22)], DM: [(L - 32, W / 2)], CB: [(L - 44, W / 2 + 8), (L - 44, W / 2 - 8), (L - 46, W / 2)]}
-        for r, spots in templ.items():
-            free = [i for i in idx if role[i] == r and 11 * t + i != carrier]
-            for spot in spots:
-                if not free:
-                    break
-                i = min(free, key=lambda j: float(nrm(zone[j] - np.array(spot))))
-                free.remove(i)
-                tgt_ = np.array([min(spot[0], line_t - 1.4 + 1.6 * np.sin(.5 * m.t + m.phase[11 * t + i])), spot[1]])  # on the shoulder of the last defender, now and then mistimed
+        slots = [(r, np.array(sp, float)) for r, spots in templ.items() for sp in spots if r not in (CB,)]  # the centre-backs are rest defence, not part of the attack
+        cand_i = [i for i in idx if role[i] > GK and role[i] != CB and 11 * t + i != carrier]
+        if slots and cand_i:
+            cost = np.array([[float(nrm(zone[i] - sp_)) + (0. if role[i] == r_ else ROT_COST * (1. + abs(int(role[i]) - int(r_)) / 4.)) for (r_, sp_) in slots] for i in cand_i])
+            rr, cc = linear_sum_assignment(cost)
+            for a_, b_ in zip(rr, cc):
+                i, (r_, sp_) = cand_i[a_], slots[b_]
+                tgt_ = np.array([min(sp_[0], line_t - 1.4 + 1.6 * np.sin(.5 * m.t + m.phase[11 * t + i])), sp_[1]])  # on the shoulder of the last defender, now and then mistimed
                 zone[i] = zone[i] * (1 - w) + tgt_ * w
+
+    if has:  # rest defence: the deepest-anchored players stay well behind the ball and never cross a limit just inside the opposition half
+        deep = np.argsort(np.where(out_f, A[:, 0], 1e9))[:REST_N]
+        cap = float(clip(B[0] - REST_LAG, 20., REST_MAX))
+        zone[deep, 0] = np.minimum(zone[deep, 0], np.maximum(cap, MIN_X[role[deep]]))
 
     mine = 11 * t <= carrier < 11 * t + 11
 
