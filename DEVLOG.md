@@ -365,6 +365,38 @@ Open after this entry (measured over 16 matches, un-retuned): shots 21.9 vs 12.9
 the box 16 vs 5.6, final-third entries 31 vs 53, forward passes in the middle third .37 vs .50, interceptions 18.8 vs 10.9, shots with
 a free look .55 vs .01, first-time shots .50 vs .32.
 
+## The defence as a team plan: what a working open-source engine does, and what we copied
+
+**Why we looked.** Weeks of per-stat fixes left shots at 1.5-2x real with the same shape each time: markers a few metres off their man,
+defenders level with or upfield of the ball at the moment of a shot, an empty shot lane. The user asked for public code that simulates real
+games and to copy its logic instead of tuning. Studied: HELIOS base and Cyrus2D (RoboCup 2D: formation positions as a function of the BALL,
+an intercept-time press rule, a "block" that predicts the dribble line and sends the first man who can get there in time, an offside-trap
+step-up) and **Open Football** (Rust, `ZOXEXIVO/open-football`, match engine under `src/core/src/match/engine`). Open Football is the useful
+one: its authors hit exactly our symptoms and wrote down the measurements (74 % of attackers in their own third with nobody within 3 m,
+defenders 14.5 m off a shot's line, blocks 1.2 % against a real 18-22 %, midfielders taking 74 % of shots because nobody marked them).
+
+**What fixed it there, and what is now here** (`defend_assign` in `matchsim/movement.py`):
+- One team-level plan, exclusive and sticky: somebody is responsible for every dangerous opponent and nobody is responsible for the same one.
+  Order: the press (the first man who can get to a point on the carrier's predicted line), the cover, then marks by threat.
+- Only the back line and the midfield are given a man; the forwards are in the unit for the press (and screening lanes) only.
+- Threat set = men near our goal (about 36 m out) or within about 25 m of the ball; a marker must be within about 19 m of his man.
+- "Mark the man in your layer": a defender already level with or deeper than the threat pays nothing, one dragged upfield pays for every
+  metre, so midfielders pick up midfielders and the back four the men in and around the box.
+- A mark is worth what a pass to the man would add to the threat (expected-threat gain), so a man behind the ball is not worth leaving for.
+- Defensive recovery: a defender who is not engaging the ball and has the ball goal-side of him goes back to a cover point 3 m goal-side of it;
+  his job still decides where he stands across the pitch. In Open Football this single rule moved attackers-with-a-defender-goal-side per shot
+  from 0.2 to 3.3. Inert for a defender already goal-side.
+- Shape around where the ball will be controlled (flight end), not the flying ball; effort follows need (a defender 6 m off his target sprints).
+
+**Measured against real freeze frames (defenders goal-side of the shooter, by shot distance, real vs sim):** 0-8 m 2.6 / 2.4, 8-12 m
+3.6 / 3.3, 12-16 m 4.3 / 3.4, 16-20 m 6.0 / 5.3, 20-25 m 7.5 / 6.1, 25-40 m 8.4 / 4.8 (few sim shots there). Before the plan and the
+recovery rule the sim was about 2 lower in every band. Marking tightness of every attacker within 20 m of goal matches real (nearest defender
+median 2.6 m vs 2.3, share with more than 4 m of space .19 vs .19).
+
+**What was a dead end (kept so nobody repeats it).** Tightening mark_gap / ball_side / press constants (no effect: the structure, not the numbers,
+was wrong); reaction delay and target update rate (no effect); first-time-shot incentives; a flat 12 % block probability; a one-parameter-at-a-time
+calibration (three runs, no gain: the gaps were structural); a hard per-zone first-touch penalty (rejected: stat-fitting, not football).
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
