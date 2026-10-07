@@ -229,6 +229,7 @@ def low_block(seed):
     put(m, cm, 80, 40)
     give(m, cm)
     m.next_dec = m.t + 99
+    m.protect_until = m.t + 99  # he holds the ball and nobody can take it: the defence is measured settled
     run(m, 8)
     ff = np.array([m.pos[i] for i in range(11, 22) if m.role[i] != GKR])
     depth = np.sort(L - ff[:, 0])

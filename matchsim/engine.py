@@ -934,7 +934,7 @@ class Match:
                     lam_c[o - 11 * (1 - t)] = 0.  # the man he is taking on is priced by p_beat; p_surv is for everyone else on the way (the next man)
                 p_surv = float(np.prod(1. - (1. - np.exp(-lam_c * 1.0)) * .5))
                 p_keep = p_beat * (.4 + .6 * fg) * p_surv ** TUNE["surv_k"] * float(np.exp(-TUNE["cong_k"] * max(float(np.exp(-nrm(O[1:] - cpos, axis=1) / 3.).sum()) - 1., 0)))  # a dribbler avoids walking into a crowd
-                u_c = (p_keep * (TUNE["carry_base"] + TUNE["carry_prog"] * prog_w * (Tf(cpos) - TC)) - (1 - p_keep) * loss_eff - TUNE["carry_streak"] * s.carry_streak + s.mod["carry"][c] + CARRY_ROLE[s.role[c]]
+                u_c = (p_keep * (TUNE["carry_base"] + TUNE["carry_prog"] * prog_w * (Tf(cpos) - TC)) - (1 - p_keep) * loss_eff - TUNE["carry_streak"] * s.carry_streak * (1. - .8 * open_) + s.mod["carry"][c] + CARRY_ROLE[s.role[c]]
                        + TUNE["patience"] * np.exp(-(s.t - s.ctrl_t) / 2.0) * (1 - pr) * (dnear > 4) + TUNE["drive"] * open_ * (1 - pr)
                        + TUNE["xg_run"] * p_keep * max(s._xg(cpos, [])[0] - s._xg(C, [])[0], 0.))  # running at goal is worth the chance it creates (xg_run term above)
                 if best_c is None or u_c > best_c[0]:
