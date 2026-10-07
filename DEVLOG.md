@@ -334,7 +334,36 @@ vs 61% sim in the middle third, 67% real vs 47% sim in the final third. At real 
 goal line (sim 9 m), and the sim's defence only gets deep about 6 s after the ball arrives (14 m -> 4.7 m): the sim's attacks are
 quick relative to the defence's drop. A "forwards stay ahead" allowance (`ALLOW`) was tested first and changed nothing: the players
 ahead of the ball were centre-backs/full-backs marking edge-of-box runners and midfielders level with the ball, not forwards.
-(Details and the fix: see the next entry once measured.)
+
+Tried (24 matches per variant, because 8 matches was pure noise: shots per team-match have a standard deviation of about 4.5):
+midfield and wingers stand deeper when the ball is in the final third (`LAG`/`COMPRESS`) - almost no effect on shots; the box lanes start
+to fill earlier (`BOX_START` 30 -> 38 m) - shots with a free look 0.70 -> 0.58 and the deepest defender 9.9 -> 7.3 m, **but box entries
+and shots went up** (16 -> 20, 20 -> 22): a defence that drops early gives the attack the space between the lines. Kept, because the
+shape at the shot is closer to real (deepest defender 7 m vs 2 m real, goal-side 4 vs 5.6, bodies in the box 7 vs 6.3), and shots per
+entry is a separate problem (below). Real defences do both: compact and high in midfield, then drop fast once the ball is in the
+final third; the sim now drops about 4 s after the ball arrives (14 m -> 4.7 m), real is faster.
+
+**Where the extra shots come from.** Not the defence alone: the sim converts box entries to shots about twice as often as real
+(1.1 per entry vs 0.5), and 13-16 of its box entries per team come from carries (real 5.6). 28% of sim shots follow a "sideways" pass in
+the final third, 26% a forward pass, 14% a cross; only 0.9 through balls per team (real 2.1).
+
+**Hold time was the hidden driver of the carry count.** Real time between receiving and passing is heavily skewed (31% released at
+once, median about 1 s, 12% over 3 s). The sim's non-first-time dwell was a near-constant 1.8-2.0 s (normal with sd 0.05), so every
+receiver drifted 4-5 m before releasing and almost every reception became a "carry" (285 per team vs 154 real). The dwell is now
+lognormal with the same mean (`hold_sigma` .7): median 1.0 s, 90th percentile 3 s, 10% over 3 s - and carries fell to 217-223 without
+touching any carry logic. Lesson: a distribution that is the wrong shape can look right on its mean (hold mean 1.4 vs 1.5 s was fine
+all along).
+
+**Walking to corners.** In the corner scenario centre-backs took 36 s and had still only reached the halfway line: jogging speed is
+(work rate x role cruise factor), about 1.7 m/s for a centre-back, meant for open play. At dead balls there is now a jog floor of
+3.6 m/s and no laziness; attackers in the box at the kick 2.6 -> 4.8.
+
+**Scenario metric corrected.** `defending` counted a striker standing up the pitch and looking back at the play as "facing his own
+goal"; only players between the ball and their goal count now (0.22 -> 0.05).
+
+Open after this entry (measured over 16 matches, un-retuned): shots 21.9 vs 12.9, goals 1.9 vs 1.24, carries 217 vs 154, carries into
+the box 16 vs 5.6, final-third entries 31 vs 53, forward passes in the middle third .37 vs .50, interceptions 18.8 vs 10.9, shots with
+a free look .55 vs .01, first-time shots .50 vs .32.
 
 ## Is the tuner machine learning?
 
