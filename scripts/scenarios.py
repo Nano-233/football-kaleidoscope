@@ -176,7 +176,7 @@ def chase(seed):
     for i in range(11, 22):
         put(m, i, 85 + 1.0 * (i - 11) % 8, 8 + 5.5 * (i - 11))
     put(m, 11, L - 4, W / 2)
-    put(m, st, 80, 30, 3.0, 0)
+    put(m, st, 82, 22, 5.0, 2.0)  # a runner off the line of the ball, going for the space behind the defence
     put(m, cm, 55, 34, 0, 0)
     give(m, cm)
     m.next_dec = m.t + 99

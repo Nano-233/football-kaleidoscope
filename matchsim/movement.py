@@ -26,6 +26,7 @@ LAG = np.array([0, 8, 8, 2, 1, 0, 0, -10.])  # metres behind the ball each role 
 GS_CAP = np.array([0, 0, 0, 0, 0, 2, 2, 8.])  # how far past the ball (towards the opponent) each role may stand while defending: most men stay goal-side of it
 GOAL = np.array([0., W / 2])
 TUNE_COMMIT = .08
+GK_RISK = .2         # the keeper comes out if he can get there within this many seconds of the nearest attacker
 DANGER_ZONE = 38.    # an attacker this close to goal who is unmarked gets picked up by a free defender
 PICK_UP = .8         # how much of his own place a defender gives up to take the free man
 SUPPORT_MIN = 8.     # the nearest supporting player stands at least this far from the carrier
@@ -429,7 +430,14 @@ def team_targets(m, t):
                     zone[i], urgent[i] = q[i], True
                     m.sprint_hint[11 * t + i] = True  # getting to the lane in time
                     taken.add(int(i))
-            e_ = f(fl["end"])  # the nearest other defender closes the receiver so that he arrives with the ball
+            e_ = f(fl["end"])
+            if e_[0] < 30. and role[0] == GK:  # the keeper comes for a ball into his area if he can get there no later than the nearest attacker
+                gk_t = float(nrm(P[0] - e_)) / (m.vmax[sl][0] * .9) + .15
+                att_t = float((nrm(O[1:] - e_, axis=1) / (m.vmax[osl][1:] * .9)).min())
+                if gk_t < att_t + GK_RISK:
+                    zone[0], urgent[0] = e_, True
+                    m.sprint_hint[11 * t] = True
+            # the nearest other defender closes the receiver so that he arrives with the ball
             de = nrm(P - e_, axis=1)
             de[role == GK] = 1e9
             for i in np.argsort(de)[:2]:
