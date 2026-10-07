@@ -20,9 +20,9 @@ from .movement import _tf, _unit, nrm, clip
 
 DT = 0.2
 # Single tuning table (calibrated by scripts/calibrate.py against real-football norms).
-TUNE = dict(cruise_k=.65, burst_hold=.4, run_frac=.7, press_dist=1.75, air_base=.5, head_on=.28, head_clear=.5, air_k=.5, gk_air=.6, block_base=0.12, block_nb=0.12, ft_shot=0.315, turn_cost=0.55, turn_rate=3.2, face_k=0.6, pot=2.19, relief=1.0, ft_slow=.0, drive=0.4,  cong_k=0.5, risk_pow=2.2, first_touch=3.0, wide_v=0.74, ctrl_marked=0.33, shoot_hold=0.98, shoot_slope=2.05, shoot_ref=0.168, shoot_press=0.56, adv_lin=.6, pack=.04, shoot_min=.12, react=2.32, patience=0.02, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.4, fk_bonus=0.05, long_bonus=0.163, prog_base=0.75, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=1.3, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=1.3, shot_k=3.15, shot_k_dir=5.0,
+TUNE = dict(mom_k=.75, carry_v0=2.0, carry_v1=1.6, cruise_k=0.65, burst_hold=0.4, run_frac=0.7, press_dist=1.75, air_base=0.5, head_on=0.28, head_clear=0.5, air_k=0.5, gk_air=0.6, block_base=0.12, block_nb=0.12, ft_shot=0.315, turn_cost=0.55, turn_rate=3.2, face_k=1.05, pot=2.2, relief=1.0, ft_slow=.0, drive=0.1,  cong_k=0.5, risk_pow=2.2, first_touch=3.0, wide_v=0.35, ctrl_marked=0.33, shoot_hold=0.98, shoot_slope=2.05, shoot_ref=0.168, shoot_press=0.56, adv_lin=.6, pack=.04, shoot_min=.12, react=1.84, patience=0.02, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.76, fk_bonus=0.05, long_bonus=0.163, prog_base=0.5, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=0.8, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=1.3, shot_k=3.15, shot_k_dir=5.0,
             carry_base=0.22, carry_prog=.2, carry_streak=.3, dwell_base=0.9, dwell_shape=2.4, dwell_scale=1.61,
-            tackle_rate=2.84, wide_error=3.2, off_miss=.2, off_mult=.25)
+            tackle_rate=3.6, wide_error=3.2, off_miss=.2, off_mult=.25)
 sig = lambda x: 1 / (1 + np.exp(-x))
 GOAL_HALF = 3.66
 _MULT = ("shot", "runs", "follow", "prog", "loss", "cruise", "commit", "foul", "tackle")
@@ -478,11 +478,11 @@ class Match:
         s.next_dec = s.t + s._dwell(i)
         s.protect_until = s.t + (.15 if float(nrm(s.pos[s._opp(t)] - s.pos[i], axis=1).min()) < 1.6 else .6)  # a defender on the receiver contests him at once; with space he gets a moment
         s.carry_tgt = s.pos[i] + np.array([1., 0.] if t == 0 else [-1., 0.]) * 5
-        s.carry_dir, s.carry_speed = np.array([1., 0.] if t == 0 else [-1., 0.]), 2.4 + 1.8 * float(clip(nrm(s.pos[s._opp(t)] - s.pos[i], axis=1).min() / 8, 0, 1))  # a run with the ball: quicker with space, slower with a defender on him
+        s.carry_dir, s.carry_speed = np.array([1., 0.] if t == 0 else [-1., 0.]), TUNE["carry_v0"] + TUNE["carry_v1"] * float(clip(nrm(s.pos[s._opp(t)] - s.pos[i], axis=1).min() / 8, 0, 1))  # a run with the ball: quicker with space, slower with a defender on him
         v0 = float(nrm(s.vel[i]))
         if v0 > 2.5:  # arrived on the move: he carries on in the same direction at nearly the same pace
             s.carry_dir = _unit(s.vel[i])
-            s.carry_speed = float(min(max(s.carry_speed, .92 * v0), .85 * s.vmax[i]))
+            s.carry_speed = float(min(max(s.carry_speed * .6, TUNE["mom_k"] * v0), .85 * s.vmax[i]))
         elif s._face_goal(i) < .5:  # back to goal and not moving: he shields and turns, he does not run
             s.carry_dir, s.carry_speed = s.head[i].copy(), .8
         s.spell = (s.t, s.pos[i].copy(), i)
