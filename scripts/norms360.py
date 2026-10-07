@@ -52,6 +52,18 @@ def shape(ball, mates, opps, gk_opp=None):
         m["block_width"] = float(near8[:, 1].std())
         m["block_depth"] = float(near8[:, 0].std())
         m["central_between"] = float(np.sum((opps[:, 0] > ball[0]) & (np.abs(opps[:, 1] - W / 2) < 12)))
+    if len(mates):
+        dm = np.hypot(*(mates - ball).T)
+        m["mate_within10"] = float((dm < 10).sum())
+        m["mate_within20"] = float((dm < 20).sum())
+        m["mate_nearest"] = float(dm.min())
+    if len(opps):
+        do = np.hypot(*(opps - ball).T)
+        m["opp_within20"] = float((do < 20).sum())
+    allp = np.vstack([a_ for a_ in (mates, opps) if len(a_)]) if (len(mates) or len(opps)) else np.zeros((0, 2))
+    if len(mates) >= 3:
+        d2 = np.hypot(*(mates[:, None] - mates[None]).transpose(2, 0, 1)) + np.eye(len(mates)) * 99
+        m["mate_spacing"] = float(d2.min(1).mean())  # how close each team-mate stands to his nearest team-mate
     m["n_vis_mates"] = float(len(mates))
     m["n_vis_opps"] = float(len(opps))
     return m

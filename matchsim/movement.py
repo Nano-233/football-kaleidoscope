@@ -26,6 +26,7 @@ LAG = np.array([0, 8, 8, 2, 1, 0, 0, -10.])  # metres behind the ball each role 
 GS_CAP = np.array([0, 0, 0, 0, 0, 2, 2, 8.])  # how far past the ball (towards the opponent) each role may stand while defending: most men stay goal-side of it
 GOAL = np.array([0., W / 2])
 TUNE_COMMIT = .08
+SUPPORT_MIN = 8.     # the nearest supporting player stands at least this far from the carrier
 ATT_SPACING = 6.5    # attackers keep at least this far from each other (m)
 BACK_PRESS = 6.      # a centre-back or full-back only leaves the line to a carrier this close
 MOVE_BURST = 4.      # an attacker who picks a new spot further away than this gets there at pace
@@ -456,6 +457,8 @@ def team_targets(m, t):
         urgent |= m.space_burst[sl] & has & out_f & (m.t < m.space_until[sl] - .3)  # moving into space at pace, not drifting
         if holder >= 0 and kind not in ("corner", "kickoff") and mine:
             fwp = out_f & (idx != holder) & ~urgent
+            near_c = nrm(zone - P[holder], axis=1)
+            zone = zone + _unit(zone - P[holder]) * (np.maximum(SUPPORT_MIN - near_c, 0.) * fwp)[:, None] * .6  # nobody crowds the carrier
             dz_ = zone[:, None] - zone[None]
             dd_ = np.maximum(nrm(dz_), 1e-3) + np.eye(11) * 99
             push_ = (dz_ / dd_[..., None] * np.maximum(ATT_SPACING - dd_, 0)[..., None] * (fwp[:, None] & fwp[None])[..., None] * .5).sum(1)

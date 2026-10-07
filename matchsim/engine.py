@@ -20,7 +20,7 @@ from .movement import _tf, _unit, nrm, clip
 
 DT = 0.2
 # Single tuning table (calibrated by scripts/calibrate.py against real-football norms).
-TUNE = dict(mom_k=.75, carry_v0=2.0, carry_v1=1.6, cruise_k=0.65, burst_hold=0.4, run_frac=0.7, press_dist=1.75, air_base=0.5, head_on=0.28, head_clear=0.5, air_k=0.5, gk_air=0.6, block_base=0.12, block_nb=0.12, ft_shot=0.315, turn_cost=0.55, turn_rate=3.2, face_k=1.05, pot=2.2, relief=1.0, ft_slow=.0, drive=0.1,  cong_k=0.5, risk_pow=2.2, first_touch=3.0, wide_v=0.35, ctrl_marked=0.33, shoot_hold=0.98, shoot_slope=2.05, shoot_ref=0.168, shoot_press=0.56, adv_lin=.6, pack=.04, shoot_min=.12, react=1.84, patience=0.02, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.76, fk_bonus=0.05, long_bonus=0.163, prog_base=0.5, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=0.8, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=1.3, shot_k=3.15, shot_k_dir=5.0,
+TUNE = dict(own_goal_cone=.0, head_run=4.2, head_rate=2.5, mom_k=.75, carry_v0=2.0, carry_v1=1.6, cruise_k=0.65, burst_hold=0.4, run_frac=0.7, press_dist=1.75, air_base=0.5, head_on=0.28, head_clear=0.5, air_k=0.5, gk_air=0.6, block_base=0.12, block_nb=0.12, ft_shot=0.315, turn_cost=0.55, turn_rate=3.2, face_k=1.05, pot=2.2, relief=1.0, ft_slow=.0, drive=0.1,  cong_k=0.5, risk_pow=2.2, first_touch=3.0, wide_v=0.35, ctrl_marked=0.33, shoot_hold=0.98, shoot_slope=2.05, shoot_ref=0.168, shoot_press=0.56, adv_lin=.6, pack=.04, shoot_min=.12, react=1.84, patience=0.02, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.76, fk_bonus=0.05, long_bonus=0.163, prog_base=0.5, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=0.8, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=1.3, shot_k=3.15, shot_k_dir=5.0,
             carry_base=0.22, carry_prog=.2, carry_streak=.3, dwell_base=0.9, dwell_shape=2.4, dwell_scale=1.61,
             tackle_rate=3.6, wide_error=3.2, off_miss=.2, off_mult=.25)
 sig = lambda x: 1 / (1 + np.exp(-x))
@@ -378,8 +378,13 @@ class Match:
         s.vel += dv * np.minimum(1, s.acc * (1 - TUNE["turn_cost"] * turn_) * dt / np.maximum(n, 1e-6))[:, None]
         s.pos = s.pos + s.vel * dt
         spd_ = nrm(s.vel, axis=1)
-        w_ = (.6 * (spd_ > 1.5))[:, None]
-        s.head = _unit(s.head * (1 - w_) + _unit(s.vel) * w_)  # running: he faces where he runs
+        carrier_ = np.zeros(22, bool)
+        if s.state == "held":
+            carrier_[s.carrier] = True
+        run_ = (spd_ > TUNE["head_run"]) | (carrier_ & (spd_ > 1.5))
+        h_run = _unit(s.head * .4 + _unit(s.vel) * .6)  # flat out (or carrying the ball): he faces where he runs
+        h_play = _unit(s.head + (s._play_heading() - s.head) * float(clip(TUNE["head_rate"] * dt, 0, 1)))  # otherwise his body turns to the play
+        s.head = np.where(run_[:, None], h_run, np.where(carrier_[:, None], s.head, h_play))
         r = s.pos[:, None] - s.pos[None]
         dd = np.maximum(nrm(r, axis=2), 1e-3) + np.eye(22) * 99
         s.pos += (r / dd[..., None] * ((1.6 - dd).clip(0))[..., None]).sum(1) * .35
@@ -421,6 +426,34 @@ class Match:
         if s.rng.random() < clip(.2 + .5 * pr + .02 * (s.attr["passing"][i] - 10), 0, .8) * s.first_time_ok * (1 - TUNE["ft_slow"] * .5 * ft):
             return float(s.rng.uniform(.05, .22))  # one touch
         return float(max(.12, react + s.rng.normal(0, .05)))
+
+    def _play_heading(s):
+        """Where each player's body wants to point when he is not running flat out.
+
+        Attackers face the ball (a little towards goal); defenders face the man they mark or the ball and rarely turn their
+        chest to their own goal; keepers face the ball."""
+        B = s.ball
+        out = np.zeros((22, 2))
+        for t in (0, 1):
+            sl = s._own(t)
+            P = s.pos[sl]
+            goal_opp = np.array([L if t == 0 else 0., W / 2])
+            goal_own = np.array([0. if t == 0 else L, W / 2])
+            dB = _unit(B - P)
+            if s.poss == t:
+                h = _unit(.65 * dB + .35 * _unit(goal_opp - P))
+            else:
+                mk = s.mark[t]
+                O = s.pos[s._opp(t)]
+                pt = np.where((mk >= 0)[:, None], O[np.maximum(mk, 0)], B)  # the man he is marking, else the ball
+                h = _unit(.55 * _unit(pt - P) + .45 * dB)
+
+            own = _unit(goal_own - P)
+            over = np.maximum((h * own).sum(1) - TUNE["own_goal_cone"], 0.)
+            h = _unit(h - own * over[:, None])  # nobody turns his chest to his own goal: he stands side-on at most, back to his own goal
+            h[0] = dB[0]
+            out[sl] = h
+        return out
 
     def _face_goal(s, i):
         """0 = back to goal, 1 = facing it."""
