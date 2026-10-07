@@ -227,6 +227,49 @@ wide for crosses. In the sim defenders hold zones/men and press the ball, but no
 the central targets. Next: lane-cutting and "force wide" positioning for the nearest defenders and the midfield screen, then
 re-measure with `norms.py sim`, `norms360.py` and `logic_audit.py`. Bake in `prog_base` and re-balance last.
 
+## Football conventions, build-up patience and body orientation (continued)
+
+**The user's three diagnoses, in order, and what each did.** The user thought of them; each moved something measurable.
+1. *"Defending is too reactive: it does not cut lanes or force the ball wide."* Implemented as geometry (see
+   `FOOTBALL_PRINCIPLES.md`): flat back line that steps up with pressure on the ball, presser stands on the inside shoulder at a
+   jockeying gap, cover behind him, closers on the receiver while the ball is in flight, lane-cutting for free defenders,
+   goal-side + ball-side marking, layered cone of bodies between ball and goal, recovery sprints. Shape checks against Euro 2020
+   freeze frames: back-line spread 3.3 m (real 2.9), defenders in the box at a shot 5.6-5.9 (6.3), nearest defender to a central
+   receiver 2.5 m (2.1). Shot volume did not respond.
+2. *"You underestimate build-up: players recycle when no good lane is on."* Right. Real teams spend about twice as long in the
+   middle third and play 22% of middle-third passes backwards (sim had 10%). Added two terms to pass utility computed from the
+   geometry: **relief** (a pressed carrier values the freest team-mate) and **onward potential** (a two-ply look-ahead: the best
+   open lane from the receiver's spot to someone further up the pitch), weighted towards midfield (`zf`). With them the passing mix
+   is close to real (middle third forward/side/back .49/.31/.20 vs .50/.28/.22) and shots fell from 35 to about 31.
+3. *"Strikers receive back to goal, cannot turn or take men on: you are missing body orientation."* Right: a standing receiver was
+   assumed to face goal. Added a heading per player: a runner faces his run, a standing receiver faces the incoming ball, a good
+   first touch opens the body part-way (less if a marker is on him), a standing carrier turns towards goal at `turn_rate`
+   (75% slower with a defender on his back). Heading now feeds: what he can see to pass, pass accuracy (worse across or behind the
+   body), shot quality and willingness, take-on and carry success, first-touch control, a defender's tackle and interception
+   chances (worse if not facing the play) and a turning cost on sharp direction changes for everyone. Effect: carries into the box
+   dropped to about real (5 vs 5.6); shots did not.
+
+**Hypotheses tested and rejected with data (do not repeat).**
+- *Shot quality too high:* xG per shot 0.06-0.09 vs 0.09 real. Not it.
+- *Finishing or saves:* goals equal xG on both sides (sim 2.0 vs 2.8, real 1.24 vs 1.15). Not it.
+- *Too few defensive actions:* the sim has more interceptions, clearances, blocks and tackles than real.
+- *Easy line-breaking into the final third:* entries match (final-third passes 56 vs 53, box passes 24 vs 25); time with the ball in the
+  final third matches (280 s vs 310 s).
+- *Counter-attacks / transitions:* median time from winning the ball to a shot is 13.6 s sim vs 13.0 s real.
+- *One hidden shot route:* shots come through the normal shoot rule (headers and free kicks add about 3 per team).
+- *Ball-side marking, capping how much space a forward can find, ball-side drift of the front line, role shoot propensity:*
+  the striker kept 53-59% of our shots (real 27%) in every variant. The excess is about 2.5x for every role, so it is not a
+  striker-only effect.
+- *Raising the duel rate (`tackle_rate`) to stop carriers:* fixes tackle, foul and dispossession counts (done: 2.0 with the contact
+  model) but not shots. Contact must be geometric (defender in front or alongside, not chasing, not already beaten).
+- *Throw-ins:* `wide_error` is what produces them (43 per match with 3.2, 17 with 1.0, real 45). Keep it until outs have proper
+  sources (miscontrols near the line, clearances, carriers running out).
+
+**Open and measured.** Per team per match, sim vs real: shots ~32 vs 12.9, goals ~2 vs 1.24, miscontrols 23-26 vs 14, first-time
+shots 47-56% vs 32%, throw-ins depend on `wide_error`. The shot funnel is the one structural gap left: the ball reaches the final
+third and the box as often as in real football, but the attackers there shoot about twice as often per entry.
+`scripts/tune_norms.py` now scores the simulator against about 45 real-data metrics at once and balances the numbers.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

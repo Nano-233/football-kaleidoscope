@@ -1,0 +1,132 @@
+"""Calibrate the simulator against real event data (StatsBomb aggregates in reference/norms_real.json).
+
+    python scripts/tune_norms.py [matches_per_eval] [passes]          # coordinate search on the TUNE table
+    python scripts/tune_norms.py eval [matches] key=value ...         # score one parameter set
+
+The loss is a weighted sum of squared, scaled gaps over about 45 behavioural metrics (volumes, passing mix, progression,
+shots, defending events, restarts). It runs after the logic is right: it balances numbers, it never fixes a missing behaviour.
+Common random numbers (the same seeds for every candidate) keep the comparison fair. Run it on a snapshot copy of the code,
+not on the files being edited: workers re-import the engine for every evaluation.
+"""
+import sys, os, json, pathlib, time, copy
+import numpy as np
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(ROOT / "scripts"))
+from multiprocessing import Pool
+import norms
+
+WORKERS = max(1, (os.cpu_count() or 8) - 4)
+REAL = {k: v for k, v in json.loads((ROOT / "reference" / "norms_real.json").read_text()).items() if v is not None}
+# real restart counts per match (both teams), from the same StatsBomb sample
+REAL_MATCH = {"throw_in": 45.4, "corner": 11.6, "goal_kick": 17.1, "free_kick": 22.9}
+
+# metric -> (weight, scale: gap in these units counts as 1; None = 25 % of the real value)
+W = {
+    "passes": (1, None), "pass_acc": (1, .03), "carries": (1, None), "tackles": (1, None), "interception": (1, None), "clearance": (1, None),
+    "block": (1, None), "foul": (1, None), "dispossessed": (1, None), "miscontrol": (1, None), "offside": (1, None),
+    "fwd_own": (.5, .06), "side_own": (.5, .06), "back_own": (.5, .06), "fwd_mid": (.5, .06), "side_mid": (.5, .06), "back_mid": (.5, .06),
+    "fwd_fin": (.5, .06), "side_fin": (.5, .06), "back_fin": (.5, .06), "long_share": (.5, .03), "short_share": (.5, .04), "pass_hold_mean": (1, .25),
+    "into_final3": (1, None), "into_box": (1, None), "carry_into_final3": (1, None), "carry_into_box": (1, None), "carry_prog10": (1, None), "takeons": (1, None), "takeon_succ": (.5, .08),
+    "shots": (3, None), "goals": (3, None), "on_target": (1, None), "blocked": (1, None), "xg_per_shot": (2, .02), "big_chance": (1, None),
+    "shot_d_lt12": (1, .06), "shot_d_12_20": (1, .06), "shot_d_ge20": (1, .06), "shot_head": (1, .05), "shot_first": (1, .06), "shot_blockers": (1, .4),
+    "acc_own": (.5, .05), "acc_mid": (.5, .04), "acc_fin": (.5, .05),
+}
+M = {"throw_in": (1, None), "corner": (1, None), "goal_kick": (1, None), "free_kick": (1, None)}
+
+# parameter -> (low, high)
+PARAMS = {
+    "react": (1.0, 2.6), "patience": (0., .6), "carry_base": (0., .4), "drive": (0., 1.), "shoot_ref": (.05, .5), "shoot_slope": (1., 4.), "shoot_press": (0., 1.6),
+    "shoot_hold": (0., 1.6), "ft_shot": (.1, 1.), "pot": (0., 2.2), "relief": (0., 2.), "risk_pow": (1., 3.), "prog_base": (.5, 2.), "cong_k": (0., 1.),
+    "ctrl_marked": (.15, .55), "first_touch": (0., 6.), "tackle_rate": (.8, 3.6), "wide_error": (1., 4.), "pass_sigma": (.6, 1.5), "intercept": (.3, .7),
+    "usage": (0., 1.2), "keep": (.2, .8), "long_bonus": (0., 1.2), "cross_v": (.8, 2.2), "wide_v": (0., 1.3), "turn_cost": (0., 1.), "face_k": (0., 3.),
+}
+
+
+def _init(over):
+    from matchsim import engine
+    engine.TUNE.update(over)
+
+
+def _one(seed):
+    import calibrate
+    m, r = calibrate.run(seed)
+    per = [norms.team_metrics(R) for R in norms.from_sim(r).values()]
+    cnt = {}
+    for e in r["events"]:
+        if e["type"] in REAL_MATCH:
+            cnt[e["type"]] = cnt.get(e["type"], 0) + 1
+    return per, cnt
+
+
+def evaluate(over, seeds, pool=None):
+    own = pool is None
+    if own:
+        pool = Pool(WORKERS, initializer=_init, initargs=(over,))
+    res = pool.map(_one, seeds)
+    if own:
+        pool.close(); pool.join()
+    per = [m for r, _ in res for m in r]
+    agg = norms.aggregate(per)
+    cnt = {k: float(np.mean([c.get(k, 0) for _, c in res])) for k in REAL_MATCH}
+    loss, parts = 0., {}
+    for k, (w, sc) in W.items():
+        if k not in agg or k not in REAL or np.isnan(agg[k]):
+            continue
+        scale = sc if sc is not None else max(abs(REAL[k]) * .25, 1e-3)
+        e = float(np.clip((agg[k] - REAL[k]) / scale, -4, 4))
+        parts[k] = e
+        loss += w * e * e
+    for k, (w, sc) in M.items():
+        e = float(np.clip((cnt[k] - REAL_MATCH[k]) / max(REAL_MATCH[k] * .25, 1e-3), -4, 4))
+        parts[k] = e
+        loss += w * e * e
+    return loss, parts, agg, cnt
+
+
+def main():
+    args = [a for a in sys.argv[1:] if "=" not in a]
+    kv = {k: float(v) for k, v in (a.split("=") for a in sys.argv[1:] if "=" in a)}
+    if args and args[0] == "eval":
+        n = int(args[1]) if len(args) > 1 else 16
+        loss, parts, agg, cnt = evaluate(kv, list(range(5000, 5000 + n)))
+        print(f"loss {loss:.1f}")
+        for k, e in sorted(parts.items(), key=lambda kv_: -abs(kv_[1]))[:14]:
+            print(f"  {k:16s} gap {e:+.2f}")
+        return
+    n = int(args[0]) if args else 16
+    rounds = int(args[1]) if len(args) > 1 else 2
+    seeds = list(range(5000, 5000 + n))
+    from matchsim import engine
+    cur = {k: float(engine.TUNE[k]) for k in PARAMS if k in engine.TUNE}
+    cur.update(kv)
+    out = ROOT / "out"
+    out.mkdir(exist_ok=True)
+    best, parts, agg, cnt = evaluate(cur, seeds)
+    print(f"start loss {best:.1f}", flush=True)
+    for rd in range(rounds):
+        step = .3 if rd == 0 else .15
+        for name in PARAMS:
+            if name not in cur:
+                continue
+            lo, hi = PARAMS[name]
+            span = hi - lo
+            cand_best, cand_val = best, cur[name]
+            for d in (-1, 1):
+                v = float(np.clip(cur[name] + d * step * span, lo, hi))
+                if abs(v - cur[name]) < 1e-9:
+                    continue
+                trial = dict(cur); trial[name] = v
+                t0 = time.time()
+                loss, _, _, _ = evaluate(trial, seeds)
+                if loss < cand_best - 1e-9:
+                    cand_best, cand_val = loss, v
+            if cand_val != cur[name]:
+                cur[name], best = cand_val, cand_best
+            print(f"round {rd} {name:12s} -> {cur[name]:.3f}  loss {best:.1f}", flush=True)
+            (out / "tune_norms_best.json").write_text(json.dumps({"loss": best, "params": cur}, indent=1))
+    loss, parts, agg, cnt = evaluate(cur, seeds)
+    print("final", round(loss, 1), json.dumps({k: round(v, 3) for k, v in cur.items()}))
+
+
+if __name__ == "__main__":
+    main()
