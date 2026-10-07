@@ -31,6 +31,8 @@ def from_statsbomb(events):
         press = bool(e.get("under_pressure"))
         if ty == "Ball Receipt*":
             last_receipt[pl] = t
+            if loc is not None and "outcome" not in e.get("ball_receipt", {}):
+                recs[tm].append(dict(k="receipt", x=loc[0], y=loc[1]))
         if ty == "Pass":
             p = e["pass"]
             end = np.array(p["end_location"]) * SB
@@ -75,6 +77,9 @@ def from_sim(r):
                                  switch=e.get("technique") == "switch", high=bool(e.get("lofted")), setp=e.get("source") in ("throw_in", "corner", "short_corner", "goal_kick"),
                                  length=e["length"], press=bool(e.get("under_pressure")), hold=e.get("hold"), play="Regular Play",
                                  kind={"goal_kick": "Goal Kick", "throw_in": "Throw-in", "corner": "Corner", "short_corner": "Corner"}.get(e.get("source"), ""), head=e.get("body_part") == "head"))
+        elif ty == "ball_receipt" and tm is not None:
+            x, y = fl(tm, e["x"], e["y"])
+            recs[tm].append(dict(k="receipt", x=x, y=y))
         elif ty == "carry":
             x, y = fl(tm, e["x"], e["y"]); ex, ey = fl(tm, e["end_x"], e["end_y"])
             recs[tm].append(dict(k="carry", t=e["t"], x=x, y=y, ex=ex, ey=ey, dur=e["duration"]))
@@ -176,6 +181,9 @@ def team_metrics(R):
     for name, lo, hi in (("own", 0, L / 3), ("mid", L / 3, 2 * L / 3), ("fin", 2 * L / 3, L + 1)):
         m[f"tackle_{name}"] = sum(1 for r in T if lo <= r["x"] < hi)
     # shots
+    rc = np.array([np.hypot(L - r["x"], r["y"] - W / 2) for r in R if r["k"] == "receipt"])
+    for lo, hi in ((0, 8), (8, 12), (12, 16), (16, 20), (20, 25), (25, 32)):
+        m[f"rcv_{lo}_{hi}"] = float(((rc >= lo) & (rc < hi)).sum())
     m["shots"] = len(S)
     m["shot_xg"] = float(sum(r["xg"] for r in S))
     m["xg_per_shot"] = m["shot_xg"] / max(len(S), 1)
@@ -262,6 +270,7 @@ GROUPS = [("volume", ["passes", "pass_acc", "carries", "tackles", "interception"
           ("aerial", ["high_share", "head_pass", "gk_long_share", "gk_high_share", "clear_head", "aerial_lost"]),
           ("passing", ["acc_free", "acc_press", "press_pass_share", "into_f3_att", "into_f3_rate", "within_f3_att", "within_f3_rate", "box_entry_att", "box_entry_rate", "inbox_pass_att", "inbox_pass_rate", "cross_rate", "acc_own", "acc_mid", "acc_fin", "n_own", "n_mid", "n_fin", "fwd_own", "side_own", "back_own", "fwd_mid", "side_mid", "back_mid", "fwd_fin", "side_fin", "back_fin", "long_share", "short_share", "avg_pass_len", "crosses_open", "through", "switch", "pass_hold_med", "pass_hold_mean"]),
           ("progression", ["into_final3", "into_box", "into_box_ok", "carry_len", "carry_prog10", "carry_into_final3", "carry_into_box", "takeons", "takeon_succ", "tackle_won", "tackle_own", "tackle_mid", "tackle_fin"]),
+          ("receipts near goal", ["rcv_0_8", "rcv_8_12", "rcv_12_16", "rcv_16_20", "rcv_20_25", "rcv_25_32"]),
           ("shots", ["shots", "goals", "on_target", "blocked", "shot_xg", "xg_per_shot", "big_chance", "shot_d_lt12", "shot_d_12_20", "shot_d_ge20", "shot_box", "shot_head", "shot_first", "shot_press", "shot_blockers", "shot_free_look", "shot_nearest_def", "shot_def_within5", "shot_goalside_frac", "shot_goalside_n", "shot_team_in_box", "shot_def_in_box", "shot_def1_depth", "shot_def5_depth"])]
 
 

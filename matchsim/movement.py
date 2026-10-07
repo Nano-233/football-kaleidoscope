@@ -195,7 +195,7 @@ def pick_up_free(zone, urgent, gate, role, P, O, ci, tc):
         if cost[i_, j_] > 20.:
             continue
         o = O[open_[j_]]
-        spot = o + _unit(GOAL - o) * (MARK_GAP + 1.4 * (1 - tc.marking))
+        spot = o + _unit(GOAL - o) * (TP.get("mark_gap", MARK_GAP) + 1.4 * (1 - tc.marking))
         zone[free[i_]] = zone[free[i_]] * (1 - PICK_UP) + spot * PICK_UP
         if cost[i_, j_] > 5.:
             urgent[free[i_]] = True
@@ -355,9 +355,9 @@ def team_targets(m, t):
         ov = fv(m.vel[osl])[np.where(ok, mk, 0)]
         op = o + ov * .5  # stand goal-side of where he is going, not where he is
         wb = BALL_SIDE * clip(nrm(B - op) / 20., 0, 1)  # marking is goal-side AND ball-side: the further the ball, the more the marker stands on the pass lane
-        man = op + _unit(_unit(GOAL - op) + wb[:, None] * _unit(B - op)) * (MARK_GAP + 1.4 * (1 - tc.marking))
+        man = op + _unit(_unit(GOAL - op) + wb[:, None] * _unit(B - op)) * (TP.get("mark_gap", MARK_GAP) + 1.4 * (1 - tc.marking))
         gate = clip(1.4 - nrm(zone - o, axis=1) / 22, 0, 1) * tc.marking * ok
-        gate = np.where(ok & (o[:, 0] < 20) & (np.abs(o[:, 1] - W / 2) < 22) & (role > GK), np.maximum(gate, .85), gate)  # attackers in the box are marked, not watched
+        gate = np.where(ok & (o[:, 0] < 20) & (np.abs(o[:, 1] - W / 2) < 22) & (role > GK), np.maximum(gate, TP.get("box_gate", .85)), gate)  # attackers in the box are marked, not watched
         thr = np.exp(-nrm(o - GOAL) / 22)
         gate = np.where(ok, np.maximum(gate, clip((thr - .25) * 1.6, 0, .8)), gate)  # and so is anyone within about 30 m of goal
         zone = zone * (1 - gate[:, None]) + man * gate[:, None]
