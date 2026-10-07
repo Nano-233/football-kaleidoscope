@@ -25,6 +25,14 @@ LAG = np.array([0, 8, 8, 5, 3, 1, 0, -10.])  # metres behind the ball each role 
 GS_CAP = np.array([0, 0, 0, 0, 0, 2, 2, 8.])  # how far past the ball (towards the opponent) each role may stand while defending: most men stay goal-side of it
 GOAL = np.array([0., W / 2])
 TUNE_COMMIT = .08
+MARK_GAP = 1.1       # how far goal-side of his man a marker stands (tighter in the box)
+LINE_STEP = 5.       # metres the back line moves with pressure on the ball (up when pressed, down when the carrier has time)
+LINE_FLAT2 = .35     # the same after marking has been applied
+LINE_FLAT = .25      # how much of its own spread each back-line player keeps (0 = perfectly flat line)
+COVER_GAP = 6.       # distance of the cover defender behind the presser
+LANE_CUT = .6        # how far free defenders move onto a passing lane (0 = hold the zone, 1 = stand on the lane)
+CENTRE_BIAS = 1.0    # central receivers count this much more when choosing which lanes to cut
+FORCE_WIDE = .6      # how far the presser shades to the inside of the carrier so that the open side is the touchline
 NARROW = .3   # how much a defending block squeezes in from its formation width at full compactness
 SPACING = 7.   # minimum gap between defenders who are holding zones
 COMMIT_DANGER = 2.
@@ -133,6 +141,37 @@ def box_defence(m, B, zone, urgent, gate, role, P):
     return zone, urgent
 
 
+def cut_lanes(zone, urgent, gate, role, P, O, C, ci):
+    """Cover shadows: defenders who are not marking a man stand on the passing lane between the ball carrier and the most
+    dangerous team-mates ahead of the ball (central ones first), so the safe pass is the one out wide.
+
+    Each lane point sits about half way along the pass line (at least 5 m from the carrier, who has his own presser).
+    Free defenders take lanes by shortest total distance and only move part of the way, so the block keeps its shape.
+    Near goal box_defence takes over (this fades out inside about 20 m of goal)."""
+    w = LANE_CUT * (1. - float(clip((30. - float(nrm(C - GOAL))) / 10., 0, 1)))
+    if w < .05:
+        return zone, urgent
+    free = np.nonzero((role > GK) & (gate < .6) & ~urgent)[0]
+    if not len(free):
+        return zone, urgent
+    rec = np.array([j for j in range(1, 11) if j != ci and O[j, 0] < C[0] + 4.])
+    if not len(rec):
+        return zone, urgent
+    dist = nrm(O[rec] - C, axis=1)
+    thr = np.exp(-nrm(O[rec] - GOAL, axis=1) / 25.) * (1. + CENTRE_BIAS * (np.abs(O[rec, 1] - W / 2) < 14)) * clip(1.2 - dist / 35., .2, 1.) * (dist > 6.)
+    top = np.argsort(-thr)[:min(len(free), 4)]
+    top = top[thr[top] > .02]
+    if not len(top):
+        return zone, urgent
+    s_ = np.maximum(.5, 5. / np.maximum(dist[top], 1e-6))
+    Q = C + (O[rec[top]] - C) * s_[:, None]
+    r, c = linear_sum_assignment(cdist(zone[free], Q))
+    for i, j in zip(free[r], Q[c]):
+        if np.hypot(*(zone[i] - j)) < 28.:
+            zone[i] = zone[i] * (1 - w) + j * w
+    return zone, urgent
+
+
 def team_targets(m, t):
     """Returns (targets (11,2) in world coords, urgent (11,) bool) for team t."""
     sl, osl = slice(11 * t, 11 * t + 11), slice(11 * (1 - t), 11 * (1 - t) + 11)
@@ -193,6 +232,16 @@ def team_targets(m, t):
         wn = float(clip((42. - B[0]) / 12., 0, 1))
         tx = np.where(out_f, tx * (1 - wn) + np.maximum(B[0] - LAG[role] * (1.25 - .5 * tc.press), MIN_X[role]) * wn, tx)
         tx = np.where(out_f, np.minimum(tx, np.maximum(B[0] + GS_CAP[role] * (.6 + .8 * tc.press), MIN_X[role])), tx)
+    if not has:
+        bl = (role == CB) | (role == FB)
+        cur = m.carrier if m.state == "held" and m.poss == 1 - t else -1
+        if bl.sum() >= 2:
+            step = 0.
+            if cur >= 0:  # pressure on the ball: step up together; free to look up: drop together
+                dn = float(nrm(P[out_f] - O[cur - 11 * (1 - t)], axis=1).min())
+                step = LINE_STEP * (float(clip(1 - dn / 6., 0, 1)) - .4)
+            lx = tx[bl].mean()
+            tx = np.where(bl, lx + step + LINE_FLAT * (tx - lx), tx)  # one depth for the line, a little individual variation
     cx = tx[out_f].mean()  # compact the block around its own centre
     tx = np.where(out_f, cx + (tx - cx) * (.9 - .2 * tc.compactness), tx)
     if has and B[0] > .62 * L:  # midfielders arrive late at the edge of the box; wingers tuck in when the ball is on the far side
@@ -205,7 +254,7 @@ def team_targets(m, t):
             tx = np.where(att, np.maximum(tx, line + SHOULDER[role] + 2. * np.sin(.5 * m.t + m.phase[sl])), tx)
     if has and B[0] > .55 * L:
         far = (role == WG) & (np.abs(B[1] - A[:, 1]) > 25)
-        ty = np.where(far, W / 2 + np.sign(A[:, 1] - W / 2) * 9, ty)
+        ty = np.where(far, W / 2 + np.sign(A[:, 1] - W / 2) * 21, ty)  # the far-side winger stays wide: he is the switch outlet
     zone = np.stack([clip(tx, 2, L - 2), clip(ty, 2, W - 2)], 1)
     carrier = m.carrier if m.state == "held" else -1
     bx = B[0] + max(float(Bv[0]), 0.)  # the team moves up with the play: look a second ahead along the ball's path
@@ -237,7 +286,7 @@ def team_targets(m, t):
         o = O[np.where(ok, mk, 0)]
         ov = fv(m.vel[osl])[np.where(ok, mk, 0)]
         op = o + ov * .5  # stand goal-side of where he is going, not where he is
-        man = op + _unit(GOAL - op) * (1.6 + 2.0 * (1 - tc.marking))
+        man = op + _unit(GOAL - op) * (MARK_GAP + 1.4 * (1 - tc.marking))
         gate = clip(1.4 - nrm(zone - o, axis=1) / 22, 0, 1) * tc.marking * ok
         gate = np.where(ok & (o[:, 0] < 20) & (np.abs(o[:, 1] - W / 2) < 22) & (role > GK), np.maximum(gate, .85), gate)  # attackers in the box are marked, not watched
         thr = np.exp(-nrm(o - GOAL) / 22)
@@ -248,31 +297,36 @@ def team_targets(m, t):
         dd = np.maximum(nrm(dz), 1e-3) + np.eye(11) * 99
         push = dz / dd[..., None] * np.maximum(SPACING - dd, 0)[..., None] * (free[:, None] & free[None])[..., None] * .5
         zone = zone + push.sum(1) * free[:, None]
-        # pressing the opposing ball carrier
+        # pressing the opposing ball carrier: the nearest defender closes to a jockeying gap, standing slightly on the inside so the
+        # open side is the touchline; the next one covers behind him (cover and balance); both go earlier when the touch is fresh
         if m.poss == 1 - t and carrier >= 0:
             C, Cv = O[carrier - 11 * (1 - t)], fv(m.vel[carrier])
+            gv = _unit(GOAL - C)
+            inside = np.array([0., np.sign(W / 2 - C[1]) * float(clip(abs(C[1] - W / 2) / 18., 0, 1))])
+            cs = float(nrm(Cv))
+            trig = 1. + .35 * (m.t - m.ctrl_t < 1.2) + .3 * (Cv[0] > .5)  # press triggers: a fresh touch, a carrier turning away from our goal
             depth = C[0] / L
-            R = (3 + 9 * tc.press) * (1.5 if m.t < m.trans_until[t] else 1.0)
+            R = (3 + 9 * tc.press) * (1.5 if m.t < m.trans_until[t] else 1.0) * trig
             if depth > .5:
                 R *= max(.15, 1 - (depth - .5) * 2 * (1 - tc.press) * .9)
             d = nrm(P - C, axis=1)
             d[role == GK] = 1e9
             n = 1 + (tc.press > .8)
             near = np.argsort(d)
-            danger = clip((.45 * L - C[0]) / (.3 * L), 0, 1)
-            if danger > 0:  # shot-blocking cover: the next three defenders drop onto the ball-goal line
-                gv = _unit(GOAL - C)
-                for k, i in enumerate(near[n:n + 1]):
-                    if d[i] < 22:
-                        zone[i] = C + gv * (3.2 + 2.2 * k) + np.array([-gv[1], gv[0]]) * (1.8 * k * (1 if k % 2 else -1))
+            gap = 2.4 + 1.4 * (1 - tc.press) + .15 * cs
+            tgt1 = C + _unit(gv + FORCE_WIDE * inside) * gap + Cv * .2
+            if depth < .62:  # cover behind the presser, shifted to the inside
+                for i in near[n:n + 1]:
+                    if d[i] < 24:
+                        zone[i] = tgt1 + gv * COVER_GAP + inside * 2.0
                         urgent[i] = True
-            for i in np.argsort(d)[:n]:
+            for i in near[:n]:
                 if d[i] < R:
                     g = 11 * t + i  # jockey goal-side; occasionally commit to the tackle
                     danger = clip((.4 * L - C[0]) / (.3 * L), 0, 1)  # defenders commit more as the ball nears their goal
                     if m.t >= m.commit_until[g] and m.rng.random() < (TUNE_COMMIT + .12 * tc.press) * m.mod["commit"][g] * (1 + COMMIT_DANGER * danger) * m.dt:
                         m.commit_until[g] = m.t + m.rng.uniform(1., 2.)
-                    zone[i] = C + Cv * .2 if m.t < m.commit_until[g] else C + _unit(GOAL - C) * (1.8 + 1.6 * (1 - tc.press)) + Cv * .2
+                    zone[i] = C + Cv * .2 if m.t < m.commit_until[g] else tgt1
                     urgent[i] = True
         elif m.state == "dead" and kind == "free_kick" and np.hypot(B[0], B[1] - W / 2) < 32:  # wall on the line to goal, 9.15 m back
             dist = float(np.hypot(B[0], B[1] - W / 2))
@@ -303,10 +357,25 @@ def team_targets(m, t):
             slack = nrm(P - q, axis=1) / (m.vmax[sl] * .9) - s * nrm(ab) / fl["speed"]
             if f(fl["end"])[0] > 30:  # the keeper only sweeps up balls played in behind towards his goal
                 slack[role == GK] = 1e9
+            taken = set()
             for i in np.argsort(slack)[:2]:
                 if slack[i] < 1.2:
                     zone[i], urgent[i] = q[i], True
+                    taken.add(int(i))
+            e_ = f(fl["end"])  # the nearest other defender closes the receiver so that he arrives with the ball
+            de = nrm(P - e_, axis=1)
+            de[role == GK] = 1e9
+            for i in np.argsort(de)[:2]:
+                if int(i) not in taken and de[i] < 12:
+                    zone[i], urgent[i] = e_ + _unit(GOAL - e_) * 1.5, True
+                    break
         if m.state != "dead":
+            bl = ((role == CB) | (role == FB)) & ~urgent
+            if bl.sum() >= 2 and float(nrm(B - GOAL)) > 26.:  # marking must not pull defenders out of the line: re-flatten it (outside the box)
+                mx = zone[bl, 0].mean()
+                zone[bl, 0] = mx + LINE_FLAT2 * (zone[bl, 0] - mx)
+            if m.poss == 1 - t and carrier >= 0:
+                zone, urgent = cut_lanes(zone, urgent, gate, role, P, O, O[carrier - 11 * (1 - t)], carrier - 11 * (1 - t))
             zone, urgent = box_defence(m, B, zone, urgent, gate, role, P)
             urgent |= (gate > .6) & (nrm(zone - P, axis=1) > 1.0)  # a man-marker in the danger area stays with his man at the man's pace
             urgent |= out_f & (P[:, 0] - zone[:, 0] > 5.) & (B[0] < .65 * L)  # recovery run: well upfield of where he should be, ball in his half: sprint back, do not jog
@@ -340,7 +409,7 @@ def team_targets(m, t):
         if holder >= 0 and kind not in ("corner", "kickoff"):
             skip = (idx == holder) | urgent | (m.t < m.run_until[sl])
             zone = seek_space(m, t, P, O, P[holder] if mine else B, zone, role, out_f, skip, max(np.sort(O[:, 0])[-2], L / 2))
-        urgent |= out_f & (zone[:, 0] - P[:, 0] > 6.) & (B[0] > .5 * L)  # joining the attack: well behind where he should be with the ball in the opposition half, he sprints up instead of jogging
+        urgent |= out_f & (zone[:, 0] - P[:, 0] > 6.) & (B[0] > .3 * L)  # joining the attack: well behind where he should be with the ball in the opposition half, he sprints up instead of jogging
         running = has & (m.t < m.run_until[sl])
         for i in np.nonzero(running)[0]:
             zone[i], urgent[i] = m.run_tgt[11 * t + i], True

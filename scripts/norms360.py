@@ -36,12 +36,28 @@ def shape(ball, mates, opps, gk_opp=None):
         m["opp_central_frac"] = float(np.mean(np.abs(opps[:, 1] - W / 2) < 12))
         m["opp_width"] = float(np.ptp(opps[:, 1])) if len(opps) > 2 else np.nan
         m["opp_depth"] = float(np.ptp(opps[:, 0])) if len(opps) > 2 else np.nan
+    if len(opps) >= 5:
+        xs = np.sort(opps[:, 0])[::-1]
+        back = xs[:4]  # the four deepest outfield defenders (largest x = closest to their own goal)
+        m["line_gap"] = float(back.mean() - ball[0])  # how far the back line stands in front of (positive) or behind the ball
+        m["line_flat"] = float(back.std())
+        o = np.argsort(np.hypot(*(opps - ball).T))
+        n1, n2 = opps[o[0]], opps[o[1]]
+        wide = abs(ball[1] - W / 2) > 14
+        if wide:
+            m["press_inside"] = float((n1[1] - ball[1]) * np.sign(W / 2 - ball[1]))  # nearest defender stands on the inside (+) or outside (-) of a wide carrier
+        m["press_goalside"] = float(n1[0] - ball[0])
+        m["cover_dist"] = float(np.hypot(*(n2 - n1)))
+        near8 = opps[o[:8]]
+        m["block_width"] = float(near8[:, 1].std())
+        m["block_depth"] = float(near8[:, 0].std())
+        m["central_between"] = float(np.sum((opps[:, 0] > ball[0]) & (np.abs(opps[:, 1] - W / 2) < 12)))
     m["n_vis_mates"] = float(len(mates))
     m["n_vis_opps"] = float(len(opps))
     return m
 
 
-def real(n_matches):
+def real(n_matches, zlo=2 * L / 3, zhi=L + 1):
     rows = []
     d = pathlib.Path(__file__).resolve().parents[2] / "reference_data" / "euro2020"
     files = [f for f in sorted(glob.glob(str(d / "[0-9]*.json"))) if "_360" not in f][:n_matches]
@@ -52,7 +68,7 @@ def real(n_matches):
             if e["type"]["name"] != "Pass" or e["id"] not in fr or e["pass"].get("type", {}).get("name") in ("Corner", "Free Kick", "Throw-in", "Goal Kick", "Kick Off"):
                 continue
             ball = np.array(e["location"][:2]) * SB
-            if ball[0] < 2 * L / 3:
+            if not (zlo <= ball[0] < zhi):
                 continue
             ff = fr[e["id"]]["freeze_frame"]
             mates = [np.array(p["location"]) * SB for p in ff if p["teammate"] and not p["actor"] and not p.get("keeper")]
@@ -61,7 +77,7 @@ def real(n_matches):
     return rows
 
 
-def sim(n_matches):
+def sim(n_matches, zlo=2 * L / 3, zhi=L + 1):
     import calibrate
     rows = []
     for seed in range(700, 700 + n_matches):
@@ -77,7 +93,7 @@ def sim(n_matches):
                 continue
             P = pos if tm == 0 else np.array([L, W]) - pos
             ball = np.array([e["x"], e["y"]]) if tm == 0 else np.array([L - e["x"], W - e["y"]])
-            if ball[0] < 2 * L / 3:
+            if not (zlo <= ball[0] < zhi):
                 continue
             mates = [P[11 * tm + i] for i in range(1, 11) if np.hypot(*(P[11 * tm + i] - ball)) > .5 and np.hypot(*(P[11 * tm + i] - ball)) < VIS]
             opps = [P[11 * (1 - tm) + i] for i in range(1, 11) if np.hypot(*(P[11 * (1 - tm) + i] - ball)) < VIS]
@@ -86,13 +102,15 @@ def sim(n_matches):
 
 
 def agg(rows):
-    keys = rows[0].keys()
+    keys = sorted({k for r in rows for k in r})
     return {k: float(np.nanmean([r.get(k, np.nan) for r in rows])) for k in keys}
 
 
 if __name__ == "__main__":
     nr = int(sys.argv[1]) if len(sys.argv) > 1 else 20
     ns = int(sys.argv[2]) if len(sys.argv) > 2 else 8
-    R, S = agg(real(nr)), agg(sim(ns))
-    for k in R:
-        print(f"  {k:18s} real {R[k]:7.2f}   sim {S.get(k, np.nan):7.2f}")
+    for name, lo, hi in (("middle third (ball 35-70 m)", L / 3, 2 * L / 3), ("final third (ball 70+ m)", 2 * L / 3, L + 1)):
+        R, S = agg(real(nr, lo, hi)), agg(sim(ns, lo, hi))
+        print(name)
+        for k in sorted(R):
+            print(f"  {k:18s} real {R[k]:7.2f}   sim {S.get(k, np.nan):7.2f}")
