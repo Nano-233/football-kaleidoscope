@@ -20,7 +20,7 @@ from .movement import _tf, _unit, nrm, clip
 
 DT = 0.2
 # Single tuning table (calibrated by scripts/calibrate.py against real-football norms).
-TUNE = dict(tackle_sel=8., exposed_k=1.2, surv_k=1.0, gk_shoot=1.4, contact_r=1.6, press_len=3.2, close_t=.5, hurry_k=.3, exec_k=2.0, exec_floor=.15, dec_noise=.15, windup_k=.35, hold_sigma=.7, fade_up=2.2, fade_dn=1.4, lazy_k=.6, xg_run=8., own_goal_cone=.0, head_run=4.2, head_rate=2.5, mom_k=.75, carry_v0=2.0, carry_v1=1.6, cruise_k=0.65, burst_hold=0.4, run_frac=0.7, press_dist=1.75, air_base=0.5, head_on=0.28, head_clear=0.5, air_k=0.5, gk_air=0.6, block_base=0.12, block_nb=0.12, ft_shot=0.315, turn_cost=0.55, turn_rate=3.2, face_k=1.05, pot=2.2, relief=1.0, ft_slow=.0, drive=0.1,  cong_k=0.5, risk_pow=2.2, first_touch=3.0, wide_v=0.35, ctrl_marked=0.5, shoot_hold=0.98, shoot_slope=2.05, shoot_ref=0.168, shoot_press=0.56, adv_lin=.6, pack=.04, shoot_min=.12, react=1.84, patience=0.02, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.76, fk_bonus=0.05, long_bonus=0.163, prog_base=0.5, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=0.8, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=1.3, shot_k=3.15, shot_k_dir=5.0,
+TUNE = dict(read_press=.5, tackle_sel=8., exposed_k=1.2, surv_k=1.0, gk_shoot=1.4, contact_r=1.6, press_len=3.2, close_t=.5, hurry_k=.3, exec_k=2.0, exec_floor=.15, dec_noise=.15, windup_k=.35, hold_sigma=.7, fade_up=2.2, fade_dn=1.4, lazy_k=.6, xg_run=8., own_goal_cone=.0, head_run=4.2, head_rate=2.5, mom_k=.75, carry_v0=2.0, carry_v1=1.6, cruise_k=0.65, burst_hold=0.4, run_frac=0.7, press_dist=1.75, air_base=0.5, head_on=0.28, head_clear=0.5, air_k=0.5, gk_air=0.6, block_base=0.12, block_nb=0.12, ft_shot=0.315, turn_cost=0.55, turn_rate=3.2, face_k=1.05, pot=2.2, relief=1.0, ft_slow=.0, drive=0.1,  cong_k=0.5, risk_pow=2.2, first_touch=3.0, wide_v=0.35, ctrl_marked=0.5, shoot_hold=0.98, shoot_slope=2.05, shoot_ref=0.168, shoot_press=0.56, adv_lin=.6, pack=.04, shoot_min=.12, react=1.84, patience=0.02, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.76, fk_bonus=0.05, long_bonus=0.163, prog_base=0.5, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=0.8, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=1.3, shot_k=3.15, shot_k_dir=5.0,
             carry_base=0.22, carry_prog=.2, carry_streak=.3, dwell_base=0.9, dwell_shape=2.4, dwell_scale=1.61,
             tackle_rate=1.2, wide_error=3.2, off_miss=.2, off_mult=.25)
 TUNE.update(box_start=38., wn_end=42., lag_k=1., drop_k=1.)  # block shape (read by movement.py through TP)
@@ -538,7 +538,7 @@ class Match:
                 own_box = (at[0] < 16.5 if t == 0 else at[0] > L - 16.5) and abs(at[1] - W / 2) < 20.16
                 s.emit("keeper_claim" if own_box else "keeper_sweep", player=i, pos=at)
             elif s.state == "flight":
-                if nrm(np.asarray(at) - s.flight["start"]) < 5:  # right next to the passer: a block, not a read of the pass
+                if nrm(np.asarray(at) - s.flight["start"]) < 2.5:  # right next to the passer: a block, not a read of the pass
                     s.emit("block", player=i, pos=at, shooter=pp["player"], kind="pass")
                 elif s.flight.get("kind") != "lofted":  # winning a high ball is an aerial duel (logged there), not an interception
                     s.emit("interception", player=i, pos=at)
@@ -622,6 +622,7 @@ class Match:
             if len(att):
                 ia = att[np.argmin(d[att])]
                 o = opp[ia]
+                driving = bool(nrm(v) > 1.5 and s.t - s.ctrl_t > .5)  # a dribble is a choice to run at a man; being closed down on receiving the ball is not
                 edge = float(edge_v[ia])
                 kp = bool(s.role[o] == 0)  # a keeper does not tackle: he comes out, spreads himself and smothers the ball at the carrier's feet
                 p_win = float(p_w[ia]) if not kp else sig(.22 * ((a["gk"][o] + .3 * a["strength"][o]) - (a["dribbling"][c] + .3 * a["strength"][c])) - .1 + .5 - edge * 3)
@@ -643,7 +644,7 @@ class Match:
                         s._foul(o, c)
                     else:
                         s.emit("tackle", player=o, pos=s.pos[c], target=s.ids[c], outcome="won")
-                        if front[att[np.argmin(d[att])]] > .7:  # he was running at a man and lost the duel: a failed dribble (a dispossession is losing it without trying to go past anyone)
+                        if front[ia] > .7 and driving:  # he was running at a man and lost the duel: a failed dribble (a dispossession is losing it without trying to go past anyone)
                             s.emit("take_on", player=c, pos=s.pos[c], target=s.ids[o], outcome="lost", p_success=1 - float(p_win))
                         else:
                             s.emit("dispossessed", player=c, pos=s.pos[c])
@@ -653,12 +654,14 @@ class Match:
                         s.last_touch = o
                         s._loose_ball(_unit(s.vel[o] + s.rng.normal(0, 1, 2)) * 2.5)
                     return
-                if front[att[np.argmin(d[att])]] > .7:  # he got past a defender who was in front of him: a take-on
+                if front[ia] > .7 and driving:  # he was running at a man and got past him: a take-on
                     s.emit("take_on", player=c, pos=s.pos[c], target=s.ids[o], outcome="won", p_success=1 - float(p_win))
                     s.emit("dribbled_past", player=o, pos=s.pos[o], by=s.ids[c])
                     s.block_until[o] = s.t + 1.2
                 else:
                     s.emit("tackle", player=o, pos=s.pos[c], target=s.ids[c], outcome="lost")
+        if s.t >= s.protect_until and s.next_dec > s.t + .3 and s._exec_pressure(c) > TUNE["read_press"]:  # he sees the man coming and does not wait for the dwell to run out
+            s.next_dec = s.t + .3
         if s.t >= s.next_dec:
             s._decide()
 
@@ -927,6 +930,8 @@ class Match:
                 d_seg = nrm(O - (C + sp_[:, None] * seg), axis=1)
                 rho = np.maximum(d_seg - .75 * .8 * s.vmax[s._opp(t)] * sp_ * np.sqrt(sl) / 4., 0.)
                 lam_c = TUNE["tackle_rate"] * (1. + 1.5 * float(clip((C[0] - .6 * L) / (.35 * L), 0, 1))) * np.exp(-(rho / TUNE["contact_r"]) ** 2) * .6
+                if o >= 0:
+                    lam_c[o - 11 * (1 - t)] = 0.  # the man he is taking on is priced by p_beat; p_surv is for everyone else on the way (the next man)
                 p_surv = float(np.prod(1. - (1. - np.exp(-lam_c * 1.0)) * .5))
                 p_keep = p_beat * (.4 + .6 * fg) * p_surv ** TUNE["surv_k"] * float(np.exp(-TUNE["cong_k"] * max(float(np.exp(-nrm(O[1:] - cpos, axis=1) / 3.).sum()) - 1., 0)))  # a dribbler avoids walking into a crowd
                 u_c = (p_keep * (TUNE["carry_base"] + TUNE["carry_prog"] * prog_w * (Tf(cpos) - TC)) - (1 - p_keep) * loss_eff - TUNE["carry_streak"] * s.carry_streak + s.mod["carry"][c] + CARRY_ROLE[s.role[c]]
