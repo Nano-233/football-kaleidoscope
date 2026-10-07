@@ -405,7 +405,12 @@ class Match:
         r = s.pos[:, None] - s.pos[None]
         dd = np.maximum(nrm(r, axis=2), 1e-3) + np.eye(22) * 99
         s.pos += (r / dd[..., None] * ((1.6 - dd).clip(0))[..., None]).sum(1) * .35
-        s.pos = clip(s.pos, [-1, -1], [L + 1, W + 1])
+        raw = s.pos.copy()
+        s.pos = clip(s.pos, [0, 0], [L, W])  # nobody plays outside the lines: a wide player who overshoots his spot stops on the line
+        s.vel = np.where(s.pos != raw, 0., s.vel)
+        if s.state == "dead" and s.dead.get("taker") is not None:  # the taker of a throw-in or corner stands just outside
+            tk = int(s.dead["taker"])
+            s.pos[tk] = clip(raw[tk], [-1, -1], [L + 1, W + 1])
         if s.off.any():
             s.pos[s.off], s.vel[s.off] = PARK[s.off], 0
         sp = nrm(s.vel, axis=1)
