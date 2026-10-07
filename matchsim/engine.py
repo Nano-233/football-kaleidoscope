@@ -112,6 +112,7 @@ class Match:
         s.next_dec, s.protect_until = 0., 0.
         s.carry_tgt = s.ball.copy()
         s.carry_dir, s.carry_speed = np.array([1., 0.]), 3.
+        s.space_burst = np.zeros(22, bool)
         s.space_off, s.space_until = np.zeros((22, 2)), np.zeros(22)  # where each off-ball player has chosen to stand (offset from his zone) and until when
         s._reset_positions()
         s.tgt = s.pos.copy()

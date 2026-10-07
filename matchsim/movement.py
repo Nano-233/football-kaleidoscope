@@ -26,6 +26,8 @@ LAG = np.array([0, 8, 8, 2, 1, 0, 0, -10.])  # metres behind the ball each role 
 GS_CAP = np.array([0, 0, 0, 0, 0, 2, 2, 8.])  # how far past the ball (towards the opponent) each role may stand while defending: most men stay goal-side of it
 GOAL = np.array([0., W / 2])
 TUNE_COMMIT = .08
+BACK_PRESS = 6.      # a centre-back or full-back only leaves the line to a carrier this close
+MOVE_BURST = 4.      # an attacker who picks a new spot further away than this gets there at pace
 REST_N = 3           # players kept back as rest defence while the team attacks (the deepest anchored)
 REST_LAG = 16.       # how far behind the ball they stay (m)
 REST_MAX = 54.       # and the furthest up the pitch they go (m from their own goal)
@@ -123,6 +125,8 @@ def seek_space(m, t, P, O, C, zone, role, out_f, skip, line):
         best = score.argmax(1)
         m.space_off[11 * t + idx] = cand[np.arange(n), best] - zone[idx]
         m.space_until[11 * t + idx] = m.t + m.rng.uniform(.8, 1.6, n)
+    far_ = (nrm(m.space_off[sl], axis=1) > MOVE_BURST) & out_f & ~skip
+    m.space_burst[sl] = far_
     return zone + m.space_off[sl] * (out_f & ~skip)[:, None]
 
 
@@ -164,7 +168,7 @@ def cut_lanes(zone, urgent, gate, role, P, O, C, ci):
     w = LANE_CUT * (1. - float(clip((30. - float(nrm(C - GOAL))) / 10., 0, 1)))
     if w < .05:
         return zone, urgent
-    free = np.nonzero((role > GK) & (gate < .6) & ~urgent)[0]
+    free = np.nonzero((role > GK) & (role != CB) & (role != FB) & (gate < .6) & ~urgent)[0]
     if not len(free):
         return zone, urgent
     rec = np.array([j for j in range(1, 11) if j != ci and O[j, 0] < C[0] + 4.])
@@ -341,7 +345,7 @@ def team_targets(m, t):
                         zone[i] = tgt1 + gv * COVER_GAP + inside * 2.0
                         urgent[i] = True
             for i in near[:n]:
-                if d[i] < R:
+                if d[i] < (min(R, BACK_PRESS) if role[i] in (CB, FB) else R):
                     g = 11 * t + i  # jockey goal-side; occasionally commit to the tackle
                     danger = clip((.4 * L - C[0]) / (.3 * L), 0, 1)  # defenders commit more as the ball nears their goal
                     if m.t >= m.commit_until[g] and m.rng.random() < (TUNE_COMMIT + .12 * tc.press) * m.mod["commit"][g] * (1 + COMMIT_DANGER * danger) * m.dt:
@@ -439,6 +443,7 @@ def team_targets(m, t):
             skip = (idx == holder) | urgent | (m.t < m.run_until[sl])
             zone = seek_space(m, t, P, O, P[holder] if mine else B, zone, role, out_f, skip, max(np.sort(O[:, 0])[-2], L / 2))
         urgent |= out_f & (zone[:, 0] - P[:, 0] > 6.) & (B[0] > .3 * L)  # joining the attack: well behind where he should be with the ball in the opposition half, he sprints up instead of jogging
+        urgent |= m.space_burst[sl] & has & out_f & (m.t < m.space_until[sl] - .3)  # moving into space at pace, not drifting
         running = has & (m.t < m.run_until[sl])
         for i in np.nonzero(running)[0]:
             zone[i], urgent[i] = m.run_tgt[11 * t + i], True
