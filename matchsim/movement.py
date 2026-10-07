@@ -30,6 +30,26 @@ WN_END = 42.  # the block follows the ball (each line a fixed distance behind it
 ALLOW = np.array([0, 0, 0, 0, 4., 8., 8., 40.])  # extra metres past the ball a role may stand while defending: only the striker is a real outlet (real freeze frames: 67-83% of defenders are goal-side of the ball)
 GS_CAP = np.array([0, 0, 0, 0, 0, 2, 2, 8.])  # how far past the ball (towards the opponent) each role may stand while defending: most men stay goal-side of it
 GOAL = np.array([0., W / 2])
+
+
+def _load_xt():
+    """Expected-threat surface (value of holding the ball at each spot) from real events, see scripts/xt.py."""
+    import json, pathlib
+    f = pathlib.Path(__file__).resolve().parents[1] / "reference" / "xt_grid.json"
+    return np.array(json.loads(f.read_text())["xt"]) if f.exists() else None
+
+
+_XTG = _load_xt()
+
+
+def XT(p):
+    """Bilinear xT at points p (..., 2) in the attacking-left-to-right frame (the opponent's goal at x = L)."""
+    from scipy.ndimage import map_coordinates
+    p = np.asarray(p, float)
+    nx, ny = _XTG.shape
+    cx = np.clip(p[..., 0] / L * nx - .5, 0, nx - 1)
+    cy = np.clip(p[..., 1] / W * ny - .5, 0, ny - 1)
+    return map_coordinates(_XTG, [np.atleast_1d(cx).ravel(), np.atleast_1d(cy).ravel()], order=1, mode="nearest").reshape(np.shape(cx))
 TUNE_COMMIT = .08
 RING_MIN = 11.       # supporting players do not want to stand closer than this to the carrier (m)
 RING_K = 1.8         # how much they mind
@@ -151,66 +171,101 @@ def seek_space(m, t, P, O, C, zone, role, out_f, skip, line):
     return zone + m.space_off[sl] * (out_f & ~skip)[:, None]
 
 
-def defensive_jobs(m, t, zone, urgent, role, P, O, C, ci, tc):
-    """Every defender near his goal has a job: a man to stay with, the shot lane, or the post. Nobody stands about and nobody is
-    stacked on a line that one body already covers.
+def defend_assign(m, t, zone, urgent, role, P, O, Ov, C, Cv, ci, tc, tgt1, cover_pt, R_press, in_range, cover_ok, d_ball, avail=None, with_press=True):
+    """The defence as one connected system: every outfield defender is assigned the job that is worth most to the team, and the assignment is solved
+    for all of them together, so when one man leaves his job the others re-arrange around it.
 
-    Jobs are generated from the position of the ball (or where it is going) and the attackers, each with a value, and the free
-    defenders are assigned by the cheapest total (running time minus value; skipping a job is allowed). Values:
-      mark   an attacker near goal, worth more the closer he is to goal, the clearer the pass to him, and when nobody is near him
-      lane   one body on the line from the ball to goal, worth more the better the shot the carrier has (twice a lower value if the
-             man closing him is already standing on it)
-      post   one defender covering the near post/goal line when the ball can be shot, crossed or cut back
-    A marker stands goal-side of his man and leans to the ball side; in the box he is between the man and the goal first."""
-    free = np.nonzero((role > GK) & ~urgent)[0]
-    if not len(free):
-        return zone, urgent
+    Jobs, each with a value (seconds of running it is worth) and a place to stand:
+      press   the man on the ball (one, two for a high press), only for those within reach
+      cover   behind the presser on the inside, when the ball is in the defensive two thirds
+      mark    each attacker, worth the threat he carries: where he stands (expected threat of that spot) x the chance the ball gets to him (an open
+              lane from the carrier, where nobody stands in the way) x more when he is running at goal; he is covered goal-side with a lean to the ball
+      lane    one body on the line from the ball to goal when the carrier can shoot
+      post    one man on the near post / goal line when the ball can be shot, crossed or cut back
+      space   the cut-back area when the ball is wide and deep
+    The cost of a job for a defender is the time to get there (minus nothing for a job he already has: a defender keeps his job unless another is clearly
+    worth more), a defender may take none and then holds his place in the block. Dangerous men are therefore always picked up; when the nearest man is
+    pulled out to the ball, the next one slides across to the most dangerous free attacker, and the chain ends with the least dangerous man left alone."""
+    outf = np.nonzero((role > GK) & (np.ones(len(role), bool) if avail is None else avail))[0]
+    if not len(outf):
+        return zone, urgent, [], []
     dgc = float(nrm(C - GOAL))
-    jobs, vals, codes = [], [], []
     side = 1. if C[1] >= W / 2 else -1.
-    # --- marks
-    cand = [j for j in range(1, 11) if j != ci]
-    for j in cand:
+    jobs, vals, codes, kinds, allowed = [], [], [], [], []
+    n_def = len(P)
+
+    def add(pos, val, code, kind, ok=None):
+        jobs.append(np.asarray(pos, float)); vals.append(val); codes.append(code); kinds.append(kind); allowed.append(np.ones(n_def, bool) if ok is None else ok)
+
+    # press (one or two) and cover
+    n_press = 1 + (tc.press > .8)
+    back = (role == CB) | (role == FB)
+    ok_press = (d_ball < np.where(back & ~in_range, np.minimum(R_press, BACK_PRESS), R_press))
+    for k in range(n_press if with_press else 0):
+        add(tgt1 if k == 0 else tgt1 + _unit(GOAL - C) * 3. + np.array([0., side * 2.]), TP.get("press_v", 7.) * (1. if k == 0 else .5), 200 + k, "press", ok_press)
+    if cover_ok and with_press:
+        ok_cov = (d_ball < np.where(back, BACK_PRESS + 6., 24.))
+        add(cover_pt, TP.get("cover_v", 3.5), 210, "cover", ok_cov)
+    # marks
+    vlan = C
+    for j in range(1, 11):
+        if j == ci:
+            continue
         o = O[j]
         dg = float(nrm(o - GOAL))
-        if dg > TP.get("jobs_att", 40.):
+        xt_a = float(XT(np.array([L - o[0], W - o[1]])))  # the spot he stands on, valued from his own team's point of view
+        ab = o - C
+        dl = float(nrm(ab))
+        run = float(clip(float((Ov[j] * _unit(GOAL - o)).sum()) / 6., 0, 1))
+        if dl > 1e-3:
+            end = C + ab * max(1. - 2.5 / dl, 0.)  # the lane up to the last couple of metres: a man standing goal-side of him does not close it
+            segv = end - C
+            s_ = clip(((P[outf] - C) @ segv) / max(float(segv @ segv), 1e-6), 0, 1)
+            lane_open = float(clip(nrm(P[outf] - (C + s_[:, None] * segv), axis=1).min() / 2.5, 0, 1))
+        else:
+            lane_open = 1.
+        v = TP.get("mark_k", 100.) * xt_a * (.3 + .7 * lane_open) * (1. + .7 * run) * float(np.exp(-dl / 45.))
+        if v < .25:
             continue
-        near_def = float(nrm(P[role > GK] - o, axis=1).min())
-        v = TP.get("job_mark", 3.) * float(np.exp(-dg / 18.)) * (.55 + .45 * float(clip(near_def / 4., 0, 1)))
-        if o[0] > C[0] + 6.:  # well behind the ball and far from it: a long way to find
-            v *= .6
-        wb = BALL_SIDE * float(clip(nrm(C - o) / 20., 0, 1)) * float(clip(dg / TP.get("lean_r", 24.), TP.get("lean_min", .35), 1.))
-        spot = o + _unit(_unit(GOAL - o) + wb * _unit(C - o)) * (TP.get("mark_gap", MARK_GAP) + 1.4 * (1 - tc.marking))
-        jobs.append(spot); vals.append(v); codes.append(j)
-    # --- shot lane
+        wb = TP.get("ball_side", BALL_SIDE) * float(clip(dl / 20., 0, 1)) * float(clip(dg / TP.get("lean_r", 24.), TP.get("lean_min", .35), 1.))
+        spot = o + Ov[j] * .5 + _unit(_unit(GOAL - o) + wb * _unit(C - o)) * (TP.get("mark_gap", MARK_GAP) + 1.4 * (1 - tc.marking))
+        add(spot, v, j, "mark")
+    # lane, post, space
     if dgc < 30.:
-        xg0 = float(np.exp(-dgc / 12.)) * .4
-        lane_pt = C + _unit(GOAL - C) * max(4., .45 * dgc)
-        jobs.append(lane_pt); vals.append(min(TP.get("job_lane", 12.) * xg0, 2.2)); codes.append(100)
-    # --- post / goal line
+        add(C + _unit(GOAL - C) * max(4., .45 * dgc), TP.get("lane_k", 35.) * float(np.exp(-dgc / 12.)) * .4, 100, "lane")
     if dgc < 26.:
-        jobs.append(np.array([1.6, W / 2 + side * 2.8])); vals.append(TP.get("job_post", 1.4) * float(clip((28. - dgc) / 12., 0, 1))); codes.append(101)
+        add(np.array([1.6, W / 2 + side * 2.8]), TP.get("post_v", 5.) * float(clip((28. - dgc) / 12., 0, 1)), 101, "post")
+    if dgc < 30. and abs(C[1] - W / 2) > 14.:
+        add(np.array([11., W / 2 + .3 * (C[1] - W / 2)]), TP.get("space_v", 3.), 102, "space")
     if not jobs:
-        return zone, urgent
-    jobs = np.array(jobs); vals = np.array(vals)
-    vref, wv = 6., TP.get("job_wv", 4.)
-    cost = cdist(P[free], jobs) / vref - vals[None, :] * wv
-    prev = m.job_prev[t][free]
-    cost = cost - TP.get("job_hyst", 1.5) * (prev[:, None] == np.array(codes)[None, :])  # a defender keeps his job unless another is clearly worth more
-    ndum = len(free)
-    cost = np.concatenate([cost, np.zeros((len(free), ndum))], axis=1)  # a defender may take no job
+        return zone, urgent, [], []
+    jobs = np.array(jobs); vals = np.array(vals); codes = np.array(codes)
+    vref = 6.
+    trav = cdist(P[outf], jobs) / vref
+    cost = trav - vals[None, :]
+    cost = cost - TP.get("job_hyst", 1.5) * (m.job_prev[t][outf][:, None] == codes[None, :])
+    al = np.array(allowed)[:, outf].T
+    cost = np.where(al, cost, 1e3)
+    cost = np.concatenate([cost, np.zeros((len(outf), len(outf)))], axis=1)
     r, c = linear_sum_assignment(cost)
-    w = TP.get("jobs_w", .9) * float(clip((TP.get("jobs_d", 38.) - dgc) / 8., 0, 1))
-    m.job_prev[t][:] = -1
+    m.job_prev[t][outf] = -1
+    press_ids, cover_ids = [], []
     for i_, k_ in zip(r, c):
-        if k_ >= len(jobs):
+        if k_ >= len(jobs) or cost[i_, k_] >= 1e3:
             continue
-        i = free[i_]
+        i = int(outf[i_])
         m.job_prev[t][i] = codes[k_]
-        zone[i] = zone[i] * (1 - w) + jobs[k_] * w
-        if float(nrm(P[i] - jobs[k_])) > 4.:
-            urgent[i] = True
-    return zone, urgent
+        if kinds[k_] == "press":
+            press_ids.append(i)
+        elif kinds[k_] == "cover":
+            cover_ids.append(i)
+            zone[i] = jobs[k_]; urgent[i] = True
+        else:
+            w = TP.get("jobs_w", .9)
+            zone[i] = zone[i] * (1 - w) + jobs[k_] * w
+            if float(nrm(P[i] - jobs[k_])) > 4.:
+                urgent[i] = True
+    return zone, urgent, press_ids, cover_ids
 
 
 def box_defence(m, B, zone, urgent, gate, role, P):
@@ -457,31 +512,34 @@ def team_targets(m, t):
             d = nrm(P - C, axis=1)
             d[role == GK] = 1e9
             n = 1 + (tc.press > .8)
-            # who presses and who covers: the nearest man who is free to. A defender with a dangerous man to stay with, and the back line when the ball is not
-            # in their area, are not pulled out to the ball (his man would run in behind him)
-            busy = (gate > TP.get("busy_gate", .6)) | (((role == CB) | (role == FB)) & (d > BACK_PRESS + 2.))
-            keep_ = np.zeros(11); keep_[[i for i in m.press_prev[t] if i < 11]] = TP.get("press_hyst", 2.0)
-            near = np.argsort(d + 40. * busy - keep_)  # the man who was closing him keeps doing so unless someone is clearly nearer
-            m.press_prev[t] = [int(i) for i in near[:n + 1]]
             gap = (2.4 + 1.4 * (1 - tc.press) + .15 * cs) * TP.get("jock_k", 1.)
             tgt1 = C + _unit(gv + FORCE_WIDE * inside) * (gap * (TP.get("shot_gap", .7) if float(nrm(C - GOAL)) < TP.get("shoot_close", 28.) else 1.)) + Cv * .2
-            if depth < .62:  # cover behind the presser, shifted to the inside
-                for i in near[n:n + 1]:
-                    if d[i] < 24:
-                        zone[i] = tgt1 + gv * COVER_GAP + inside * 2.0
-                        urgent[i] = True
             in_range = float(nrm(C - GOAL)) < TP.get("shoot_close", 28.)  # the carrier can shoot: the nearest man, whatever his role, gets tight and stands in the shot lane
             if in_range:
                 R = max(R, 12.)
-            for i in near[:n]:
-                if d[i] < (R if in_range else (min(R, BACK_PRESS) if role[i] in (CB, FB) else R)):
-                    g = 11 * t + i  # jockey goal-side; occasionally commit to the tackle
-                    danger = clip((.4 * L - C[0]) / (.3 * L), 0, 1)  # defenders commit more as the ball nears their goal
-                    if m.t >= m.commit_until[g] and m.rng.random() < (TUNE_COMMIT + .12 * tc.press) * m.mod["commit"][g] * (1 + COMMIT_DANGER * danger) * m.dt:
-                        m.commit_until[g] = m.t + m.rng.uniform(1., 2.)
-                    zone[i] = C + Cv * .2 if m.t < m.commit_until[g] else tgt1
-                    urgent[i] = True
-                    m.sprint_hint[g] = True  # the presser goes for the ball
+            cover_pt = tgt1 + gv * COVER_GAP + inside * 2.0
+            if TP.get("assign_on", 1.):
+                Ov = fv(m.vel[osl])
+                zone, urgent, press_ids, cover_ids = defend_assign(m, t, zone, urgent, role, P, O, Ov, C, Cv, carrier - 11 * (1 - t), tc, tgt1, cover_pt, R, in_range, depth < .62, d)
+            else:
+                busy = (gate > TP.get("busy_gate", .6)) | (((role == CB) | (role == FB)) & (d > BACK_PRESS + 2.))
+                keep_ = np.zeros(11); keep_[[i for i in m.press_prev[t] if i < 11]] = TP.get("press_hyst", 2.0)
+                near = np.argsort(d + 40. * busy - keep_)
+                m.press_prev[t] = [int(i) for i in near[:n + 1]]
+                if depth < .62:
+                    for i in near[n:n + 1]:
+                        if d[i] < 24:
+                            zone[i] = cover_pt
+                            urgent[i] = True
+                press_ids = [int(i) for i in near[:n] if d[i] < (R if in_range else (min(R, BACK_PRESS) if role[i] in (CB, FB) else R))]
+            for i in press_ids:
+                g = 11 * t + i  # jockey goal-side; occasionally commit to the tackle
+                danger = clip((.4 * L - C[0]) / (.3 * L), 0, 1)  # defenders commit more as the ball nears their goal
+                if m.t >= m.commit_until[g] and m.rng.random() < (TUNE_COMMIT + .12 * tc.press) * m.mod["commit"][g] * (1 + COMMIT_DANGER * danger) * m.dt:
+                    m.commit_until[g] = m.t + m.rng.uniform(1., 2.)
+                zone[i] = C + Cv * .2 if m.t < m.commit_until[g] else tgt1
+                urgent[i] = True
+                m.sprint_hint[g] = True  # the presser goes for the ball
         elif m.state == "dead" and kind == "free_kick" and np.hypot(B[0], B[1] - W / 2) < 32:  # wall on the line to goal, 9.15 m back
             dist = float(np.hypot(B[0], B[1] - W / 2))
             n = 5 if dist < 19 else 4 if dist < 25 else 3
@@ -535,19 +593,20 @@ def team_targets(m, t):
                     zone[i], urgent[i] = e_ + _unit(GOAL - e_) * TP.get("close_gap", 1.5), True
                     m.sprint_hint[11 * t + i] = True  # closing the receiver
                     break
+            if TP.get("assign_on", 1.) and m.flight["rcv"] >= 0 and m.flight["rcv"] // 11 == 1 - t:  # everyone else is covering as if the receiver already had it: the same assignment, around where the ball is going
+                avail = ~urgent
+                zone, urgent, _, _ = defend_assign(m, t, zone, urgent, role, P, O, fv(m.vel[osl]), e_, np.zeros(2), m.flight["rcv"] - 11 * (1 - t), tc, e_, e_, 0., False, False, nrm(P - e_, axis=1), avail, False)
         if m.state != "dead":
             bl = ((role == CB) | (role == FB)) & ~urgent & (gate < TP.get("flat_gate", .6))  # a defender who has a man running at goal stays with him: the line does not pull him back level
             if bl.sum() >= 2 and float(nrm(B - GOAL)) > 26.:  # marking must not pull defenders out of the line: re-flatten it (outside the box)
                 mx = zone[bl, 0].mean()
                 zone[bl, 0] = mx + LINE_FLAT2 * (zone[bl, 0] - mx)
             if m.poss == 1 - t and carrier >= 0:
-                if TP.get("jobs_on", 1.) and float(nrm(O[carrier - 11 * (1 - t)] - GOAL)) < TP.get("jobs_d", 38.):
-                    zone, urgent = defensive_jobs(m, t, zone, urgent, role, P, O, O[carrier - 11 * (1 - t)], carrier - 11 * (1 - t), tc)
-                else:
+                if not TP.get("assign_on", 1.):
                     zone, urgent = pick_up_free(zone, urgent, gate, role, P, O, carrier - 11 * (1 - t), tc)
-                    zone, urgent = cut_lanes(zone, urgent, gate, role, P, O, O[carrier - 11 * (1 - t)], carrier - 11 * (1 - t))
+                zone, urgent = cut_lanes(zone, urgent, gate, role, P, O, O[carrier - 11 * (1 - t)], carrier - 11 * (1 - t))
             Bd = f(m.flight["end"]) if m.state == "flight" and m.flight["kind"] in ("ground", "lofted") and m.flight["team"] != t else B  # build the cone around where the ball is going
-            if not (TP.get("jobs_on", 1.) and m.poss == 1 - t and carrier >= 0 and float(nrm(O[carrier - 11 * (1 - t)] - GOAL)) < TP.get("jobs_d", 38.)):
+            if not (TP.get("assign_on", 1.) and m.poss == 1 - t and carrier >= 0):
                 zone, urgent = box_defence(m, Bd, zone, urgent, gate, role, P)
             urgent |= (gate > .6) & (nrm(zone - P, axis=1) > 2.5)  # a man-marker in the danger area stays with his man at the man's pace
             behind_m = (gate > .6) & (nrm(zone - P, axis=1) > TP.get("mark_sprint_d", 3.0))  # a marker who is losing his man goes flat out: effort follows need, he does not jog after a sprinting forward
