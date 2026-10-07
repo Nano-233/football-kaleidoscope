@@ -377,8 +377,10 @@ class Match:
         mind = movement.MIND[s.role]  # how attack-minded the role is
         fade_own = s.poss_fade[np.arange(22) // 11]
         lazy_role = mind + fade_own * (1. - 2. * mind)  # forwards idle when their side has no ball, defenders when their side has it all
-        lazy = np.clip((d_ball - 20.) / 45., 0, 1) * (.5 + .5 * lazy_role)
+        lazy = np.clip((d_ball - 20.) / 45., 0, 1) * (.5 + .5 * lazy_role) * (s.state != "dead")  # at a dead ball everyone gets to his place at a normal jog
         jog = np.minimum(vmax, (4.3 + .07 * s.attr["work_rate"]) * energy) * (1. - TUNE["lazy_k"] * lazy)
+        if s.state == "dead":
+            jog = np.minimum(vmax, np.maximum(jog, 3.6))  # between phases everyone jogs to his place; the open-play work-rate cap would turn a centre-back's run to a corner into a walk
         cap = np.where(sprint, vmax, np.where(urg, vmax * TUNE["run_frac"], jog))
         if s.state == "held":
             cap[s.carrier] = min(cap[s.carrier], s.carry_speed * s.carry_scale, .85 * vmax[s.carrier])
