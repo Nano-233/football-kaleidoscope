@@ -24,6 +24,7 @@ MIND = np.array([0., .1, .25, .35, .5, .75, .7, .9])  # attack-mindedness by rol
 MIN_X = np.array([0, 6, 6, 9, 10, 11, 12, 16.])
 COMPRESS = np.array([0, 1., 1., 1., 1., 1., .9, .4])  # share of the 'get behind the ball' pull each role feels near his own goal (GK CB FB DM CM WG AM ST)
 LAG = np.array([0, 10, 10, 7, 7, 6, 6, -4.])  # metres behind the ball each role stands when the ball is near its goal (a compact block that follows the ball)  # deepest a role will drop (defenders hold the box edge, they do not hug the goal line)
+TP = {}  # the engine's TUNE table (set by engine.py) so the calibration can reach the block-shape constants below
 BOX_START = 38.  # the defence starts filling the box lanes once the ball is this close to goal (they read the attack early; fully set 10 m closer)
 WN_END = 42.  # the block follows the ball (each line a fixed distance behind it) once the ball is closer than this to our goal
 ALLOW = np.array([0, 0, 0, 0, 4., 8., 8., 40.])  # extra metres past the ball a role may stand while defending: only the striker is a real outlet (real freeze frames: 67-83% of defenders are goal-side of the ball)
@@ -150,9 +151,10 @@ def box_defence(m, B, zone, urgent, gate, role, P):
     penalty spot (cut-backs) and the edge of the area (second balls). Defenders take them by shortest total distance; those
     committed to a man can be taken too (a marker who is also in the shot lane serves both), at a cost."""
     dgl = float(nrm(B - GOAL))
-    if dgl >= BOX_START:
+    bs = TP.get("box_start", BOX_START)
+    if dgl >= bs:
         return zone, urgent
-    wz = float(clip((BOX_START - dgl) / 10, 0, 1))
+    wz = float(clip((bs - dgl) / 10, 0, 1))
     free = np.nonzero((role > GK) & ~urgent)[0]
     if not len(free):
         return zone, urgent
@@ -282,13 +284,13 @@ def team_targets(m, t):
     by = B[1] - W / 2
     fd = float(m.poss_fade[t])  # 1 = a side that has had the ball for a while, 0 = one that has just lost it: the shape moves between the two smoothly
     ph = clip(.45 + B[0] / L, .5, 1.1)
-    tx = tx + fd * PUSH[role] * (.6 + .8 * tc.risk) * ph + (1 - fd) * DROP[role] * clip(1.25 - tc.press, .3, 1.2)
+    tx = tx + fd * PUSH[role] * (.6 + .8 * tc.risk) * ph + (1 - fd) * DROP[role] * TP.get("drop_k", 1.) * clip(1.25 - tc.press, .3, 1.2)
     ty = (W / 2 + (A[:, 1] - W / 2) * (fd * (1 + (tc.width - .5) * .7) + (1 - fd) * (1 - NARROW * tc.compactness))
           + by * (fd * (.2 + FRONT_SHIFT * ((role == ST) | (role == AM))) + (1 - fd) * (.28 + .22 * tc.compactness)) * out_f)  # the front line drifts to the ball side to link up
     tx = np.maximum(tx, MIN_X[role])
     if not has:  # defending: near our goal the block follows the ball, each line a fixed distance behind it
-        wn = float(clip((WN_END - B[0]) / 12., 0, 1)) * COMPRESS[role]  # how far this role is pulled onto the ball: the back line fully, forwards hardly (they are the outlet)
-        tx = np.where(out_f, tx * (1 - wn) + np.maximum(B[0] - LAG[role] * (1.25 - .5 * tc.press), MIN_X[role]) * wn, tx)
+        wn = float(clip((TP.get("wn_end", WN_END) - B[0]) / 12., 0, 1)) * COMPRESS[role]  # how far this role is pulled onto the ball: the back line fully, forwards hardly (they are the outlet)
+        tx = np.where(out_f, tx * (1 - wn) + np.maximum(B[0] - LAG[role] * TP.get("lag_k", 1.) * (1.25 - .5 * tc.press), MIN_X[role]) * wn, tx)
         tx = np.where(out_f, np.minimum(tx, np.maximum(B[0] + GS_CAP[role] * (.6 + .8 * tc.press), MIN_X[role]) + ALLOW[role]), tx)
     if not has:
         bl = (role == CB) | (role == FB)

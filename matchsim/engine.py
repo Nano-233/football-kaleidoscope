@@ -23,6 +23,8 @@ DT = 0.2
 TUNE = dict(surv_k=1.0, gk_shoot=1.4, contact_r=1.6, press_len=3.2, close_t=.5, hurry_k=.3, exec_k=2.0, exec_floor=.15, dec_noise=.15, windup_k=.35, hold_sigma=.7, fade_up=2.2, fade_dn=1.4, lazy_k=.6, xg_run=8., own_goal_cone=.0, head_run=4.2, head_rate=2.5, mom_k=.75, carry_v0=2.0, carry_v1=1.6, cruise_k=0.65, burst_hold=0.4, run_frac=0.7, press_dist=1.75, air_base=0.5, head_on=0.28, head_clear=0.5, air_k=0.5, gk_air=0.6, block_base=0.12, block_nb=0.12, ft_shot=0.315, turn_cost=0.55, turn_rate=3.2, face_k=1.05, pot=2.2, relief=1.0, ft_slow=.0, drive=0.1,  cong_k=0.5, risk_pow=2.2, first_touch=3.0, wide_v=0.35, ctrl_marked=0.5, shoot_hold=0.98, shoot_slope=2.05, shoot_ref=0.168, shoot_press=0.56, adv_lin=.6, pack=.04, shoot_min=.12, react=1.84, patience=0.02, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.76, fk_bonus=0.05, long_bonus=0.163, prog_base=0.5, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=0.8, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=1.3, shot_k=3.15, shot_k_dir=5.0,
             carry_base=0.22, carry_prog=.2, carry_streak=.3, dwell_base=0.9, dwell_shape=2.4, dwell_scale=1.61,
             tackle_rate=1.2, wide_error=3.2, off_miss=.2, off_mult=.25)
+TUNE.update(box_start=38., wn_end=42., lag_k=1., drop_k=1.)  # block shape (read by movement.py through TP)
+movement.TP = TUNE
 sig = lambda x: 1 / (1 + np.exp(-x))
 GOAL_HALF = 3.66
 _MULT = ("shot", "runs", "follow", "prog", "loss", "cruise", "commit", "foul", "tackle")
@@ -592,7 +594,7 @@ class Match:
         fg = s._face_goal(c)
         if fg > .5 and nrm(v) < 1.5 and s.next_dec > s.t:
             s.carry_dir = _unit(np.array([L if t == 0 else 0., W / 2]) - s.pos[c]) if s.carry_speed < 1.2 else s.carry_dir
-        s.ball, s.ball_v = s.pos[c] + face * .5, v.copy()
+        s.ball, s.ball_v = s.pos[c] + face * (.4 + .1 * min(float(nrm(v)), 7.)), v.copy()  # close control when walking, the ball a stride ahead at a sprint: the faster he runs the more exposed it is
         for k in np.nonzero((d < 1.7) & (s.role[opp] > 0))[0]:  # a defender within a couple of metres is pressing the carrier
             if s.t - s.last_press[opp[k]] > 4.:
                 s.emit("pressure", player=opp[k], pos=s.pos[opp[k]], target=s.ids[c], counterpress=bool(s.t < s.trans_until[1 - t]))
