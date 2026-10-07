@@ -20,7 +20,7 @@ from .movement import _tf, _unit, nrm, clip
 
 DT = 0.2
 # Single tuning table (calibrated by scripts/calibrate.py against real-football norms).
-TUNE = dict(block_base=0.12, block_nb=0.12, ft_shot=0.315, turn_cost=0.55, turn_rate=3.2, face_k=0.6, pot=2.19, relief=1.0, ft_slow=.0, drive=0.4,  cong_k=0.5, risk_pow=2.2, first_touch=3.0, wide_v=0.74, ctrl_marked=0.33, shoot_hold=0.98, shoot_slope=2.05, shoot_ref=0.168, shoot_press=0.56, adv_lin=.6, pack=.04, shoot_min=.12, react=2.32, patience=0.02, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.4, fk_bonus=0.05, long_bonus=0.163, prog_base=0.75, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=1.3, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=1.3, shot_k=3.15, shot_k_dir=5.0,
+TUNE = dict(air_base=.5, head_on=.28, head_clear=.5, air_k=.5, gk_air=.6, block_base=0.12, block_nb=0.12, ft_shot=0.315, turn_cost=0.55, turn_rate=3.2, face_k=0.6, pot=2.19, relief=1.0, ft_slow=.0, drive=0.4,  cong_k=0.5, risk_pow=2.2, first_touch=3.0, wide_v=0.74, ctrl_marked=0.33, shoot_hold=0.98, shoot_slope=2.05, shoot_ref=0.168, shoot_press=0.56, adv_lin=.6, pack=.04, shoot_min=.12, react=2.32, patience=0.02, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.4, fk_bonus=0.05, long_bonus=0.163, prog_base=0.75, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=1.3, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=1.3, shot_k=3.15, shot_k_dir=5.0,
             carry_base=0.22, carry_prog=.2, carry_streak=.3, dwell_base=0.9, dwell_shape=2.4, dwell_scale=1.61,
             tackle_rate=2.84, wide_error=3.2, off_miss=.2, off_mult=.25)
 sig = lambda x: 1 / (1 + np.exp(-x))
@@ -653,15 +653,18 @@ class Match:
         if rk in ("throw_in", "drop_ball", "indirect_free_kick"):
             vis &= dist < 28
         if rk == "goal_kick":
-            vis &= dist > 8
+            vis = (dist > 8) & (dist < 68) & ~s.off[11 * t + mates]  # a goal kick can reach the halfway line and beyond, whatever his usual range of vision
         if not (C[0] < .45 * L or pr > .4):
             vis &= s.role[11 * t + mates] != 0
         vis &= ~s.off[11 * t + mates]
         if vis.any():
             m_ = mates[vis]
+            dist0 = nrm(P[m_] - C, axis=1)
+            air = np.nonzero((dist0 > 12.) & (dist0 < (68. if rk == "goal_kick" else 55.)))[0]  # any target further than a dozen metres can also be played in the air (chip, diagonal, long ball)
+            lofted = np.concatenate([np.zeros(len(m_), bool), np.ones(len(air), bool)])
+            m_ = np.concatenate([m_, m_[air]])
             Pm, Vm = P[m_], Vp[m_]
             dist = nrm(Pm - C, axis=1)
-            lofted = (dist > 30) & (s.rng.random(len(m_)) < .35 + .5 * tc.directness)
             spd = clip(11 + .3 * dist, 11, 24)
             runner = s.t < s.run_until[11 * t + m_]  # a runner is played into space well ahead of him: through ball
             tgt = clip(Pm + Vm * (np.minimum(dist / spd, 1.5) * np.where(runner, 1.3, .8))[:, None], [1, 1], [L - 1, W - 1])
@@ -680,7 +683,7 @@ class Match:
             cong_r = np.exp(-dd_r / 3.).sum(1)  # how crowded the receiver's space is: bodies within a few metres
             tech = (a["dribbling"][11 * t + m_] + a["composure"][11 * t + m_]) / 2
             p_ctrl = clip((.97 - TUNE["ctrl_marked"] * np.exp(-(dn_r - .5) / 1.6) + .004 * (tech - 10)) * np.exp(-TUNE["cong_k"] * np.maximum(cong_r - 1., 0)), .2, .98)  # a defender on the receiver contests the first touch
-            p_air = clip(.55 + .02 * (a["aerial"][11 * t + m_] - a["aerial"][s._opp(t)].mean()), .2, .85)
+            p_air = clip((.55 + .02 * (a["aerial"][11 * t + m_] - a["aerial"][s._opp(t)].mean())) * np.exp(-.3 * np.maximum(cong_r - .6, 0)), .15, .85)  # an aerial contest: his height against the defenders around him
             p_ctrl = np.where(lofted, p_air, p_ctrl)
             sg = (.5 + .05 * d2) * (TUNE["pass_sigma"] * (1 - .0353 * a["passing"][c])) * (1 + .35 * pr) * np.where(lofted, 1.5, 1)
             p_acc = 1 - np.exp(-(2.5 ** 2) / (2 * sg ** 2))
@@ -708,8 +711,9 @@ class Match:
             for j_ in inbox_m[np.argsort(-Vf(tgt[inbox_m]))][:4]:  # could a teammate get a better chance than mine?
                 best_mate = max(best_mate, float(p_s[j_]) * s._xg(tgt[j_], O[s.role[s._opp(t)] > 0])[0])
             u = u + TUNE["long_bonus"] * (.3 + tc.directness) * ((d2 > 28) & (Vf(tgt) - VC > .06))  # direct teams go long
-            if rk == "goal_kick":  # keepers go long when the team plays direct
-                u = u + TUNE["gk_long"] * tc.directness * (d2 > 30)
+            u = u + (TUNE["air_base"] + TUNE["air_k"] * (tc.directness - .4)) * lofted  # direct sides play it in the air more, patient ones keep it on the floor
+            if rk == "goal_kick":  # a goal kick is mostly a long ball to a contest, unless the opponent leaves the short option free
+                u = u + TUNE["gk_long"] * tc.directness * (d2 > 30) + TUNE["gk_air"] * lofted * clip((d2 - 25.) / 20., 0, 1)
             for k in range(len(m_)):
                 U.append(u[k]); K.append("pass"); X.append((11 * t + m_[k], tgt[k], bool(lofted[k]), spd[k], p_s[k]))
         # -- shot
@@ -793,7 +797,7 @@ class Match:
             s.carry_streak = 0
         if kind == "pass":
             j, tgt_, lofted_, spd_, ps = x
-            s._pass(c, j, f(tgt_), lofted_, spd_, ps, why=why, hands_ok=rk != "goal_kick", source="throw_in" if rk == "throw_in" else None)
+            s._pass(c, j, f(tgt_), lofted_, spd_, ps, why=why, hands_ok=rk != "goal_kick", source="throw_in" if rk == "throw_in" else "goal_kick" if rk == "goal_kick" else None)
         elif kind == "shot":
             s._shoot(c, C, xg=x[0], nb=x[1], kind="free_kick_shot" if rk == "free_kick" else "shot", why=why)
         elif kind == "clear":
@@ -842,7 +846,7 @@ class Match:
                             hold=round(float(s.t - s.ctrl_t), 2), chosen=int(k), opts=opts))
 
     # ------------------------------------------------------------------ actions
-    def _pass(s, c, rcv, aim, lofted, spd, est, kind="pass", sigma_scale=1.0, why=None, source=None, hands_ok=True):
+    def _pass(s, c, rcv, aim, lofted, spd, est, kind="pass", sigma_scale=1.0, why=None, source=None, hands_ok=True, body="foot"):
         t = c // 11
         start = s.ball.copy()
         d = nrm(aim - start)
@@ -860,16 +864,18 @@ class Match:
         fwd = abs(gx - start[0]) - abs(gx - aim[0])  # metres gained towards the opposition goal
         f_ = _tf if t else (lambda x: x)
         line = np.sort(f_(s.pos[s._opp(t)])[:, 0])[-2]
-        offside = bool(kind == "pass" and source not in ("short_corner", "throw_in") and rcv is not None and f_(s.pos[rcv])[0] > max(line, f_(start)[0]) + .3 and f_(s.pos[rcv])[0] > L / 2)
+        offside = bool(kind == "pass" and source not in ("short_corner", "throw_in", "goal_kick") and rcv is not None and f_(s.pos[rcv])[0] > max(line, f_(start)[0]) + .3 and f_(s.pos[rcv])[0] > L / 2)
         lat = abs(aim[1] - start[1])
         technique = ("long_ball" if lofted and d > 30 else "switch" if lat > 28 and fwd < 12 else
                      "through_ball" if not lofted and fwd > 10 and f_(aim)[0] > line + 1 else "forward" if fwd > 8 else "backward" if fwd < -5 else "sideways")
+        if body == "head" and not hands:
+            technique = "header_pass"
         if hands:
             technique = "keeper_throw"
         elif source == "throw_in":
             technique = "throw_in"
         ev = s.emit(kind, player=c, pos=start, end=aim, length=d, speed=spd, lofted=lofted, height="high" if lofted else "ground",
-                    body_part="hands" if (hands or source == "throw_in") else "foot", technique=technique, hold=round(float(s.t - s.ctrl_t), 2), receiver=None if rcv is None else s.ids[rcv], p_success=est,
+                    body_part="hands" if (hands or source == "throw_in") else body, technique=technique, hold=round(float(s.t - s.ctrl_t), 2), receiver=None if rcv is None else s.ids[rcv], p_success=est,
                     difficulty=1 - est, progressive=bool(fwd >= 10), gain=round(float(fwd), 1), source=source, outcome=None, why=why)
         s._end_spell()
         if offside:
@@ -1225,6 +1231,33 @@ class Match:
             return s._aerial(f)
         s._loose_ball(_unit(f["end"] - f["start"]) * f["speed"] * .5)
 
+    def _head_target(s, i):
+        """Where a header goes: a team-mate with room, further up the pitch if possible."""
+        t = i // 11
+        own = np.array([j for j in range(11 * t, 11 * t + 11) if j != i and s.role[j] > 0 and not s.off[j]])
+        if not len(own):
+            return None
+        fwd = np.array([1. if t == 0 else -1., 0.])
+        rel = s.pos[own] - s.pos[i]
+        d = nrm(rel, axis=1)
+        opp_d = np.array([nrm(s.pos[s._opp(t)] - s.pos[j], axis=1).min() for j in own])
+        sc = .05 * (rel @ fwd) + .25 * np.minimum(opp_d, 6.) - .08 * np.abs(d - 12.) - 4. * (d < 3.)
+        pw = np.exp((sc - sc.max()) / 1.2)
+        return int(own[s.rng.choice(len(own), p=pw / pw.sum())])
+
+    def _header_on(s, i, pt):
+        """The player who won the ball in the air heads it to a team-mate (a flick-on, a lay-off, a headed pass)."""
+        j = s._head_target(i)
+        if j is None:
+            return False
+        aim = clip(s.pos[j] + s.vel[j] * .6, [1, 1], [L - 1, W - 1])
+        s._gain_control(i, pt)
+        s.ball = pt.copy()
+        d = float(nrm(aim - pt))
+        est = float(clip(.8 - .01 * d, .35, .9))
+        s._pass(i, j, aim, False, float(clip(9 + .35 * d, 9, 18)), est, kind="pass", body="head", sigma_scale=1.3)
+        return True
+
     def _aerial(s, f):
         pt = f["end"]
         d = nrm(s.pos - pt, axis=1)
@@ -1241,7 +1274,16 @@ class Match:
         w[f["rcv"]] *= 1.2 if f["rcv"] >= 0 else 1
         i = int(s.rng.choice(22, p=w / w.sum()))
         t = i // 11
-        rivals = w * (np.arange(22) // 11 != t)
+        rivals = w * (np.arange(22) // 11 != t) * (d < 3.5)  # only a body within reach of the landing point makes it a duel
+        rv = int(rivals.argmax()) if rivals.max() > 0 else -1
+        if rv < 0 and t == f["team"] and s.role[i] > 0:  # nobody near: he just brings it down (chest, thigh, foot) or it runs on a little
+            s.ball = pt.copy()
+            if s.rng.random() < .9:
+                return s._gain_control(i, pt)
+            s.last_touch = i
+            if s.pending_pass is not None:
+                s.pending_pass["outcome"], s.pending_pass = "incomplete", None
+            return s._loose_ball(s.rng.normal(0, 1.8, 2))
         if s.role[i] == 0 and t != f["team"]:
             if s.rng.random() < .3:  # punches it clear
                 s.emit("keeper_punch", player=i, pos=pt)
@@ -1250,11 +1292,13 @@ class Match:
                 s.last_touch = i
                 return s._loose_ball(_unit(np.array([L / 2, W / 2]) - pt + s.rng.normal(0, .8, 2)) * 8)
             s.emit("keeper_claim", player=i, pos=pt)
-        elif rivals.max() > 0:
-            s.emit("duel", player=i, pos=pt, duel="aerial", outcome="won", target=s.ids[int(rivals.argmax())])
+        elif rv >= 0:
+            s.emit("duel", player=i, pos=pt, duel="aerial", outcome="won", target=s.ids[rv])
+            s.emit("duel", player=rv, pos=pt, duel="aerial", outcome="lost", target=s.ids[i])
         s.ball = pt.copy()
         pt_t = _tf(pt) if t else pt
-        if t == f["team"]:
+        u = s.rng.random()
+        if t == f["team"]:  # the side the ball was played to wins it
             if pt_t[0] > .7 * L and abs(pt_t[1] - W / 2) < 18 and s.rng.random() < .13:
                 s._gain_control(i, pt)
                 C = pt_t
@@ -1262,26 +1306,30 @@ class Match:
                 xg, nb = s._xg(C, O[s.role[s._opp(t)] > 0], header=True)
                 s.ball = pt.copy()
                 return s._shoot(i, C, xg * .9, nb, kind="header")
-        elif s.rng.random() < .45:  # defender heads it clear
-            s.emit("clearance", player=i, pos=pt)
-            s.pending_pass = None if s.pending_pass is None else s.pending_pass
-            if s.pending_pass is not None:
-                s.pending_pass["outcome"], s.pending_pass = "intercepted", None
-            s.last_touch = i
-            if s.rng.random() < .22:  # headed behind for a corner
-                cp = np.array([L if f["team"] == 0 else 0., 0. if pt[1] < W / 2 else W])
-                s.emit("corner", team=f["team"], pos=cp)
-                s._end_spell()
-                return s._set_dead("corner", f["team"], cp, 32 + float(s.rng.uniform(0, 12)))
-            tow = np.array([L / 2, W / 2]) - pt
-            return s._loose_ball(_unit(tow + s.rng.normal(0, .8, 2)) * 8)
-        if s.rng.random() < .75:
+            if s.role[i] > 0 and u < TUNE["head_on"] and s._header_on(i, pt):  # a flick-on or a headed lay-off
+                return
+        else:  # the other side wins it
+            if s.role[i] > 0 and u < TUNE["head_clear"]:  # headed clearance
+                s.emit("clearance", player=i, pos=pt, body_part="head", aerial_won=True)
+                if s.pending_pass is not None:
+                    s.pending_pass["outcome"], s.pending_pass = "intercepted", None
+                s.last_touch = i
+                if s.rng.random() < .22:  # headed behind for a corner
+                    cp = np.array([L if f["team"] == 0 else 0., 0. if pt[1] < W / 2 else W])
+                    s.emit("corner", team=f["team"], pos=cp)
+                    s._end_spell()
+                    return s._set_dead("corner", f["team"], cp, 32 + float(s.rng.uniform(0, 12)))
+                tow = np.array([L / 2, W / 2]) - pt
+                return s._loose_ball(_unit(tow + s.rng.normal(0, .8, 2)) * 8)
+            if s.role[i] > 0 and u < TUNE["head_clear"] + TUNE["head_on"] and s._header_on(i, pt):
+                return
+        if s.rng.random() < .62:  # he controls it
             s._gain_control(i, pt)
-        else:
+        else:  # it drops between them: a second-ball scramble
             s.last_touch = i
             if s.pending_pass is not None:
                 s.pending_pass["outcome"], s.pending_pass = "incomplete", None
-            s._loose_ball(s.rng.normal(0, 2, 2))
+            s._loose_ball(s.rng.normal(0, 2.6, 2))
 
     def _shot_end(s, f):
         res, c = f["res"], f["passer"]

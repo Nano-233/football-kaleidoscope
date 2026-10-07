@@ -39,8 +39,12 @@ def from_statsbomb(events):
                 recs[tm].append(dict(k="offside", x=0, y=0))
             recs[tm].append(dict(k="pass", t=t, x=loc[0], y=loc[1], ex=end[0], ey=end[1], ok="outcome" not in p, cross=bool(p.get("cross")),
                                  through=bool(p.get("through_ball")), switch=bool(p.get("switch")), high=p.get("height", {}).get("name") == "High Pass",
-                                 setp=kind in ("Corner", "Free Kick", "Throw-in", "Goal Kick", "Kick Off"), length=p["length"] * 105 / 120, press=press,
+                                 setp=kind in ("Corner", "Free Kick", "Throw-in", "Goal Kick", "Kick Off"), length=p["length"] * 105 / 120, press=press, kind=kind, head=p.get("body_part", {}).get("name") == "Head",
                                  hold=(t - last_receipt[pl]) if pl in last_receipt and 0 <= t - last_receipt[pl] < 10 else None, play=e["play_pattern"]["name"]))
+        elif ty == "Clearance":
+            recs[tm].append(dict(k="clearance", head=e.get("clearance", {}).get("body_part", {}).get("name") == "Head", x=loc[0] if loc is not None else 0, y=loc[1] if loc is not None else 0))
+        elif ty == "Duel" and e.get("duel", {}).get("type", {}).get("name") == "Aerial Lost":
+            recs[tm].append(dict(k="aerial_lost", x=loc[0], y=loc[1]))
         elif ty == "Carry":
             end = np.array(e["carry"]["end_location"]) * SB
             recs[tm].append(dict(k="carry", t=t, x=loc[0], y=loc[1], ex=end[0], ey=end[1], dur=e.get("duration", 0.)))
@@ -68,8 +72,9 @@ def from_sim(r):
         if ty in ("pass", "cross") and e.get("source") not in ("kickoff",):
             x, y = fl(tm, e["x"], e["y"]); ex, ey = fl(tm, e["end_x"], e["end_y"])
             recs[tm].append(dict(k="pass", t=e["t"], x=x, y=y, ex=ex, ey=ey, ok=e.get("outcome") == "complete", cross=ty == "cross", through=e.get("technique") == "through_ball",
-                                 switch=e.get("technique") == "switch", high=bool(e.get("lofted")), setp=e.get("source") in ("throw_in", "corner", "short_corner"),
-                                 length=e["length"], press=False, hold=e.get("hold"), play="Regular Play"))
+                                 switch=e.get("technique") == "switch", high=bool(e.get("lofted")), setp=e.get("source") in ("throw_in", "corner", "short_corner", "goal_kick"),
+                                 length=e["length"], press=False, hold=e.get("hold"), play="Regular Play",
+                                 kind={"goal_kick": "Goal Kick", "throw_in": "Throw-in", "corner": "Corner", "short_corner": "Corner"}.get(e.get("source"), ""), head=e.get("body_part") == "head"))
         elif ty == "carry":
             x, y = fl(tm, e["x"], e["y"]); ex, ey = fl(tm, e["end_x"], e["end_y"])
             recs[tm].append(dict(k="carry", t=e["t"], x=x, y=y, ex=ex, ey=ey, dur=e["duration"]))
@@ -87,7 +92,12 @@ def from_sim(r):
         elif ty == "tackle":
             x, y = fl(tm, e["x"], e["y"])
             recs[tm].append(dict(k="tackle", x=x, y=y, won=e.get("outcome") == "won"))
-        elif ty in ("interception", "foul", "ball_recovery", "dispossessed", "offside", "block", "clearance", "pressure", "miscontrol"):
+        elif ty == "clearance":
+            x, y = fl(tm, e.get("x", 0), e.get("y", 0))
+            recs[tm].append(dict(k="clearance", head=e.get("body_part") == "head", x=x, y=y))
+        elif ty == "duel" and e.get("duel") == "aerial" and e.get("outcome") == "lost":
+            recs[tm].append(dict(k="aerial_lost", x=e.get("x", 0), y=e.get("y", 0)))
+        elif ty in ("interception", "foul", "ball_recovery", "dispossessed", "offside", "block", "pressure", "miscontrol"):
             recs[tm].append(dict(k={"ball_recovery": "ball", "foul": "foul"}.get(ty, ty), x=e.get("x", 0), y=e.get("y", 0)))
     return recs
 
@@ -122,6 +132,13 @@ def team_metrics(R):
     m["long_share"] = float(np.mean([r["length"] >= 32 for r in P])) if P else np.nan
     m["short_share"] = float(np.mean([r["length"] < 10 for r in P])) if P else np.nan
     m["avg_pass_len"] = float(np.mean([r["length"] for r in P])) if P else np.nan
+    m["high_share"] = float(np.mean([r["high"] for r in Pall])) if Pall else np.nan
+    m["head_pass"] = sum(1 for r in Pall if r.get("head"))
+    gk = [r for r in Pall if r.get("kind") == "Goal Kick"]
+    m["gk_long_share"] = float(np.mean([r["length"] >= 35 for r in gk])) if gk else np.nan
+    m["gk_high_share"] = float(np.mean([r["high"] for r in gk])) if gk else np.nan
+    m["clear_head"] = sum(1 for r in R if r["k"] == "clearance" and r.get("head"))
+    m["aerial_lost"] = sum(1 for r in R if r["k"] == "aerial_lost")
     m["crosses_open"] = sum(1 for r in P if r["cross"])
     m["through"] = sum(1 for r in P if r["through"])
     m["switch"] = sum(1 for r in P if r["switch"])
@@ -228,6 +245,7 @@ def _init(over):
 
 
 GROUPS = [("volume", ["passes", "pass_acc", "carries", "tackles", "interception", "clearance", "block", "foul", "ball", "dispossessed", "offside", "pressure", "miscontrol"]),
+          ("aerial", ["high_share", "head_pass", "gk_long_share", "gk_high_share", "clear_head", "aerial_lost"]),
           ("passing", ["acc_own", "acc_mid", "acc_fin", "n_own", "n_mid", "n_fin", "fwd_own", "side_own", "back_own", "fwd_mid", "side_mid", "back_mid", "fwd_fin", "side_fin", "back_fin", "long_share", "short_share", "avg_pass_len", "crosses_open", "through", "switch", "pass_hold_med", "pass_hold_mean"]),
           ("progression", ["into_final3", "into_box", "into_box_ok", "carry_len", "carry_prog10", "carry_into_final3", "carry_into_box", "takeons", "takeon_succ", "tackle_won", "tackle_own", "tackle_mid", "tackle_fin"]),
           ("shots", ["shots", "goals", "on_target", "blocked", "shot_xg", "xg_per_shot", "big_chance", "shot_d_lt12", "shot_d_12_20", "shot_d_ge20", "shot_box", "shot_head", "shot_first", "shot_press", "shot_blockers", "shot_free_look", "shot_nearest_def", "shot_def_within5", "shot_goalside_frac", "shot_goalside_n", "shot_team_in_box", "shot_def_in_box", "shot_def1_depth", "shot_def5_depth"])]
