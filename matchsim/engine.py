@@ -20,7 +20,7 @@ from .movement import _tf, _unit, nrm, clip
 
 DT = 0.2
 # Single tuning table (calibrated by scripts/calibrate.py against real-football norms).
-TUNE = dict(air_base=.5, head_on=.28, head_clear=.5, air_k=.5, gk_air=.6, block_base=0.12, block_nb=0.12, ft_shot=0.315, turn_cost=0.55, turn_rate=3.2, face_k=0.6, pot=2.19, relief=1.0, ft_slow=.0, drive=0.4,  cong_k=0.5, risk_pow=2.2, first_touch=3.0, wide_v=0.74, ctrl_marked=0.33, shoot_hold=0.98, shoot_slope=2.05, shoot_ref=0.168, shoot_press=0.56, adv_lin=.6, pack=.04, shoot_min=.12, react=2.32, patience=0.02, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.4, fk_bonus=0.05, long_bonus=0.163, prog_base=0.75, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=1.3, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=1.3, shot_k=3.15, shot_k_dir=5.0,
+TUNE = dict(press_dist=1.75, air_base=.5, head_on=.28, head_clear=.5, air_k=.5, gk_air=.6, block_base=0.12, block_nb=0.12, ft_shot=0.315, turn_cost=0.55, turn_rate=3.2, face_k=0.6, pot=2.19, relief=1.0, ft_slow=.0, drive=0.4,  cong_k=0.5, risk_pow=2.2, first_touch=3.0, wide_v=0.74, ctrl_marked=0.33, shoot_hold=0.98, shoot_slope=2.05, shoot_ref=0.168, shoot_press=0.56, adv_lin=.6, pack=.04, shoot_min=.12, react=2.32, patience=0.02, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.4, fk_bonus=0.05, long_bonus=0.163, prog_base=0.75, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=1.3, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=1.3, shot_k=3.15, shot_k_dir=5.0,
             carry_base=0.22, carry_prog=.2, carry_streak=.3, dwell_base=0.9, dwell_shape=2.4, dwell_scale=1.61,
             tackle_rate=2.84, wide_error=3.2, off_miss=.2, off_mult=.25)
 sig = lambda x: 1 / (1 + np.exp(-x))
@@ -40,6 +40,9 @@ _ROLE_NEAR = {frozenset(p): c for p, c in {("CB", "FB"): 1.5, ("CB", "DM"): 2., 
 _PRESET_X = {"GK": .03, "CB": .20, "FB": .22, "DM": .37, "CM": .43, "WG": .66, "AM": .57, "ST": .70}
 _ROLE_NAME = {v: k for k, v in ROLE_IDX.items()}
 PARK = np.array([[L / 2 + 6 * (i // 11), -40. - 2 * (i % 11)] for i in range(22)])  # distinct spots so parked players never coincide  # sent-off players wait off the pitch
+
+
+PRESS_FLAG = {"pass", "cross", "carry", "shot", "take_on", "clearance", "dispossessed", "miscontrol"}
 
 
 class Match:
@@ -144,6 +147,11 @@ class Match:
         if end is not None:
             ev["end_x"], ev["end_y"] = round(float(end[0]), 1), round(float(end[1]), 1)
         ev.update({k: (round(float(v), 3) if isinstance(v, (float, np.floating)) else v) for k, v in kw.items()})
+        if player is not None and type in PRESS_FLAG:
+            if type in ("take_on", "clearance", "dispossessed", "tackle"):
+                ev["under_pressure"] = True  # a duel is pressure by definition
+            else:
+                ev["under_pressure"] = bool(float(nrm(s.pos[s._opp(player // 11)] - s.pos[player], axis=1).min()) < TUNE["press_dist"])
         s.events.append(ev)
         return ev
 
@@ -432,6 +440,7 @@ class Match:
             pp["outcome"] = "complete" if same else "intercepted"
             if same:
                 s.last_pass_to[t] = (pp["player"], i, s.t, pp)
+                s.emit("ball_receipt", player=i, pos=at, outcome="complete", passer=pp["player"])
             elif s.state == "flight" and s.role[i] == 0:  # the keeper collects it: inside the box a claim, outside a sweep
                 own_box = (at[0] < 16.5 if t == 0 else at[0] > L - 16.5) and abs(at[1] - W / 2) < 20.16
                 s.emit("keeper_claim" if own_box else "keeper_sweep", player=i, pos=at)
@@ -488,9 +497,9 @@ class Match:
         if fg > .5 and nrm(v) < 1.5 and s.next_dec > s.t:
             s.carry_dir = _unit(np.array([L if t == 0 else 0., W / 2]) - s.pos[c]) if s.carry_speed < 1.2 else s.carry_dir
         s.ball, s.ball_v = s.pos[c] + face * .5, v.copy()
-        for k in np.nonzero((d < 3.0) & (s.commit_until[opp] > s.t))[0]:  # a defender commits to closing the carrier down
-            if s.t - s.last_press[opp[k]] > 2.5:
-                s.emit("pressure", player=opp[k], pos=s.pos[opp[k]], target=s.ids[c])
+        for k in np.nonzero((d < 1.7) & (s.role[opp] > 0))[0]:  # a defender within a couple of metres is pressing the carrier
+            if s.t - s.last_press[opp[k]] > 4.:
+                s.emit("pressure", player=opp[k], pos=s.pos[opp[k]], target=s.ids[c], counterpress=bool(s.t < s.trans_until[1 - t]))
                 s.last_press[opp[k]] = s.t
         # Carrying the ball is hard with a defender in the way: it slows him, and a defender who is in front of or alongside him gets a
         # real chance at the ball. A defender who is behind him (chasing) or has already been beaten hardly does.
@@ -527,6 +536,7 @@ class Match:
                     return
                 if front[att[np.argmin(d[att])]] > .7:  # he got past a defender who was in front of him: a take-on
                     s.emit("take_on", player=c, pos=s.pos[c], target=s.ids[o], outcome="won", p_success=1 - float(p_win))
+                    s.emit("dribbled_past", player=o, pos=s.pos[o], by=s.ids[c])
                     s.block_until[o] = s.t + 1.2
                 else:
                     s.emit("tackle", player=o, pos=s.pos[c], target=s.ids[c], outcome="lost")
@@ -573,6 +583,7 @@ class Match:
             return s._loose_ball(_unit(s.vel[o] + s.rng.normal(0, 1, 2)) * 2.5)
         reason = str(s.rng.choice(["tackle", "trip", "shirt_pull", "handball"], p=[.55, .2, .2, .05]))
         s.emit("foul", player=o, pos=s.pos[c], target=s.ids[c], reason=reason)
+        s.emit("foul_won", player=c, pos=s.pos[c], by=s.ids[o])
         u = s.rng.random()
         k = .7 + .6 * s.ref
         card = "red" if (u < .005 * k and s.role[o] != 0) else ("yellow" if u < .13 * k else None)
@@ -810,6 +821,8 @@ class Match:
             if o >= 0:
                 won = s.rng.random() < p_beat
                 s.emit("take_on", player=c, pos=s.pos[c], target=s.ids[o], outcome="won" if won else "lost", p_success=p_beat, why=why)
+                if won:
+                    s.emit("dribbled_past", player=o, pos=s.pos[o], by=s.ids[c])
                 if not won:
                     if s.rng.random() < .25:
                         return s._foul(o, c)

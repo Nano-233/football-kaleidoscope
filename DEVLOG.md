@@ -270,6 +270,38 @@ shots 47-56% vs 32%, throw-ins depend on `wide_error`. The shot funnel is the on
 third and the box as often as in real football, but the attackers there shoot about twice as often per entry.
 `scripts/tune_norms.py` now scores the simulator against about 45 real-data metrics at once and balances the numbers.
 
+## The aerial game and a full event inventory (user: "balls only go to feet, no clearances, no loose balls, no aerial duels")
+
+**Method.** Instead of looking at the aggregates we already had, `scripts/inventory.py` lists every StatsBomb event type and sub-type
+per team per match next to the simulator's closest equivalent. It is the check to run whenever someone says "the game feels like it is
+missing something".
+
+**What it showed (real per team per match, sim at the time).**
+- High (lofted) passes 115 = 24% of all passes; sim 34 = 7%. Lofted passes only existed as a coin flip for targets beyond 30 m. There were
+  no chips, no diagonals, no balls over the top.
+- Aerial duels: 22 lost per team per match (about 44 duels a match). Sim: not logged as duels, and an aerial contest had one outcome (control).
+- Headed passes (flick-ons, lay-offs) 24 per team; headed clearances 16 of 29 clearances. Sim: none tagged as headed.
+- Goal kicks: 79% long, 77% high. Sim: a low-probability bonus; many short.
+- Goalkeeper events 15.6 vs 7, pressure events 148 vs 49 (sim only logs a press at the moment of commitment), under-pressure flag on 75% of
+  events (sim none), counterpress flag, ball receipts, fouls won, dribbled past, injury stoppages (1.6 vs 0.25).
+
+**Implemented now.** Every target further than 12 m has two candidates, ground and lofted; the lofted one gets the aerial-contest
+success estimate (his height against the bodies near the landing point), flies over the lane (low interception) and is wilder.
+`air_base`, `air_k` (directness) and `gk_air` set how readily teams play it in the air. A lofted ball arriving with no opponent within
+3.5 m of the landing spot is just controlled from the air; with a rival within reach it is an aerial duel, both players are logged
+(won/lost), and the winner can control it, head it on to a team-mate (flick-on / lay-off: a `pass` with `body_part=head`), head it
+clear (a `clearance` with `body_part=head`) or the ball drops loose into a second-ball scramble. Goal kicks can reach the halfway line
+and beyond whatever the keeper's usual range of vision, and are exempt from offside. New metrics in `norms.py`: `high_share`,
+`head_pass`, `gk_long_share`, `gk_high_share`, `clear_head`, `aerial_lost`.
+
+**Measured after the change (before re-tuning).** High passes 17-19% (real 25%), headed passes 18 (24), headed clearances 21 of 40
+(real 16 of 29), goal kicks 85% long and high with `gk_air` 0.6 (real 79/77), aerial duels about 2x real (our high balls are contested
+more often than real ones; many real long switches are uncontested).
+
+**Still not in the engine (from the same inventory).** Pressure events and the under-pressure / counterpress annotation, ball-receipt
+events, fouls won and dribbled-past events, goalkeeper involvement beyond saves and claims (sweeper actions, throws and drop kicks as
+distinct restarts), injury stoppages at the real rate.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
