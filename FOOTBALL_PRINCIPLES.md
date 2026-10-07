@@ -37,7 +37,7 @@ checking come from real event/freeze-frame data (`scripts/norms.py`, `scripts/no
 | D17 | Transition: counter-press for a few seconds, the rest recover goal-side | after turnover, nearest players press, others recover at speed | partial |
 | D18 | Rest defence: while attacking keep a screen and 2-3 defenders behind the ball | attacking template keeps minimum cover behind the ball line | partial |
 | D19 | Defend crosses: near post, penalty spot, edge of box for cut-backs, clear wide | box slots from ball and goal geometry | partial |
-| D20 | Goalkeeper: on the ball-goal line, narrow the angle one-on-one, sweep behind the line | GK target from ball and goal geometry; sweeper trait | partial |
+| D20 | Goalkeeper: on the ball-goal line, narrow the angle one-on-one, sweep behind the line | GK target from ball and goal geometry; comes out to the carrier's shooting point when no defender is there first (time race); smothers the ball at the carrier's feet (gk skill vs dribbling); sweeper trait | done |
 | D21 | Drop and get bodies behind the ball when the box is threatened | box_defence slots | done |
 
 ## Attacking, the team
@@ -63,6 +63,8 @@ checking come from real event/freeze-frame data (`scripts/norms.py`, `scripts/no
 | A12 | First touch away from pressure; receive on the half-turn | control probability from marker distance and side | done (facing, marker limits turn) |
 | A13 | Dribble only with space ahead and a pace/skill edge; otherwise pass | take-on probability and carry steering | done (open space ahead, contact duel) |
 | A14 | Shoot when in range with a clear sight; square the ball when the angle is poor and a team-mate is better placed | shot propensity from location; best_mate comparison | done |
+| A18 | A run at goal is not a chance already used: he shoots when the chance has become real, not when the clock on the ball has run out | the 'time held' penalty on shooting restarts whenever xG becomes clearly better (x1.3, from about .12) | done |
+| A19 | A carrier in open space does not treat the keeper as a defender in the way: he shoots or rounds him | keeper excluded from the carry-blocking and crowding terms; the shot terms price him in | done |
 | A15 | Through-ball timing: play it when the line steps up | pass utility uses the line as the passer last saw it | done |
 | A16 | One-twos to beat a defender | wall-pass option | missing |
 | A17 | Manage the game: keep the ball in the corner when ahead late | late-game utilities | missing |

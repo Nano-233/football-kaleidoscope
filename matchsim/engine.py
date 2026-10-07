@@ -20,7 +20,7 @@ from .movement import _tf, _unit, nrm, clip
 
 DT = 0.2
 # Single tuning table (calibrated by scripts/calibrate.py against real-football norms).
-TUNE = dict(xg_run=8., own_goal_cone=.0, head_run=4.2, head_rate=2.5, mom_k=.75, carry_v0=2.0, carry_v1=1.6, cruise_k=0.65, burst_hold=0.4, run_frac=0.7, press_dist=1.75, air_base=0.5, head_on=0.28, head_clear=0.5, air_k=0.5, gk_air=0.6, block_base=0.12, block_nb=0.12, ft_shot=0.315, turn_cost=0.55, turn_rate=3.2, face_k=1.05, pot=2.2, relief=1.0, ft_slow=.0, drive=0.1,  cong_k=0.5, risk_pow=2.2, first_touch=3.0, wide_v=0.35, ctrl_marked=0.33, shoot_hold=0.98, shoot_slope=2.05, shoot_ref=0.168, shoot_press=0.56, adv_lin=.6, pack=.04, shoot_min=.12, react=1.84, patience=0.02, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.76, fk_bonus=0.05, long_bonus=0.163, prog_base=0.5, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=0.8, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=1.3, shot_k=3.15, shot_k_dir=5.0,
+TUNE = dict(hold_sigma=.7, fade_up=2.2, fade_dn=1.4, lazy_k=.6, xg_run=8., own_goal_cone=.0, head_run=4.2, head_rate=2.5, mom_k=.75, carry_v0=2.0, carry_v1=1.6, cruise_k=0.65, burst_hold=0.4, run_frac=0.7, press_dist=1.75, air_base=0.5, head_on=0.28, head_clear=0.5, air_k=0.5, gk_air=0.6, block_base=0.12, block_nb=0.12, ft_shot=0.315, turn_cost=0.55, turn_rate=3.2, face_k=1.05, pot=2.2, relief=1.0, ft_slow=.0, drive=0.1,  cong_k=0.5, risk_pow=2.2, first_touch=3.0, wide_v=0.35, ctrl_marked=0.33, shoot_hold=0.98, shoot_slope=2.05, shoot_ref=0.168, shoot_press=0.56, adv_lin=.6, pack=.04, shoot_min=.12, react=1.84, patience=0.02, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.76, fk_bonus=0.05, long_bonus=0.163, prog_base=0.5, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=0.8, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=1.3, shot_k=3.15, shot_k_dir=5.0,
             carry_base=0.22, carry_prog=.2, carry_streak=.3, dwell_base=0.9, dwell_shape=2.4, dwell_scale=1.61,
             tackle_rate=3.6, wide_error=3.2, off_miss=.2, off_mult=.25)
 sig = lambda x: 1 / (1 + np.exp(-x))
@@ -91,6 +91,8 @@ class Match:
         s.injured, s.pending_inj = np.zeros(22, bool), []
         s.ctrl_t = 0.
         s.first_time_ok = 1.0
+        s.poss_fade = np.array([.5, .5])
+        s.chance_xg, s.chance_t = 0., 0.
         s.urg_until, s.cap_s = np.zeros(22), None
         s.sprint_hint = np.zeros(22, bool)
         s.head = np.array([[1., 0.]] * 11 + [[-1., 0.]] * 11)  # which way each player's body faces
@@ -273,7 +275,14 @@ class Match:
             s._step()
         return s.result()
 
+    def _fade_possession(s):
+        for t in (0, 1):
+            goal = 1. if s.poss == t else 0. if s.poss == 1 - t else .5
+            tau = TUNE["fade_up"] if goal > s.poss_fade[t] else TUNE["fade_dn"]
+            s.poss_fade[t] += (goal - s.poss_fade[t]) * (1 - np.exp(-s.dt / tau))
+
     def _step(s):
+        s._fade_possession()
         if s.tick % 5 == 0:
             for t in (0, 1):
                 movement.refresh_marking(s, t)
@@ -364,7 +373,13 @@ class Match:
         if s.state == "flight":
             near_ball |= nrm(tg - s.flight["end"], axis=1) < 6.
         sprint = urg & s.sprint_hint  # all-out only when going for the ball (or running onto it); marking and recovering is a hard run
-        cap = np.where(sprint, vmax, np.where(urg, vmax * TUNE["run_frac"], np.minimum(vmax, (4.3 + .07 * s.attr["work_rate"]) * energy)))
+        d_ball = nrm(s.pos - s.ball, axis=1)
+        mind = movement.MIND[s.role]  # how attack-minded the role is
+        fade_own = s.poss_fade[np.arange(22) // 11]
+        lazy_role = mind + fade_own * (1. - 2. * mind)  # forwards idle when their side has no ball, defenders when their side has it all
+        lazy = np.clip((d_ball - 20.) / 45., 0, 1) * (.5 + .5 * lazy_role)
+        jog = np.minimum(vmax, (4.3 + .07 * s.attr["work_rate"]) * energy) * (1. - TUNE["lazy_k"] * lazy)
+        cap = np.where(sprint, vmax, np.where(urg, vmax * TUNE["run_frac"], jog))
         if s.state == "held":
             cap[s.carrier] = min(cap[s.carrier], s.carry_speed * s.carry_scale, .85 * vmax[s.carrier])
         if s.cap_s is None:
@@ -425,7 +440,7 @@ class Match:
             return float(s.rng.uniform(.05, .2))
         if s.rng.random() < clip(.2 + .5 * pr + .02 * (s.attr["passing"][i] - 10), 0, .8) * s.first_time_ok * (1 - TUNE["ft_slow"] * .5 * ft):
             return float(s.rng.uniform(.05, .22))  # one touch
-        return float(max(.12, react + s.rng.normal(0, .05)))
+        return float(clip(react * np.exp(s.rng.normal(0., TUNE["hold_sigma"]) - .5 * TUNE["hold_sigma"] ** 2), .12, 9.))  # a skewed spread with the same mean: many quick releases, now and then a long dwell on the ball (real: 31% at once, 12% over 3 s)
 
     def _play_heading(s):
         """Where each player's body wants to point when he is not running flat out.
@@ -508,6 +523,7 @@ class Match:
         s.last_touch = i
         s.recent[i] += 1.
         s.ctrl_t = s.t
+        s.chance_xg, s.chance_t = .09, s.t  # only a real chance (about .12 and better) restarts the clock below
         s.next_dec = s.t + s._dwell(i)
         s.protect_until = s.t + (.15 if float(nrm(s.pos[s._opp(t)] - s.pos[i], axis=1).min()) < 1.6 else .6)  # a defender on the receiver contests him at once; with space he gets a moment
         s.carry_tgt = s.pos[i] + np.array([1., 0.] if t == 0 else [-1., 0.]) * 5
@@ -573,8 +589,21 @@ class Match:
                 o = opp[att[np.argmin(d[att])]]
                 a = s.attr
                 edge = float(clip(.12 * (nrm(s.vel[c]) - nrm(s.vel[o])), -.25, .25))  # a clear pace advantage lets the carrier slip past
-                p_win = sig(.22 * ((a["tackling"][o] + .3 * a["strength"][o]) - (a["dribbling"][c] + .3 * a["strength"][c])) - .1 - edge * 3)
+                kp = bool(s.role[o] == 0)  # a keeper does not tackle: he comes out, spreads himself and smothers the ball at the carrier's feet
+                p_win = sig(.22 * (((a["gk"][o] if kp else a["tackling"][o]) + .3 * a["strength"][o]) - (a["dribbling"][c] + .3 * a["strength"][c])) - .1 + (.5 if kp else 0.) - edge * 3)
                 s.protect_until = s.t + .7
+                if kp and s.rng.random() < p_win:
+                    if s.rng.random() < .12 * s.mod["foul"][o]:
+                        s._foul(o, c)
+                    else:
+                        at_ = s.pos[c].copy()
+                        in_own_box = (at_[0] < 16.5 if (1 - t) == 0 else at_[0] > L - 16.5) and abs(at_[1] - W / 2) < 20.16
+                        s.emit("keeper_claim" if in_own_box else "keeper_sweep", player=o, pos=at_, technique="smother")
+                        s.emit("dispossessed", player=c, pos=at_)
+                        s.block_until[c] = s.t + .8
+                        s._end_spell()
+                        s._gain_control(o, at_)
+                    return
                 if s.rng.random() < p_win:
                     if s.rng.random() < (.4 + .2 * (1 - a["tackling"][o] / 20)) * s.mod["foul"][o] * (.75 + .5 * s.ref):
                         s._foul(o, c)
@@ -802,7 +831,9 @@ class Match:
                 # willingness to shoot follows where he is (a clean-look xG from distance and angle), not whether a defender happens to be in the way:
                 # real shooters take it through traffic (about two defenders in the shot triangle) and the defence blocks a third of them
                 xg0, _ = s._xg(C, [])
-                z = TUNE["shoot_slope"] * np.log(xg0 / TUNE["shoot_ref"]) + 1.5 * np.log(SHOT_PROP[s.role[c]]) + 1.2 * (tc.shoot - .5) + np.log(s.mod["shot"][c]) + TUNE["shoot_press"] * pr - TUNE["shoot_hold"] * (s.t - s.ctrl_t) + TUNE["face_k"] * 2. * (fg - .5)  # the chance is taken early: a player who keeps carrying has passed it up
+                if xg0 > 1.3 * s.chance_xg:  # a clearly better chance than any he has had with this ball: running at goal does not use up the chance he had 30 m back
+                    s.chance_xg, s.chance_t = xg0, s.t
+                z = TUNE["shoot_slope"] * np.log(xg0 / TUNE["shoot_ref"]) + 1.5 * np.log(SHOT_PROP[s.role[c]]) + 1.2 * (tc.shoot - .5) + np.log(s.mod["shot"][c]) + TUNE["shoot_press"] * pr - TUNE["shoot_hold"] * (s.t - s.chance_t) + TUNE["face_k"] * 2. * (fg - .5)  # the chance is taken early: a player who keeps carrying has passed it up
                 take = bool(s.rng.random() < sig(z)) and best_mate < 1.5 * xg
             elif rk == "free_kick":
                 take = s.role[c] > 0 and xg >= .08
@@ -829,6 +860,7 @@ class Match:
             away = (_unit(C - O[near]) * ((8 - dn[near]) / 8)[:, None]).sum(0) if near.any() else 0
             dirv = _unit(toward + .8 * away)
             rel = O - C
+            rel[0] = 99.  # the keeper is not an obstacle to a run at goal: it ends in a shot or a dribble round him, and the shot terms price him in
             fwd_d = rel @ dirv  # a carrier drives when there is room: nobody in the cone ahead of him
             lat_d = np.abs(rel[:, 0] * dirv[1] - rel[:, 1] * dirv[0])
             free_ahead = float(np.min(np.where((fwd_d > 1) & (lat_d < np.maximum(2.5, .35 * fwd_d)), fwd_d, 40.)))
@@ -844,12 +876,14 @@ class Match:
                 p_beat = min(p_beat, .97) * (.5 + .5 * fg)
             else:
                 j, o, p_beat = -1, -1, 1.
-            p_keep = p_beat * (.4 + .6 * fg) * (1 - .15 * np.exp(-dnear / 2.3)) * float(np.exp(-TUNE["cong_k"] * max(float(np.exp(-nrm(O - cpos, axis=1) / 3.).sum()) - 1., 0)))  # a dribbler avoids walking into a crowd
+            p_keep = p_beat * (.4 + .6 * fg) * (1 - .15 * np.exp(-dnear / 2.3)) * float(np.exp(-TUNE["cong_k"] * max(float(np.exp(-nrm(O[1:] - cpos, axis=1) / 3.).sum()) - 1., 0)))  # a dribbler avoids walking into a crowd
             U.append(p_keep * (TUNE["carry_base"] + TUNE["carry_prog"] * prog_w * (Tf(cpos) - TC)) - (1 - p_keep) * .5 - TUNE["carry_streak"] * s.carry_streak + s.mod["carry"][c] + CARRY_ROLE[s.role[c]]
                      + TUNE["patience"] * np.exp(-(s.t - s.ctrl_t) / 2.0) * (1 - pr) * (dnear > 4) + TUNE["drive"] * open_ * (1 - pr)
                      + TUNE["xg_run"] * p_keep * max(s._xg(cpos, [])[0] - s._xg(C, [])[0], 0.)); K.append("carry"); X.append((cpos, o, p_beat))  # running at goal is worth the chance it creates (xg_run term above)
             if C[0] < .2 * L and dnear < 3.5:
-                U.append(.2 + .35 * pr); K.append("clear"); X.append(np.array([C[0] + 40, clip(C[1] + s.rng.choice([-1, 1]) * 18, 5, W - 5)]))
+                cand_c = [np.array([C[0] + 38 * np.cos(a_), clip(C[1] + 38 * np.sin(a_), 1., W - 1.)]) for a_ in np.radians([-65, -40, -15, 15, 40, 65])]
+                sc_c = [-1.5 * float((nrm(O - q_, axis=1) < 9).sum()) + .03 * (q_[0] - C[0]) + (.8 if (q_[1] < 6 or q_[1] > W - 6) and C[0] < .12 * L else 0.) for q_ in cand_c]
+                U.append(.2 + .35 * pr); K.append("clear"); X.append(cand_c[int(np.argmax(sc_c))])
         if not U:
             U, K, X = [0.], ["carry"], [(clip(C + 7 * np.array([1., 0.]), [1, 1], [L - 1, W - 1]), -1, 1.)]
         tau = .02 + .04 * (1 - a["composure"][c] / 20)

@@ -107,7 +107,10 @@ def sim(n_matches, zlo=2 * L / 3, zhi=L + 1):
             ball = np.array([e["x"], e["y"]]) if tm == 0 else np.array([L - e["x"], W - e["y"]])
             if not (zlo <= ball[0] < zhi):
                 continue
-            mates = [P[11 * tm + i] for i in range(1, 11) if np.hypot(*(P[11 * tm + i] - ball)) > .5 and np.hypot(*(P[11 * tm + i] - ball)) < VIS]
+            ci = int(fr[max(k - 1, 0), 3])  # the passer is the carrier just before the pass; he is not a supporting team-mate
+            if ci >= 0 and ci // 11 == tm:
+                ball = P[ci]
+            mates = [P[11 * tm + i] for i in range(1, 11) if 11 * tm + i != ci and np.hypot(*(P[11 * tm + i] - ball)) < VIS]
             opps = [P[11 * (1 - tm) + i] for i in range(1, 11) if np.hypot(*(P[11 * (1 - tm) + i] - ball)) < VIS]
             rows.append(shape(ball, mates, opps))
     return rows

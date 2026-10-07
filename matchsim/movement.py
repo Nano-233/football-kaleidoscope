@@ -20,16 +20,22 @@ FOLLOW = np.array([.1, .5, .55, .55, .55, .5, .5, .45])  # how strongly the role
 CRUISE = np.array([1.7, .56, .56, .6, .7, .5, .6, .48])  # jogging speed by role (box-to-box midfielders cover more ground)
 SHOULDER = np.array([0, 0, 0, 0, 0, -3.5, -8., -1.5])  # where each attacking role stands relative to the last defender (m)
 WANDER = np.array([.4, 1.3, 1.8, 1.7, 2.2, 2.3, 2.4, 2.4])  # metres of constant drifting around the target: nobody stands still
+MIND = np.array([0., .1, .25, .35, .5, .75, .7, .9])  # attack-mindedness by role (GK CB FB DM CM WG AM ST), used for laziness
 MIN_X = np.array([0, 6, 6, 9, 10, 11, 12, 16.])
-COMPRESS = np.array([0, 1., 1., 1., .85, .45, .2, 0.])  # share of the 'get behind the ball' pull each role feels near his own goal (GK CB FB DM CM WG AM ST)
-LAG = np.array([0, 8, 8, 2, 1, 0, 0, -10.])  # metres behind the ball each role stands when the ball is near its goal (a compact block that follows the ball)  # deepest a role will drop (defenders hold the box edge, they do not hug the goal line)
+COMPRESS = np.array([0, 1., 1., 1., 1., 1., .9, .4])  # share of the 'get behind the ball' pull each role feels near his own goal (GK CB FB DM CM WG AM ST)
+LAG = np.array([0, 10, 10, 7, 7, 6, 6, -4.])  # metres behind the ball each role stands when the ball is near its goal (a compact block that follows the ball)  # deepest a role will drop (defenders hold the box edge, they do not hug the goal line)
+BOX_START = 38.  # the defence starts filling the box lanes once the ball is this close to goal (they read the attack early; fully set 10 m closer)
+WN_END = 42.  # the block follows the ball (each line a fixed distance behind it) once the ball is closer than this to our goal
+ALLOW = np.array([0, 0, 0, 0, 4., 8., 8., 40.])  # extra metres past the ball a role may stand while defending: only the striker is a real outlet (real freeze frames: 67-83% of defenders are goal-side of the ball)
 GS_CAP = np.array([0, 0, 0, 0, 0, 2, 2, 8.])  # how far past the ball (towards the opponent) each role may stand while defending: most men stay goal-side of it
 GOAL = np.array([0., W / 2])
 TUNE_COMMIT = .08
+RING_MIN = 11.       # supporting players do not want to stand closer than this to the carrier (m)
+RING_K = 1.8         # how much they mind
 GK_RISK = .2         # the keeper comes out if he can get there within this many seconds of the nearest attacker
 DANGER_ZONE = 38.    # an attacker this close to goal who is unmarked gets picked up by a free defender
 PICK_UP = .8         # how much of his own place a defender gives up to take the free man
-SUPPORT_MIN = 8.     # the nearest supporting player stands at least this far from the carrier
+SUPPORT_MIN = 10.     # the nearest supporting player stands at least this far from the carrier
 ATT_SPACING = 6.5    # attackers keep at least this far from each other (m)
 BACK_PRESS = 6.      # a centre-back or full-back only leaves the line to a carrier this close
 MOVE_BURST = 4.      # an attacker who picks a new spot further away than this gets there at pace
@@ -118,7 +124,7 @@ def seek_space(m, t, P, O, C, zone, role, out_f, skip, line):
         lane = clip(perp.min(2) / 3., 0, 1)
         thr = np.exp(-np.hypot(L - cand[..., 0], W / 2 - cand[..., 1]) / 22.) * 3 * WTHREAT[role[idx]][:, None]
         dc = np.sqrt(ab2)
-        pref = np.exp(-((dc - 16.) / 12.) ** 2) * (dc < 40)
+        pref = np.exp(-((dc - 16.) / 12.) ** 2) * (dc < 40) - RING_K * np.maximum(RING_MIN - dc, 0) / RING_MIN
         dz = np.sqrt(((cand[:, :, None, :] - zone[None, None]) ** 2).sum(-1))  # distance to every team-mate's target
         dz[np.arange(n)[:, None], np.arange(K)[None, :], idx[:, None]] = 99.  # not to himself
         spacing = clip((7. - dz) / 7., 0, 1).sum(2)
@@ -144,9 +150,9 @@ def box_defence(m, B, zone, urgent, gate, role, P):
     penalty spot (cut-backs) and the edge of the area (second balls). Defenders take them by shortest total distance; those
     committed to a man can be taken too (a marker who is also in the shot lane serves both), at a cost."""
     dgl = float(nrm(B - GOAL))
-    if dgl >= 30:
+    if dgl >= BOX_START:
         return zone, urgent
-    wz = float(clip((30 - dgl) / 10, 0, 1))
+    wz = float(clip((BOX_START - dgl) / 10, 0, 1))
     free = np.nonzero((role > GK) & ~urgent)[0]
     if not len(free):
         return zone, urgent
@@ -274,18 +280,16 @@ def team_targets(m, t):
     kx = FOLLOW[role] * m.mod["follow"][sl] * (1 + .3 * (tc.compactness - .5))
     tx = A[:, 0] + kx * (B[0] - L / 2) + (tc.line_height - .5) * 14 * out_f
     by = B[1] - W / 2
-    if has:
-        ph = clip(.45 + B[0] / L, .5, 1.1)
-        tx = tx + PUSH[role] * (.6 + .8 * tc.risk) * ph
-        ty = W / 2 + (A[:, 1] - W / 2) * (1 + (tc.width - .5) * .7) + by * (.2 + FRONT_SHIFT * ((role == ST) | (role == AM))) * out_f  # the front line drifts to the ball side to link up
-    else:
-        tx = tx + DROP[role] * clip(1.25 - tc.press, .3, 1.2)
-        ty = W / 2 + (A[:, 1] - W / 2) * (1 - NARROW * tc.compactness) + by * (.28 + .22 * tc.compactness) * out_f
+    fd = float(m.poss_fade[t])  # 1 = a side that has had the ball for a while, 0 = one that has just lost it: the shape moves between the two smoothly
+    ph = clip(.45 + B[0] / L, .5, 1.1)
+    tx = tx + fd * PUSH[role] * (.6 + .8 * tc.risk) * ph + (1 - fd) * DROP[role] * clip(1.25 - tc.press, .3, 1.2)
+    ty = (W / 2 + (A[:, 1] - W / 2) * (fd * (1 + (tc.width - .5) * .7) + (1 - fd) * (1 - NARROW * tc.compactness))
+          + by * (fd * (.2 + FRONT_SHIFT * ((role == ST) | (role == AM))) + (1 - fd) * (.28 + .22 * tc.compactness)) * out_f)  # the front line drifts to the ball side to link up
     tx = np.maximum(tx, MIN_X[role])
     if not has:  # defending: near our goal the block follows the ball, each line a fixed distance behind it
-        wn = float(clip((42. - B[0]) / 12., 0, 1)) * COMPRESS[role]  # how far this role is pulled onto the ball: the back line fully, forwards hardly (they are the outlet)
+        wn = float(clip((WN_END - B[0]) / 12., 0, 1)) * COMPRESS[role]  # how far this role is pulled onto the ball: the back line fully, forwards hardly (they are the outlet)
         tx = np.where(out_f, tx * (1 - wn) + np.maximum(B[0] - LAG[role] * (1.25 - .5 * tc.press), MIN_X[role]) * wn, tx)
-        tx = np.where(out_f, np.minimum(tx, np.maximum(B[0] + GS_CAP[role] * (.6 + .8 * tc.press), MIN_X[role]) + (1 - COMPRESS[role]) * 40.), tx)
+        tx = np.where(out_f, np.minimum(tx, np.maximum(B[0] + GS_CAP[role] * (.6 + .8 * tc.press), MIN_X[role]) + ALLOW[role]), tx)
     if not has:
         bl = (role == CB) | (role == FB)
         cur = m.carrier if m.state == "held" and m.poss == 1 - t else -1
@@ -529,6 +533,14 @@ def team_targets(m, t):
 
     # ---- goalkeeper ---------------------------------------------------------------------
     sw = 1 + 1.2 * m.mod["sweep"][11 * t]  # sweeper keepers play higher
+    rush = 0.
+    if not has and m.state == "held" and m.poss == 1 - t and carrier >= 0:
+        Cc = O[carrier - 11 * (1 - t)]
+        dgl = float(nrm(Cc - GOAL))
+        if dgl < 34.:
+            sp_pt = Cc + _unit(GOAL - Cc) * max(dgl - 18., 0.)  # where he becomes a real shooting threat
+            if float(nrm(P[1:] - sp_pt, axis=1).min()) / 7.5 > float(nrm(sp_pt - Cc)) / 7. + 1.:  # no team-mate gets there a second before him
+                rush = float(clip((34. - dgl) / 14., .35, 1.))
     if not urgent[0]:
         if has:
             gx, gy = clip(2.5 + .12 * B[0] * sw, 2.5, 14 * sw), W / 2 + clip(by * .22, -8, 8)
@@ -536,6 +548,8 @@ def team_targets(m, t):
             v = B - GOAL
             db = max(float(nrm(v)), 1e-6)
             depth = clip(1.2 + .08 * db + 2 * (sw - 1), 1.5, 8 + 6 * (sw - 1))
+            if rush > 0:
+                depth = max(depth, float(clip(db - 5.5, 0., 16.)) * rush)  # out to meet the carrier, not beyond the edge of the area
             gx, gy = v[0] / db * depth, W / 2 + clip(v[1] / db * depth, -7, 7)
         zone[0] = (clip(gx, 1., 22.), gy)
     return f(np.stack([clip(zone[:, 0], 1, L - 1), clip(zone[:, 1], 1, W - 1)], 1)), urgent

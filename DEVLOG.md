@@ -302,6 +302,40 @@ more often than real ones; many real long switches are uncontested).
 events, fouls won and dribbled-past events, goalkeeper involvement beyond saves and claims (sweeper actions, throws and drop kicks as
 distinct restarts), injury stoppages at the real rate.
 
+## Ideas from other football AIs, keeper 1v1 and the shot clock
+
+Read-only study of two open-source football AIs (RoboCup 2D HELIOS base, Google Research Football's engine). Nothing was copied; the
+ideas that fit were re-derived as geometry/utility rules. Used: possession that fades in and out instead of flipping (so the shape moves
+smoothly between attack and defence), laziness far from the ball in roles with little to do, a support ring around the carrier (attract
+from afar, repel inside ~11 m), the keeper coming out to the carrier's "shooting point" when no defender can get there first.
+Not used: HELIOS's deep action-chain search (our two-ply `pot` term already covers the cheap part of it) and a "knock-on" self-pass
+(the existing carry stride already represents running onto a ball pushed ahead, and a self-pass would pollute pass statistics and
+trigger false offsides - skipped on purpose).
+
+**A measurement bug first.** `norms360.sim()` counted the passer as a supporting team-mate (the ball sits 0.5 m ahead of him), which
+produced a false "hoarding, nearest support 5 m" alarm. Excluding the carrier by identity gave nearest support 9.3 m (real 9.1).
+Lesson: when a metric looks wrong, check that the instrument is not the thing that is wrong before changing the engine.
+
+**Keeper rushing out broke the through-on-goal behaviour (0.73 -> 0.23 shots).** Two separate reasons, both real football logic that
+was missing: (1) the carry option treated the keeper as a defender standing in the way / a crowd, so the striker passed instead of
+running at him (a run at goal ends in a shot or a dribble round the keeper, and the shot terms already price the keeper in);
+(2) nothing physical happened when the striker reached the keeper: the 5 Hz step let him run straight through. Now a keeper who
+reaches the carrier smothers the ball (gk skill vs dribbling, a small chance of a foul/penalty) and logs `keeper_claim` /
+`keeper_sweep` with `technique="smother"`. Result in the scenario: shot 0.70, mean shot distance 11 m, xG 0.17, no passes; the other
+30% are saved at his feet, which is the real-football outcome of a 1v1 (the keeper wins about half).
+
+**The shot clock was punishing running at goal.** The willingness to shoot falls with the time he has held the ball (`shoot_hold`),
+which is right for a player who sits on a chance in the box, but a striker who carried 40 m had used it all up before reaching the box,
+so he shot from 3-5 m. The clock now restarts when the chance becomes clearly better (xG at least 1.3x the best he has had with this
+ball, only counted from about .12 xG upward). Through-on-goal shots come from 11 m instead of 5 m.
+
+**Defensive depth - what the real freeze frames say (Euro 2020 360, final third passes).** Defenders goal-side of the ball: 83% real
+vs 61% sim in the middle third, 67% real vs 47% sim in the final third. At real shots the deepest outfield defender is 2.2 m off his
+goal line (sim 9 m), and the sim's defence only gets deep about 6 s after the ball arrives (14 m -> 4.7 m): the sim's attacks are
+quick relative to the defence's drop. A "forwards stay ahead" allowance (`ALLOW`) was tested first and changed nothing: the players
+ahead of the ball were centre-backs/full-backs marking edge-of-box runners and midfielders level with the ball, not forwards.
+(Details and the fix: see the next entry once measured.)
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

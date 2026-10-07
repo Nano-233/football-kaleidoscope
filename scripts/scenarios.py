@@ -12,6 +12,7 @@ Scenarios:
   corner      attacking corner: players in the box, nobody behind the keeper or on the goal line
   hold_up     striker receives with a marker on his back: lay-off or shield, not a turn-and-shoot
   defending   the other side attacks down the wing: defenders face the play, keep a line, nobody turns their chest to their own goal
+  low_block   a settled attack with the ball 20-25 m out: how deep and how many defenders are near their own goal
   chase       a ball played into space behind the line: runner and defenders race for it, keeper comes for it when he can
 """
 import sys, pathlib
@@ -163,10 +164,10 @@ def defending(seed):
             continue
         g = own - m.pos[i]
         g /= np.linalg.norm(g) + 1e-9
-        if np.hypot(*m.vel[i]) < 4.:  # a defender sprinting back to his goal naturally faces it; the rest should not
+        if np.hypot(*m.vel[i]) < 4. and m.pos[i][0] > m.ball[0]:  # only players between the ball and their goal count: an outlet up the pitch facing back at the play is facing his own goal for a good reason; a defender sprinting back naturally faces it too
             facing.append(float(m.head[i] @ g > .3))
     back = [m.pos[i][0] for i in range(11, 22) if m.role[i] in (1, 2)]
-    return dict(facing_own_goal=float(np.mean(facing)), line_spread=float(np.std(back)))
+    return dict(facing_own_goal=float(np.mean(facing)) if facing else np.nan, line_spread=float(np.std(back)))
 
 
 def chase(seed):
@@ -213,7 +214,29 @@ def marked_run(seed):
     return dict(gap_end=gap[-1], gap_mean=float(np.mean(gap)), loose=float(np.mean(np.array(gap) > 4.)), beyond_line=float(off > 0))
 
 
-SCEN = dict(marked_run=marked_run, through=through, pressed=pressed, corner=corner, hold_up=hold_up, defending=defending, chase=chase)
+def low_block(seed):
+    """The ball sits with a carrier 20-25 m from goal while the attacking side is settled: how deep and how many bodies does the defence have near its goal?"""
+    m = build(seed)
+    cm = of(m, 0, CM)[0]
+    base = {GKR: 103., 1: 88., 2: 88., 3: 80., 4: 76., 5: 70., 6: 70., 7: 62.}
+    for i in range(11, 22):
+        m.pos[i][0] = base[int(m.role[i])]
+        m.tsm[i] = m.pos[i]
+    for i in range(11):
+        if i != cm and m.role[i] != GKR:
+            m.pos[i][0] = np.clip(m.pos[i][0] + 28, 40, 96)
+    m.poss_fade[0] = 1.
+    put(m, cm, 80, 40)
+    give(m, cm)
+    m.next_dec = m.t + 99
+    run(m, 8)
+    ff = np.array([m.pos[i] for i in range(11, 22) if m.role[i] != GKR])
+    depth = np.sort(L - ff[:, 0])
+    return dict(def1=float(depth[0]), def3=float(depth[2]), def5=float(depth[4]), inbox=float(np.sum((L - ff[:, 0] < 16.5) & (np.abs(ff[:, 1] - W / 2) < 20.2))),
+                goalside=float(np.sum(ff[:, 0] > m.pos[cm][0])), line_gap=float(depth[-1] - depth[0]))
+
+
+SCEN = dict(low_block=low_block, marked_run=marked_run, through=through, pressed=pressed, corner=corner, hold_up=hold_up, defending=defending, chase=chase)
 EXPECT = dict(
     through="shot in most trials and few passes (real: a striker through on goal shoots or rounds the keeper, he does not play a pass)",
     pressed="speed 1 s in: well below his 5.5 m/s (about 2-3.3), a real contest (ball lost or a take-on logged in a good share of trials)",
@@ -221,6 +244,7 @@ EXPECT = dict(
     hold_up="mostly a lay-off or a shield; a shot is rare (<15%) and the ball is often lost to the marker",
     defending="facing own goal under 10%; back line spread (std of x) under 4 m",
     marked_run="the nearest defender stays within about 2-3 m of a runner through the run (real defenders track runners; the share beyond 4 m should be small)",
+    low_block="real shots (360 freeze frames) show the deepest outfield defender about 2 m off his goal line, 6 defenders inside the box and about 5-6 players goal-side of the shooter",
     chase="runner and defenders race; the keeper collects or sweeps in a good share when the ball is in his area",
 )
 
