@@ -44,6 +44,12 @@ PARAMS = {
 }
 
 
+# the parameters that decide the funnel (defensive closing and shape, duel odds, risk appetite, shot appetite) go first: a round takes an hour
+PRIORITY = ["press_k", "jock_k", "close_gap", "react_def", "mark_gap", "box_gate", "dang_far", "dang_gate", "box_start", "lag_k", "wn_end", "drop_k", "tackle_rate", "tackle_sel", "contact_r",
+            "ctrl_marked", "intercept", "risk_pow", "shoot_ref", "shoot_slope", "prog_base", "exec_k", "press_len", "dec_noise", "surv_k", "gk_shoot", "cross_v", "pot", "relief", "keep"]
+ORDER = [n for n in PRIORITY if n in PARAMS] + [n for n in PARAMS if n not in PRIORITY]
+
+
 def _init(over):
     from matchsim import engine
     engine.TUNE.update(over)
@@ -113,7 +119,7 @@ def main():
     print(f"start loss {best:.1f}", flush=True)
     for rd in range(rounds):
         step = .3 if rd == 0 else .15
-        for name in PARAMS:
+        for name in ORDER:
             if name not in cur:
                 continue
             lo, hi = PARAMS[name]
