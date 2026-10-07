@@ -134,6 +134,12 @@ def seek_space(m, t, P, O, C, zone, role, out_f, skip, line):
     idx = np.nonzero(due)[0]
     if len(idx):
         cand = clip(zone[idx][:, None, :] + OFFS[None], [2., 2.], [L - 2., W - 2.])  # (n, K, 2)
+        # A forward who cannot find a lane up where the shape put him also looks for one closer to the ball: checking to feet, dropping into the half-space, the
+        # useful passing band 10-20 m from the carrier (the open-source forward 'creating space' state scores spots the same way, with the passing lane weighted heaviest)
+        fwd_ = np.isin(role[idx], (ST, WG, AM))[:, None, None]
+        short = np.stack(np.meshgrid([5., 11., 17.], [-10., 0., 10.], indexing="ij"), -1).reshape(-1, 2)  # (9, 2): ahead of the ball by 5-17 m, either side
+        sc_ = np.stack([np.clip(C[0] + short[:, 0], 2., L - 2.)[None].repeat(len(idx), 0), np.clip(zone[idx][:, 1:2] + short[:, 1][None], 2., W - 2.)], -1)  # (n, 9, 2)
+        cand = np.concatenate([cand, np.where(fwd_, sc_, cand[:, :1])], axis=1)
         n, K = cand.shape[:2]
         dmin = np.sqrt(((cand[:, :, None, :] - O[None, None]) ** 2).sum(-1)).min(2)  # (n, K)
         open_ = clip(dmin / OPEN_CAP, 0, 1.)  # separation from the nearest defender only counts up to a few metres: a marked forward cannot get 6 m of room
@@ -152,6 +158,7 @@ def seek_space(m, t, P, O, C, zone, role, out_f, skip, line):
         att = np.isin(role[idx], (WG, AM, ST, CM))[:, None]
         offside = att * ((cand[..., 0] > line + .3) & (cand[..., 0] > C[0]))
         dev = np.sqrt(((cand - zone[idx][:, None]) ** 2).sum(-1)) / 8.
+        dev[:, len(OFFS):] *= TP.get("check_dev", .3)  # checking to feet is a deliberate move away from the shape, not drifting out of it
         # a player cannot walk through the man who is marking him: a spot that needs him to get past a defender who stands between him and it is worth less
         a_pos = P[idx][:, None, :]  # (n,1,2)
         vv = cand - a_pos  # (n,K,2)
