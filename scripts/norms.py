@@ -69,6 +69,7 @@ def from_sim(r):
     ev = r["events"]
     recs = collections.defaultdict(list)
     fl = lambda tm, x, y: (x, y) if tm == 0 else (L - x, W - y)
+    fr = np.array(r["frames"]); ft = fr[:, 0]
     for e in ev:
         ty, tm = e["type"], e.get("team")
         if ty in ("pass", "cross") and e.get("source") not in ("kickoff",):
@@ -79,7 +80,10 @@ def from_sim(r):
                                  kind={"goal_kick": "Goal Kick", "throw_in": "Throw-in", "corner": "Corner", "short_corner": "Corner"}.get(e.get("source"), ""), head=e.get("body_part") == "head"))
         elif ty == "ball_receipt" and tm is not None:
             x, y = fl(tm, e["x"], e["y"])
-            recs[tm].append(dict(k="receipt", x=x, y=y))
+            k_ = min(int(np.searchsorted(ft, e["t"])), len(fr) - 1)
+            pos_ = fr[k_, 5:49].reshape(22, 2)
+            opp_ = pos_[11 * (1 - tm) + 1: 11 * (1 - tm) + 11]
+            recs[tm].append(dict(k="receipt", x=x, y=y, nd=float(np.hypot(*(opp_ - np.array([e["x"], e["y"]])).T).min())))
         elif ty == "carry":
             x, y = fl(tm, e["x"], e["y"]); ex, ey = fl(tm, e["end_x"], e["end_y"])
             recs[tm].append(dict(k="carry", t=e["t"], x=x, y=y, ex=ex, ey=ey, dur=e["duration"]))
@@ -181,7 +185,14 @@ def team_metrics(R):
     for name, lo, hi in (("own", 0, L / 3), ("mid", L / 3, 2 * L / 3), ("fin", 2 * L / 3, L + 1)):
         m[f"tackle_{name}"] = sum(1 for r in T if lo <= r["x"] < hi)
     # shots
-    rc = np.array([np.hypot(L - r["x"], r["y"] - W / 2) for r in R if r["k"] == "receipt"])
+    rcr = [r for r in R if r["k"] == "receipt"]
+    rc = np.array([np.hypot(L - r["x"], r["y"] - W / 2) for r in rcr])
+    rnd = np.array([r.get("nd", np.nan) for r in rcr])
+    for lo, hi in ((8, 16), (16, 25), (25, 35)):
+        s_ = (rc >= lo) & (rc < hi) & ~np.isnan(rnd)
+        m[f"rcv_nd_{lo}_{hi}"] = float(rnd[s_].mean()) if s_.any() else np.nan
+        if lo >= 16:
+            m[f"rcv_gt4_{lo}_{hi}"] = float((rnd[s_] > 4).mean()) if s_.any() else np.nan
     for lo, hi in ((0, 8), (8, 12), (12, 16), (16, 20), (20, 25), (25, 32)):
         m[f"rcv_{lo}_{hi}"] = float(((rc >= lo) & (rc < hi)).sum())
     m["shots"] = len(S)
@@ -270,7 +281,7 @@ GROUPS = [("volume", ["passes", "pass_acc", "carries", "tackles", "interception"
           ("aerial", ["high_share", "head_pass", "gk_long_share", "gk_high_share", "clear_head", "aerial_lost"]),
           ("passing", ["acc_free", "acc_press", "press_pass_share", "into_f3_att", "into_f3_rate", "within_f3_att", "within_f3_rate", "box_entry_att", "box_entry_rate", "inbox_pass_att", "inbox_pass_rate", "cross_rate", "acc_own", "acc_mid", "acc_fin", "n_own", "n_mid", "n_fin", "fwd_own", "side_own", "back_own", "fwd_mid", "side_mid", "back_mid", "fwd_fin", "side_fin", "back_fin", "long_share", "short_share", "avg_pass_len", "crosses_open", "through", "switch", "pass_hold_med", "pass_hold_mean"]),
           ("progression", ["into_final3", "into_box", "into_box_ok", "carry_len", "carry_prog10", "carry_into_final3", "carry_into_box", "takeons", "takeon_succ", "tackle_won", "tackle_own", "tackle_mid", "tackle_fin"]),
-          ("receipts near goal", ["rcv_0_8", "rcv_8_12", "rcv_12_16", "rcv_16_20", "rcv_20_25", "rcv_25_32"]),
+          ("receipts near goal", ["rcv_nd_8_16", "rcv_nd_16_25", "rcv_nd_25_35", "rcv_gt4_16_25", "rcv_gt4_25_35", "rcv_0_8", "rcv_8_12", "rcv_12_16", "rcv_16_20", "rcv_20_25", "rcv_25_32"]),
           ("shots", ["shots", "goals", "on_target", "blocked", "shot_xg", "xg_per_shot", "big_chance", "shot_d_lt12", "shot_d_12_20", "shot_d_ge20", "shot_box", "shot_head", "shot_first", "shot_press", "shot_blockers", "shot_free_look", "shot_nearest_def", "shot_def_within5", "shot_goalside_frac", "shot_goalside_n", "shot_team_in_box", "shot_def_in_box", "shot_def1_depth", "shot_def5_depth"])]
 
 
@@ -296,6 +307,9 @@ if __name__ == "__main__":
         per = real(d)
         agg = aggregate(per)
         agg["_n_team_matches"] = len(per)
+        ex = ROOT / "reference" / "real_extras.json"
+        if ex.exists():
+            agg.update({k: v for k, v in json.loads(ex.read_text()).items() if not k.startswith("_")})
         outp.parent.mkdir(exist_ok=True)
         outp.write_text(json.dumps({k: (None if isinstance(v, float) and np.isnan(v) else v) for k, v in agg.items()}, indent=1))
         table(agg)

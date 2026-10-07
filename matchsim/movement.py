@@ -360,6 +360,8 @@ def team_targets(m, t):
         gate = np.where(ok & (o[:, 0] < 20) & (np.abs(o[:, 1] - W / 2) < 22) & (role > GK), np.maximum(gate, TP.get("box_gate", .85)), gate)  # attackers in the box are marked, not watched
         thr = np.exp(-nrm(o - GOAL) / 22)
         gate = np.where(ok, np.maximum(gate, clip((thr - .25) * 1.6, 0, .8)), gate)  # and so is anyone within about 30 m of goal
+        dang = clip((TP.get("dang_far", 38.) - nrm(o - GOAL, axis=1)) / 18., 0, 1)  # the closer an attacker is to goal the more he is marked (man first, zone second)
+        gate = np.where(ok & (role > GK), np.maximum(gate, TP.get("dang_gate", .85) * dang), gate)
         zone = zone * (1 - gate[:, None]) + man * gate[:, None]
         free = out_f & (gate < .5)  # defenders holding a zone keep their distance from each other: no bunching, no gaps
         dz = zone[:, None] - zone[None]
@@ -375,14 +377,14 @@ def team_targets(m, t):
             cs = float(nrm(Cv))
             trig = 1. + .35 * (m.t - m.ctrl_t < 1.2) + .3 * (Cv[0] > .5)  # press triggers: a fresh touch, a carrier turning away from our goal
             depth = C[0] / L
-            R = (3 + 9 * tc.press) * (1.5 if m.t < m.trans_until[t] else 1.0) * trig
+            R = (3 + 9 * tc.press) * (1.5 if m.t < m.trans_until[t] else 1.0) * trig * TP.get("press_k", 1.)
             if depth > .5:
                 R *= max(.15, 1 - (depth - .5) * 2 * (1 - tc.press) * .9)
             d = nrm(P - C, axis=1)
             d[role == GK] = 1e9
             n = 1 + (tc.press > .8)
             near = np.argsort(d)
-            gap = 2.4 + 1.4 * (1 - tc.press) + .15 * cs
+            gap = (2.4 + 1.4 * (1 - tc.press) + .15 * cs) * TP.get("jock_k", 1.)
             tgt1 = C + _unit(gv + FORCE_WIDE * inside) * gap + Cv * .2
             if depth < .62:  # cover behind the presser, shifted to the inside
                 for i in near[n:n + 1]:
@@ -421,7 +423,7 @@ def team_targets(m, t):
             for i in np.argsort(d)[:2]:
                 zone[i], urgent[i] = f(m.flight["end"]), True
                 m.sprint_hint[11 * t + i] = True  # the contest for a ball in the air
-        elif m.state == "flight" and m.flight["kind"] == "ground" and m.t - m.flight["t0"] > .35:  # defenders react ~.35 s after release; nearest-in-time one moves to the lane
+        elif m.state == "flight" and m.flight["kind"] == "ground" and m.t - m.flight["t0"] > TP.get("react_def", .35):  # defenders react ~.35 s after release; nearest-in-time one moves to the lane
             fl = m.flight
             a, b = B, f(fl["end"])
             ab = b - a
@@ -448,7 +450,7 @@ def team_targets(m, t):
             de[role == GK] = 1e9
             for i in np.argsort(de)[:2]:
                 if int(i) not in taken and de[i] < 12:
-                    zone[i], urgent[i] = e_ + _unit(GOAL - e_) * 1.5, True
+                    zone[i], urgent[i] = e_ + _unit(GOAL - e_) * TP.get("close_gap", 1.5), True
                     m.sprint_hint[11 * t + i] = True  # closing the receiver
                     break
         if m.state != "dead":

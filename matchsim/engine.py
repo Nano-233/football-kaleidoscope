@@ -20,10 +20,10 @@ from .movement import _tf, _unit, nrm, clip
 
 DT = 0.2
 # Single tuning table (calibrated by scripts/calibrate.py against real-football norms).
-TUNE = dict(read_press=.5, tackle_sel=8., exposed_k=1.2, surv_k=1.0, gk_shoot=1.4, contact_r=1.6, press_len=3.2, close_t=.5, hurry_k=.3, exec_k=2.0, exec_floor=.15, dec_noise=.15, windup_k=.35, hold_sigma=.7, fade_up=2.2, fade_dn=1.4, lazy_k=.6, xg_run=8., own_goal_cone=.0, head_run=4.2, head_rate=2.5, mom_k=.75, carry_v0=2.0, carry_v1=1.6, cruise_k=0.65, burst_hold=0.4, run_frac=0.7, press_dist=1.75, air_base=0.5, head_on=0.28, head_clear=0.5, air_k=0.5, gk_air=0.6, block_base=0.12, block_nb=0.12, ft_shot=0.315, turn_cost=0.55, turn_rate=3.2, face_k=1.05, pot=2.2, relief=1.0, ft_slow=.0, drive=0.1,  cong_k=0.5, risk_pow=2.2, first_touch=3.0, wide_v=0.35, ctrl_marked=0.5, shoot_hold=0.98, shoot_slope=2.05, shoot_ref=0.168, shoot_press=0.56, adv_lin=.6, pack=.04, shoot_min=.12, react=1.84, patience=0.02, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.76, fk_bonus=0.05, long_bonus=0.163, prog_base=0.5, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=0.8, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=1.3, shot_k=3.15, shot_k_dir=5.0,
+TUNE = dict(free_dwell=.5, ball_v0=8.5, ball_v1=.25, read_press=.8, tackle_sel=8., exposed_k=1.2, surv_k=1.0, gk_shoot=1.4, contact_r=1.6, press_len=3.2, close_t=.5, hurry_k=.3, exec_k=2.0, exec_floor=.15, dec_noise=.15, windup_k=.35, hold_sigma=.7, fade_up=2.2, fade_dn=1.4, lazy_k=.6, xg_run=8., own_goal_cone=.0, head_run=4.2, head_rate=2.5, mom_k=.75, carry_v0=.9, carry_v1=.9, cruise_k=0.65, burst_hold=0.4, run_frac=0.7, press_dist=1.75, air_base=0.5, head_on=0.28, head_clear=0.5, air_k=0.5, gk_air=0.6, block_base=0.12, block_nb=0.12, ft_shot=0.315, turn_cost=0.55, turn_rate=3.2, face_k=1.05, pot=2.2, relief=1.0, ft_slow=.0, drive=0.1,  cong_k=0.5, risk_pow=2.2, first_touch=3.0, wide_v=0.35, ctrl_marked=0.5, shoot_hold=0.98, shoot_slope=2.05, shoot_ref=0.168, shoot_press=0.56, adv_lin=.6, pack=.04, shoot_min=.12, react=1.84, patience=0.02, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.76, fk_bonus=0.05, long_bonus=0.163, prog_base=0.5, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=0.8, gk_long=.5, box_foul=.04, home_edge=1.7, shot_cost=1.3, shot_k=3.15, shot_k_dir=5.0,
             carry_base=0.22, carry_prog=.2, carry_streak=.3, dwell_base=0.9, dwell_shape=2.4, dwell_scale=1.61,
             tackle_rate=1.2, wide_error=3.2, off_miss=.2, off_mult=.25)
-TUNE.update(box_start=38., wn_end=42., lag_k=1., drop_k=1., mark_gap=1.1, box_gate=.85)  # block shape (read by movement.py through TP)
+TUNE.update(box_start=38., wn_end=42., lag_k=1., drop_k=1., mark_gap=1.1, box_gate=.85, dang_far=38., dang_gate=.85, react_def=.35, close_gap=1.5, jock_k=1., press_k=1.)  # block shape (read by movement.py through TP)
 movement.TP = TUNE
 sig = lambda x: 1 / (1 + np.exp(-x))
 GOAL_HALF = 3.66
@@ -463,11 +463,11 @@ class Match:
         pr = clip(1 - nrm(s.pos[s._opp(t)] - s.pos[i], axis=1).min() / 5, 0, 1)
         xa = f(s.pos[i])[0]
         ft = float(clip((xa - .62 * L) / (.2 * L), 0, 1))  # the final third is played more carefully: more look-ups, fewer first-time balls
-        react = TUNE["react"] * (1.4 - .015 * (s.attr["composure"][i] + s.attr["vision"][i])) * (1 - .55 * pr) * (1 + TUNE["ft_slow"] * ft)
+        react = TUNE["react"] * (1.4 - .015 * (s.attr["composure"][i] + s.attr["vision"][i])) * (1 - .2 * pr) * (1 + TUNE["free_dwell"] * (1 - pr)) * (1 + TUNE["ft_slow"] * ft)  # with nobody near he takes his time (looks up, shows for it, passes it back and forth); pressure does not make a real player hold it any shorter
         xg_here, _ = s._xg(f(s.pos[i]), [])
         if xg_here > .08 and s.role[i] > 0 and s._face_goal(i) > .55 and s.rng.random() < TUNE["ft_shot"]:  # in front of goal, facing it and the ball sits right: hit it first time (otherwise he takes a touch first)
             return float(s.rng.uniform(.05, .2))
-        if s.rng.random() < clip(.2 + .5 * pr + .02 * (s.attr["passing"][i] - 10), 0, .8) * s.first_time_ok * (1 - TUNE["ft_slow"] * .5 * ft):
+        if s.rng.random() < clip(.2 + .15 * pr + .02 * (s.attr["passing"][i] - 10), 0, .8) * s.first_time_ok * (1 - TUNE["ft_slow"] * .5 * ft):
             return float(s.rng.uniform(.05, .22))  # one touch
         return float(clip(react * np.exp(s.rng.normal(0., TUNE["hold_sigma"]) - .5 * TUNE["hold_sigma"] ** 2), .12, 9.))  # a skewed spread with the same mean: many quick releases, now and then a long dwell on the ball (real: 31% at once, 12% over 3 s)
 
@@ -801,7 +801,7 @@ class Match:
             m_ = np.concatenate([m_, m_[air], m_[thr_i]])
             Pm, Vm = P[m_], Vp[m_]
             dist = nrm(Pm - C, axis=1)
-            spd = clip(11 + .3 * dist, 11, 24)
+            spd = clip(TUNE["ball_v0"] + TUNE["ball_v1"] * dist, TUNE["ball_v0"], 22)
             runner = s.t < s.run_until[11 * t + m_]  # a runner is played into space well ahead of him: through ball
             tgt = clip(Pm + Vm * (np.minimum(dist / spd, 1.5) * np.where(runner, 1.3, .8))[:, None], [1, 1], [L - 1, W - 1])
             gdir = _unit(_unit(np.array([L, W / 2]) - Pm) + .6 * _unit(Vm + 1e-6))
@@ -992,7 +992,7 @@ class Match:
             s.carry_dir = _unit(f(cpos) - s.pos[c])
             s.carry_speed = float(min(.85 * s.vmax[c], 3.2 + 2.2 * (1 - pr) + 1.6 * float(clip((float(nrm(cpos - C)) - 7.) / 8., 0, 1))))  # more room, longer and faster strides  # running at a defender or into space: faster when unpressed
             s.carry_streak += 1
-            s.next_dec = s.t + s.rng.uniform(.35, .6) * (1. - .5 * pe)  # keep carrying and look again shortly; sooner when someone is coming at him
+            s.next_dec = s.t + s.rng.uniform(.35, .6) * (1. - .3 * pe)  # keep carrying and look again shortly; sooner when someone is coming at him
 
     def _audit(s, t, c, C, O, pr, dnear, rk, K, X, U, k):
         """Record every on-ball decision with all the options considered (attacking-left-to-right frame)."""

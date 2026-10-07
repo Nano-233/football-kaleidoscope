@@ -1,0 +1,5 @@
+{
+ "_source": "StatsBomb Euro 2020 360 freeze frames, ball receipts (aggregates only): distance from the receiver to the nearest outfield opponent, by distance of the receiver to goal",
+ "rcv_nd_8_16": 2.48, "rcv_nd_16_25": 3.20, "rcv_nd_25_35": 4.88,
+ "rcv_gt4_16_25": 0.29, "rcv_gt4_25_35": 0.57
+}
