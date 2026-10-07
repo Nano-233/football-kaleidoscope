@@ -445,6 +445,9 @@ class Match:
             lt = prev // 11
             pos_t = _tf(np.asarray(at, float)) if lt else np.asarray(at, float)
             s.turnover = dict(t=s.t, team=t, loser=prev, pos=np.asarray(at, float).copy(), own_half=bool(pos_t[0] < .5 * L), used=False)
+        if s.state == "loose" and s.role[i] == 0:  # the keeper gets to a loose ball: he collects it
+            own_box = (at[0] < 16.5 if t == 0 else at[0] > L - 16.5) and abs(at[1] - W / 2) < 20.16
+            s.emit("keeper_claim" if own_box else "keeper_sweep", player=i, pos=at)
         if s.state == "loose" and s.last_ctrl_team != t:
             s.emit("ball_recovery", player=i, pos=at)
         if s.pending_pass is not None:
@@ -1222,7 +1225,7 @@ class Match:
             d = nrm(s.pos - q, axis=1)
             ok = (d < 1.0) & (s.block_until <= s.t)
             g_ = 11 * (1 - f["team"])  # the defending keeper reaches further and is better at it than outfield players
-            ok[g_] = bool(d[g_] < 3.2 and s.block_until[g_] <= s.t)
+            ok[g_] = bool(d[g_] < 3.2 + .8 * s.mod["sweep"][g_] and s.block_until[g_] <= s.t)
             if f["rcv"] >= 0:  # the intended receiver can stretch further for it
                 ok[f["rcv"]] = d[f["rcv"]] < 1.6 and s.block_until[f["rcv"]] <= s.t
             order = list(np.argsort(sp))

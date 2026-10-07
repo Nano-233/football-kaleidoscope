@@ -368,7 +368,8 @@ def team_targets(m, t):
                 zone[i], urgent[i] = wc + perp * (k - (n - 1) / 2) * .85, True
         elif m.state == "loose":
             d = nrm(P - B, axis=1)
-            d[role == GK] = 1e9
+            if nrm(B - GOAL) > 24:  # the keeper goes for a loose ball in and around his own box, not out in the field
+                d[role == GK] = 1e9
             for i in np.argsort(d)[:2]:
                 zone[i], urgent[i] = B + Bv * .6, True
                 m.sprint_hint[11 * t + i] = True  # a loose ball is chased flat out

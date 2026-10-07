@@ -18,7 +18,7 @@ import norms
 WORKERS = max(1, (os.cpu_count() or 8) - 4)
 REAL = {k: v for k, v in json.loads((ROOT / "reference" / "norms_real.json").read_text()).items() if v is not None}
 # real restart counts per match (both teams), from the same StatsBomb sample
-REAL_MATCH = {"throw_in": 45.4, "corner": 11.6, "goal_kick": 17.1, "free_kick": 22.9}
+REAL_MATCH = {"throw_in": 45.4, "corner": 11.6, "goal_kick": 17.1, "free_kick": 22.9, "dist_km": 10.8, "top_speed": 9.4}
 
 # metric -> (weight, scale: gap in these units counts as 1; None = 25 % of the real value)
 W = {
@@ -31,14 +31,14 @@ W = {
     "shot_d_lt12": (1, .06), "shot_d_12_20": (1, .06), "shot_d_ge20": (1, .06), "shot_head": (1, .05), "shot_first": (1, .06), "shot_blockers": (1, .4),
     "high_share": (2, .03), "head_pass": (1, None), "gk_long_share": (1, .08), "gk_high_share": (1, .08), "clear_head": (1, None), "aerial_lost": (1.5, None), "acc_own": (.5, .05), "acc_mid": (.5, .04), "acc_fin": (.5, .05),
 }
-M = {"throw_in": (1.5, None), "corner": (1, None), "goal_kick": (1, None), "free_kick": (1, None)}
+M = {"throw_in": (1.5, None), "corner": (1, None), "goal_kick": (1, None), "free_kick": (1, None), "dist_km": (3, .8), "top_speed": (.5, .6)}
 
 # parameter -> (low, high)
 PARAMS = {
     "react": (1.0, 2.6), "patience": (0., .6), "carry_base": (0., .4), "drive": (0., 1.), "shoot_ref": (.05, .5), "shoot_slope": (1., 4.), "shoot_press": (0., 1.6),
     "shoot_hold": (0., 1.6), "ft_shot": (.1, 1.), "pot": (0., 2.2), "relief": (0., 2.), "risk_pow": (1., 3.), "prog_base": (.5, 2.), "cong_k": (0., 1.),
     "ctrl_marked": (.15, .55), "first_touch": (0., 6.), "tackle_rate": (.8, 3.6), "wide_error": (1., 4.), "pass_sigma": (.6, 1.5), "intercept": (.3, .7),
-    "usage": (0., 1.2), "keep": (.2, .8), "long_bonus": (0., 1.2), "cross_v": (.8, 2.2), "wide_v": (0., 1.3), "turn_cost": (0., 1.), "face_k": (0., 3.), "block_base": (.05, .3), "block_nb": (0., .25), "air_base": (0., 1.2), "air_k": (0., 1.5), "gk_air": (0., 4.), "head_on": (.05, .5), "head_clear": (.2, .8),
+    "usage": (0., 1.2), "keep": (.2, .8), "long_bonus": (0., 1.2), "cross_v": (.8, 2.2), "wide_v": (0., 1.3), "turn_cost": (0., 1.), "face_k": (0., 3.), "block_base": (.05, .3), "block_nb": (0., .25), "cruise_k": (.35, 1.), "run_frac": (.5, .95), "burst_hold": (.1, .9), "air_base": (0., 1.2), "air_k": (0., 1.5), "gk_air": (0., 4.), "head_on": (.05, .5), "head_clear": (.2, .8),
 }
 
 
@@ -52,8 +52,14 @@ def _one(seed):
     m, r = calibrate.run(seed)
     per = [norms.team_metrics(R) for R in norms.from_sim(r).values()]
     cnt = {}
+    fr = np.array(r["frames"]); pos = fr[:, 5:49].reshape(len(fr), 22, 2); dt = r["meta"]["dt"]
+    sp = np.linalg.norm(np.diff(pos, axis=0), axis=2) / dt
+    sp[sp > 15] = 0
+    out = [i for i in range(22) if m.role[i] > 0]
+    cnt["dist_km"] = float(sp[:, out].sum(0).mean() * dt / 1000)
+    cnt["top_speed"] = float(sp[:, out].max(0).mean())
     for e in r["events"]:
-        if e["type"] in REAL_MATCH:
+        if e["type"] in REAL_MATCH and e["type"] not in ("dist_km", "top_speed"):
             cnt[e["type"]] = cnt.get(e["type"], 0) + 1
     return per, cnt
 
@@ -77,7 +83,7 @@ def evaluate(over, seeds, pool=None):
         parts[k] = e
         loss += w * e * e
     for k, (w, sc) in M.items():
-        e = float(np.clip((cnt[k] - REAL_MATCH[k]) / max(REAL_MATCH[k] * .25, 1e-3), -4, 4))
+        e = float(np.clip((cnt[k] - REAL_MATCH[k]) / (sc if sc is not None else max(REAL_MATCH[k] * .25, 1e-3)), -4, 4))
         parts[k] = e
         loss += w * e * e
     return loss, parts, agg, cnt
