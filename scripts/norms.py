@@ -73,7 +73,7 @@ def from_sim(r):
             x, y = fl(tm, e["x"], e["y"]); ex, ey = fl(tm, e["end_x"], e["end_y"])
             recs[tm].append(dict(k="pass", t=e["t"], x=x, y=y, ex=ex, ey=ey, ok=e.get("outcome") == "complete", cross=ty == "cross", through=e.get("technique") == "through_ball",
                                  switch=e.get("technique") == "switch", high=bool(e.get("lofted")), setp=e.get("source") in ("throw_in", "corner", "short_corner", "goal_kick"),
-                                 length=e["length"], press=False, hold=e.get("hold"), play="Regular Play",
+                                 length=e["length"], press=bool(e.get("under_pressure")), hold=e.get("hold"), play="Regular Play",
                                  kind={"goal_kick": "Goal Kick", "throw_in": "Throw-in", "corner": "Corner", "short_corner": "Corner"}.get(e.get("source"), ""), head=e.get("body_part") == "head"))
         elif ty == "carry":
             x, y = fl(tm, e["x"], e["y"]); ex, ey = fl(tm, e["end_x"], e["end_y"])
@@ -129,6 +129,20 @@ def team_metrics(R):
         m[f"fwd_{name}"] = float((gain[s] > 5).sum() / n)
         m[f"side_{name}"] = float((np.abs(gain[s]) <= 5).sum() / n)
         m[f"back_{name}"] = float((gain[s] < -5).sum() / n)
+    Pg = [r for r in P if not r["high"] and not r["cross"]]  # ground passes: accuracy with and without a defender on the passer
+    fr_ = [r["ok"] for r in Pg if not r["press"]]; pr_ = [r["ok"] for r in Pg if r["press"]]
+    m["acc_free"] = float(np.mean(fr_)) if fr_ else np.nan
+    m["acc_press"] = float(np.mean(pr_)) if pr_ else np.nan
+    m["press_pass_share"] = len(pr_) / max(len(Pg), 1)
+    zone_rates = {"into_f3": [r for r in P if not r["cross"] and r["x"] < 70 <= r["ex"]],
+                  "within_f3": [r for r in P if not r["cross"] and r["x"] >= 70 and r["ex"] > 70 and not inbox(r["ex"], r["ey"])],
+                  "inbox_pass": [r for r in P if not r["cross"] and inbox(r["x"], r["y"])],
+                  "box_entry": [r for r in P if not r["cross"] and inbox(r["ex"], r["ey"]) and not inbox(r["x"], r["y"])]}
+    for zn, zr in zone_rates.items():
+        m[f"{zn}_att"] = len(zr)
+        m[f"{zn}_rate"] = float(np.mean([r["ok"] for r in zr])) if zr else np.nan
+    cr = [r for r in P if r["cross"]]
+    m["cross_rate"] = float(np.mean([r["ok"] for r in cr])) if cr else np.nan
     m["long_share"] = float(np.mean([r["length"] >= 32 for r in P])) if P else np.nan
     m["short_share"] = float(np.mean([r["length"] < 10 for r in P])) if P else np.nan
     m["avg_pass_len"] = float(np.mean([r["length"] for r in P])) if P else np.nan
@@ -246,7 +260,7 @@ def _init(over):
 
 GROUPS = [("volume", ["passes", "pass_acc", "carries", "tackles", "interception", "clearance", "block", "foul", "ball", "dispossessed", "offside", "pressure", "miscontrol"]),
           ("aerial", ["high_share", "head_pass", "gk_long_share", "gk_high_share", "clear_head", "aerial_lost"]),
-          ("passing", ["acc_own", "acc_mid", "acc_fin", "n_own", "n_mid", "n_fin", "fwd_own", "side_own", "back_own", "fwd_mid", "side_mid", "back_mid", "fwd_fin", "side_fin", "back_fin", "long_share", "short_share", "avg_pass_len", "crosses_open", "through", "switch", "pass_hold_med", "pass_hold_mean"]),
+          ("passing", ["acc_free", "acc_press", "press_pass_share", "into_f3_att", "into_f3_rate", "within_f3_att", "within_f3_rate", "box_entry_att", "box_entry_rate", "inbox_pass_att", "inbox_pass_rate", "cross_rate", "acc_own", "acc_mid", "acc_fin", "n_own", "n_mid", "n_fin", "fwd_own", "side_own", "back_own", "fwd_mid", "side_mid", "back_mid", "fwd_fin", "side_fin", "back_fin", "long_share", "short_share", "avg_pass_len", "crosses_open", "through", "switch", "pass_hold_med", "pass_hold_mean"]),
           ("progression", ["into_final3", "into_box", "into_box_ok", "carry_len", "carry_prog10", "carry_into_final3", "carry_into_box", "takeons", "takeon_succ", "tackle_won", "tackle_own", "tackle_mid", "tackle_fin"]),
           ("shots", ["shots", "goals", "on_target", "blocked", "shot_xg", "xg_per_shot", "big_chance", "shot_d_lt12", "shot_d_12_20", "shot_d_ge20", "shot_box", "shot_head", "shot_first", "shot_press", "shot_blockers", "shot_free_look", "shot_nearest_def", "shot_def_within5", "shot_goalside_frac", "shot_goalside_n", "shot_team_in_box", "shot_def_in_box", "shot_def1_depth", "shot_def5_depth"])]
 

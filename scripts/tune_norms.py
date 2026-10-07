@@ -29,6 +29,7 @@ W = {
     "into_final3": (3, None), "into_box": (3, None), "carry_into_final3": (1, None), "carry_into_box": (1, None), "carry_prog10": (1, None), "takeons": (1, None), "takeon_succ": (.5, .08),
     "shots": (3, None), "goals": (3, None), "on_target": (1, None), "blocked": (1, None), "xg_per_shot": (2, .02), "big_chance": (1, None),
     "shot_d_lt12": (1, .06), "shot_d_12_20": (1, .06), "shot_d_ge20": (1, .06), "shot_head": (1, .05), "shot_first": (1, .06), "shot_blockers": (1, .4),
+    "acc_free": (2, .03), "acc_press": (2, .04), "press_pass_share": (1, .04), "into_f3_att": (1.5, None), "into_f3_rate": (1.5, .06), "within_f3_rate": (1.5, .05), "box_entry_rate": (1, .06), "inbox_pass_att": (1.5, None), "inbox_pass_rate": (1, .06), "cross_rate": (1, .06), "shot_free_look": (1, .15), "shot_nearest_def": (1, .6),
     "high_share": (2, .03), "head_pass": (1, None), "gk_long_share": (1, .08), "gk_high_share": (1, .08), "clear_head": (1, None), "aerial_lost": (1.5, None), "acc_own": (.5, .05), "acc_mid": (.5, .04), "acc_fin": (.5, .05),
 }
 M = {"throw_in": (1.5, None), "corner": (1, None), "goal_kick": (1, None), "free_kick": (1, None), "dist_km": (3, .8), "top_speed": (.5, .6)}
@@ -37,7 +38,7 @@ M = {"throw_in": (1.5, None), "corner": (1, None), "goal_kick": (1, None), "free
 PARAMS = {
     "react": (1.0, 2.6), "patience": (0., .6), "carry_base": (0., .4), "drive": (0., 1.), "shoot_ref": (.05, .5), "shoot_slope": (1., 4.), "shoot_press": (0., 1.6),
     "shoot_hold": (0., 1.6), "ft_shot": (.1, 1.), "pot": (0., 2.2), "relief": (0., 2.), "risk_pow": (1., 3.), "prog_base": (.5, 2.), "cong_k": (0., 1.),
-    "ctrl_marked": (.15, .55), "first_touch": (0., 6.), "tackle_rate": (.8, 3.6), "wide_error": (1., 4.), "pass_sigma": (.6, 1.5), "intercept": (.3, .7),
+    "ctrl_marked": (.15, .8), "first_touch": (0., 6.), "tackle_rate": (.4, 3.6), "press_len": (2., 5.), "exec_k": (1., 3.5), "exec_floor": (0., .4), "dec_noise": (0., .5), "contact_r": (1., 2.5), "surv_k": (0., 2.), "gk_shoot": (0., 3.), "hurry_k": (0., 1.), "wide_error": (1., 4.), "pass_sigma": (.6, 1.5), "intercept": (.3, .7),
     "usage": (0., 1.2), "keep": (.2, .8), "long_bonus": (0., 1.2), "cross_v": (.8, 2.2), "wide_v": (0., 1.3), "turn_cost": (0., 1.), "face_k": (0., 3.), "block_base": (.05, .3), "block_nb": (0., .25), "cruise_k": (.35, 1.), "run_frac": (.5, .95), "burst_hold": (.1, .9), "air_base": (0., 1.2), "air_k": (0., 1.5), "gk_air": (0., 4.), "head_on": (.05, .5), "head_clear": (.2, .8),
 }
 
