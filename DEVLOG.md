@@ -506,6 +506,21 @@ real, with no change to behaviour. A "take a touch unless hurried" gate was trie
 Remaining gaps: box entries 11-13 vs 25 and big chances 0.17-0.39 vs 0.86 (the final third is now harder to get into than real), tackles 36-38
 vs 20 and interceptions 17-19 vs 11, aerial duels 58 vs 22 (the duel is logged for every marked landing), throw-ins 28 vs 45.
 
+### Corners: rest defence first (2026-10-08)
+
+Saw (user, viewer): at an attacking corner eight men are in or at the box, one full-back is left at x = 23 and the keeper stands 34 m out, while the other
+side's two forwards wait 29 and 44 m from the attackers' goal, onside because of that one defender: "just people in the box, then a whole empty area".
+Cause: the corner layout was a fixed list of 8 box spots filled in role order (striker, both centre-backs, ...) with whoever was left staying on his
+formation dot. Nobody decided who stays home, and the defending side's leftovers sat on their own forward dots, deep in the corner side's half.
+Source: Open Football's AttackPlan decides rest defence BEFORE the attacking roles ("a slot can never be filled by a man who is supposed to be staying
+home"), sized from the nominal defenders and game state, ranked by depth plus a bonus for centre-backs, the screen and the far-side full-back. A corner
+is the same rule with a known counter-threat.
+Built (movement.team_targets, corner branch): the defending side leaves n_out = 10 - 8 box spots = 2 quick forwards (pace) on the halfway line; the
+attacking side keeps n_out + 1 = 3 outfield men home, chosen by least value in the opposition's box (aerial + half finishing, defenders and the screen
+first, attackers last), on the halfway line paired goal-side with the outlets, a sweeper keeper 28 m behind them (21 m from goal); the rest fill the box
+spots in role order. Sent-off players are excluded from the plan.
+Check: scenarios.py corner in the box 4.8 (expected 4-7), behind the keeper 0.0; sample corners show cover at x = 46-51, keeper 21-22, outlets 52-56.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

@@ -459,21 +459,37 @@ def team_targets(m, t):
         return f(tg), urgent
     if kind == "corner":
         tg = A.copy()
+        att_spots = [(L - 7, 31), (L - 9, 37), (L - 12, 34), (L - 14, 28), (L - 14, 40), (L - 19, 34), (L - 22, 24), (L - 22, 44)]  # near post, far post, penalty spot, edge of the box
+        def_spots = [(5, 30), (5, 38), (8, 27), (8, 41), (11, 34), (6, 34), (13, 30), (13, 38)]
+        n_out = 10 - len(def_spots)  # the men a defending side leaves out of its box: its counter-attack outlets
+        rest_x, out_x = L / 2 - 3., L / 2  # the attacking side's cover stands on the halfway line, the outlets on the shoulder of its last man
+        out_y = [W / 2 - 10, W / 2 + 10]
+        cand = [i for i in idx if role[i] > GK and 11 * t + i != m.dead["taker"] and not m.off[11 * t + i]]  # a sent-off man is not part of the plan
         if has:
-            order = [i for r in (ST, CB, AM, CM, WG, DM, FB) for i in idx if role[i] == r and 11 * t + i != m.dead["taker"]]
-            spots = [(L - 7, 31), (L - 9, 37), (L - 12, 34), (L - 14, 28), (L - 14, 40), (L - 19, 34), (L - 22, 24), (L - 22, 44)]
-            for i, s in zip(order, spots):
-                tg[i] = s
-            tg[0] = (35, W / 2)
+            # who stays home is decided first (Open Football's AttackPlan: rest defence before the attacking roles): one more than the opposition
+            # has left up the pitch, the men worth least in their box (aerial and finishing), defenders and the screen first; a keeper behind them
+            n_rest = int(clip(n_out + 1, 2, 4))
+            val = {i: m.attr["aerial"][11 * t + i] + .5 * m.attr["finishing"][11 * t + i] - 6. * (role[i] in (FB, DM)) + 8. * (role[i] in (ST, WG, AM)) for i in cand}
+            rest = sorted(cand, key=lambda i: val[i])[:n_rest]
+            ys = [W / 2 + (k - (n_rest - 1) / 2) * 14. for k in range(n_rest)]
+            for k, i in enumerate(sorted(rest, key=lambda i: A[i, 1])):
+                tg[i] = (rest_x, ys[k])
+            order = [i for r in (ST, CB, AM, CM, WG, DM, FB) for i in cand if role[i] == r and i not in rest]
+            for i, sp_ in zip(order, att_spots):
+                tg[i] = sp_
+            tg[0] = (float(clip(rest_x - 28., 12., 24.)), W / 2)  # a sweeper behind his cover: close enough to the line to get back, far enough to reach a ball over it
             sup = m.dead.get("sup", -1) - 11 * t
             if m.dead.get("short") and 0 <= sup < 11:
                 cor = f(m.dead["pos"])
                 tg[sup] = cor + _unit(np.array([L / 2, W / 2]) - cor) * 9
         else:
-            order = [i for i in idx if role[i] > GK]
-            spots = [(5, 30), (5, 38), (8, 27), (8, 41), (11, 34), (6, 34), (13, 30), (13, 38)]
-            for i, s in zip(order, spots):
-                tg[i] = s
+            # the quickest forwards stay up as outlets on the shoulder of the last man; everybody else defends the box
+            fast = sorted([i for i in cand if role[i] in (ST, WG, AM)] or cand, key=lambda i: -m.attr["pace"][11 * t + i])[:n_out]
+            for k, i in enumerate(fast):
+                tg[i] = (L - out_x, out_y[k % len(out_y)])
+            order = [i for i in cand if i not in fast]
+            for i, sp_ in zip(order, def_spots):
+                tg[i] = sp_
             tg[0] = (1.5, W / 2)
         jost = 1.1 * np.stack([np.sin(.9 * m.t + m.phase[sl] * 3), np.cos(.7 * m.t + m.phase[sl] * 2)], 1)
         tg[1:] += jost[1:]  # jostling for position in the box
