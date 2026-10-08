@@ -482,6 +482,30 @@ and urgent men running as hard as the distance demands (`run_frac` -1) the total
 (D') budget is the principled next step: soccer critical speed is about 3.7-4.0 m/s and D' a few hundred metres (3-minute all-out tests), so a man can
 only spend about that much running above it before he has to recover.
 
+### Running: a stamina-linked speed budget and a real time budget (2026-10-08)
+
+Saw: 14.5 km a player (real 10.8 +/- 1.0, Prozone, Premiership) and 2.5 km above 7 m/s (real sprinting about 0.25 km). Not jitter (1 s smoothing changed
+nothing). Cause found by logging which line set the "urgent" flag: off-ball bursts 21 %, "joining the attack" 18 %, recovery runs 11 %. The reason it
+turned into sprinting: effort followed need = distance / `catch_t`, and `catch_t` was 1.2 s, so any gap over 10 m meant flat out.
+Source for the time budget: the real pass interval, about 3.4 s of ball in play per pass (968 passes in about 55 minutes of play): a man has until the
+next pass to be where the play needs him. `catch_t` 1.2 -> 3.4 gave 10.5 km, high-speed (5.5-7 m/s) 0.37 km and sprint 0.26 km on its own.
+Source for the budget: the critical speed model of running (Jones; Skiba's W'bal): a runner can hold his critical speed (CS) indefinitely and has a
+finite distance D' above it that refills below it. Soccer values from 3-minute all-out tests: CS about 3.7-4.0 m/s, D' a few hundred metres (rugby
+288 m); recovery constant 316-862 s (Skiba), 450 s used. Built in `_steer`: `dp` drains at (v - CS) above CS, refills towards `dmax` below it, and the
+speed cap falls from top speed to CS as the reserve empties. The stamina stat sets both: CS = 3.5 + 0.9 f, D' = 120 + 100 f, f = (stamina - 1) / 19.
+Check: stamina 8-12 players have CS 3.97 m/s, D' 172 m and 2.55 km above 5.5 m/s; stamina 16-21 have 4.27 m/s, 205 m and 2.88 km, and fade less in the
+second half (high-speed ratio 0.90 -> 0.97).
+Also: off-ball bursts only when the new spot is worth it or he is marked (`burst_gain`, off by default: the budget and `catch_t` made it unnecessary).
+Explicit sprint cues (press, loose ball, air contest, run in behind) stay all-out (`sprint_need` 0): making them need-based killed penetration.
+Result (36 matches / 24 seeds): distance 11.3 km, high-speed 0.68 km, sprint 0.52 km; calibration loss 287.7 -> 211.8 on the tuning seeds and 219.8 on
+48 unseen seeds. Passes 502 (real 484), own-third passes 146 (101), carries 137 (154), clearances 20 (29).
+Hold times: with the new movement the explicit wait rule is redundant (centre-backs 1.83 s vs 1.77 real, DM/CM 1.38 vs 1.39), so `wait_on` is off;
+full-backs, wingers and strikers still hold too long (about 2.0 s vs 1.4-1.5) and pressed holds too short (ratio 0.64 vs 0.86).
+Shots: "first time" was flagged for anything under 0.6 s after control; a shot after a touch is not first time. Flag now < 0.3 s: 0.33 against 0.32
+real, with no change to behaviour. A "take a touch unless hurried" gate was tried and made no difference, so it was removed.
+Remaining gaps: box entries 11-13 vs 25 and big chances 0.17-0.39 vs 0.86 (the final third is now harder to get into than real), tackles 36-38
+vs 20 and interceptions 17-19 vs 11, aerial duels 58 vs 22 (the duel is logged for every marked landing), throw-ins 28 vs 45.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
