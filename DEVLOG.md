@@ -459,6 +459,29 @@ possession push (no effect on those bands).
 Remaining gaps with this default (36 matches): own-third passes 145 vs 101, entry attempts 40 vs 54, clearances 48 vs 29, aerial duels 57 vs 22,
 offside 5.6 vs 2, carries 217 vs 154, shots 18 vs 13, long balls 5 % vs 13 %.
 
+### Time on the ball and the long ball (2026-10-08)
+
+Saw (user): "a centre-back may hold the ball a while to draw the press". Measured: time from receiving to passing (open play, StatsBomb timestamps
+to the millisecond): real CB 1.77 s (18 % over 3 s), DM/CM 1.39 s, simulated 1.38 s (10 %) and about 1.0 s. Overall 1.54 s against 1.27 s; the share of
+one-touch passes is the same (31 %), so the missing part is the tail of long holds.
+Source: Helios keeps HoldBall as the default of its action chain (a candidate wins only when it is safe and better); Open Football's passing state
+"looks for options, moving slowly or standing still". Built: if the chosen action is only a recycling pass and no safe pass that gains ground exists
+(safe = the success rate of the passes real players make unpressed, norms `acc_free` 0.88), the carrier keeps the ball and looks again every 0.3-0.6 s,
+until the man closing him is within two wind-up times (time to contact from his distance and closing speed) or 8 s have passed. That is how a
+centre-back draws the press and plays into the space it leaves. Effect: mean hold 1.27 -> 1.40 s, passes 580 -> 538 per team.
+Long balls: the 360 sample only holds passes whose receiver is in the camera frame, which drops most long balls (45 m or more: 0.0 % of the sample,
+4.7 % of Premier League passes in the air plus 0.3 % on the ground), so the learned choice believed they were rare. Fixed by a prior-shift
+correction: each (mode, length class) gets the offset log(league share / modelled share), computed in `scripts/fit_pass_policy.py` and stored in
+`reference/pass_policy.json`. Long-pass share 5 % -> 10 % (real 13 %), air share 0.20 (0.25).
+Checked and found not to be the cause: pressing intensity (PPDA median 13.1 against 13.8 real; only the pressure-event labelling is 1.5x), the support
+triangles (weight 0.55 -> 0.9: no effect), a block-length cap on the front rank (moves the wrong way: real teams have MORE men ahead of the
+carrier), first-time shots (probability scaled by pressure: shot_first 0.55 -> 0.51, so they come from the generic one-touch release).
+Distance covered: 14.5 km a player against 10.8 real, the sprint band (> 7 m/s) 2.5 km against about 0.25. Not jitter (a 1 s smoothing changes
+nothing). 35 % of outfield time carries the urgent flag; with the shape reference limited to running pace (`block_v` 0.8, Open Football's BLOCK_SPEED)
+and urgent men running as hard as the distance demands (`run_frac` -1) the total drops to 13.0 km and the sprint band to 1.7 km. A critical-speed
+(D') budget is the principled next step: soccer critical speed is about 3.7-4.0 m/s and D' a few hundred metres (3-minute all-out tests), so a man can
+only spend about that much running above it before he has to recover.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

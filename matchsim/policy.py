@@ -18,6 +18,7 @@ NAMES = ["fwd", "back", "lat", "dist", "dist2", "free", "lane", "d_xt", "ahead",
          "air", "air_dist", "air_blocked", "air_free", "p_air", "p_free", "p_lane", "thr", "thr_fwd", "thr_free", "thr_ahead", "off"]
 NF = len(NAMES)
 L_HALF = 52.5
+EDGES = [10., 20., 30., 45.]  # pass-length classes (m) for the population correction
 _FILE = pathlib.Path(__file__).resolve().parents[1] / "reference" / "pass_policy.json"
 
 
@@ -61,6 +62,17 @@ def beta():
     return _BETA
 
 
+_OFF = None
+
+
+def offsets():
+    global _OFF
+    if _OFF is None:
+        _OFF = np.array(json.loads(_FILE.read_text()).get("offsets", np.zeros((3, len(EDGES) + 1)).tolist())) if _FILE.exists() else np.zeros((3, len(EDGES) + 1))
+    return _OFF
+
+
 def scores(C, M, O, nd_p, gk):
-    """(3, k) utility of each option under the learned policy."""
-    return features(C, M, O, nd_p, gk) @ beta()
+    """(3, k) utility of each option under the learned policy, corrected from the camera-visible sample to the league's mix of pass lengths."""
+    d = np.hypot(*(M - C).T)
+    return features(C, M, O, nd_p, gk) @ beta() + offsets()[:, np.searchsorted(EDGES, d)]

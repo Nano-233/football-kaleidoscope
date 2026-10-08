@@ -69,6 +69,28 @@ def nll(beta, X, mask, y, ridge):
     return -ll.sum() + .5 * ridge * (beta ** 2).sum(), g
 
 
+PL = ROOT.parent / "reference_data" / "pl1516"
+
+
+def pl_shares():
+    """Share of Premier League open-play passes by mode (ground, air, through) and length bucket, the population the simulation must reproduce.
+    The 360 sample only holds passes whose receiver is in the camera frame, which drops most long balls and so teaches the choice model that they are rare."""
+    cnt = np.zeros((3, len(policy.EDGES) + 1))
+    for f in sorted(glob.glob(str(PL / "[0-9]*.json"))):
+        ev = json.load(open(f, encoding="utf-8"))
+        if not isinstance(ev, list) or not ev or "type" not in ev[0]:
+            continue
+        for e in ev:
+            if e["type"]["name"] != "Pass":
+                continue
+            p = e["pass"]
+            if p.get("type", {}).get("name", "") in SET_PIECES:
+                continue
+            mode = 2 if p.get("through_ball") else 1 if p.get("height", {}).get("name") == "High Pass" else 0
+            cnt[mode, np.searchsorted(policy.EDGES, p["length"] * 105 / 120)] += 1
+    return cnt / cnt.sum()
+
+
 def main():
     files = [f for f in sorted(glob.glob(str(DATA / "[0-9]*.json"))) if "_360" not in f]
     fit_f = [f for f in files if int(pathlib.Path(f).stem) % 2 == 0]; test_f = [f for f in files if int(pathlib.Path(f).stem) % 2 == 1]
@@ -100,7 +122,23 @@ def main():
     for i, r in enumerate(te):
         kk = r[2]["k"]; airmask[i, kk:2 * kk] = True
     print("  share in the air: policy %.3f  real %.3f" % ((P * airmask).sum(1).mean(), np.mean([r[2]["h"] for r in te])))
-    (ROOT / "reference" / "pass_policy.json").write_text(json.dumps({"names": policy.NAMES, "beta": [round(float(v), 4) for v in b],
+    # prior-shift correction: the fitted choice reproduces the camera-visible sample; scale each (mode, length) class to its Premier League share
+    D = np.minimum(X[..., 3] * 10, 1e3)  # pass length of every option
+    K = np.maximum(m.sum(1) // 3, 1)
+    mode_of = (np.arange(X.shape[1])[None] // K[:, None])
+    bucket = np.searchsorted(policy.EDGES, D)
+    s_ = np.where(m, X @ b, -1e9); P_ = np.exp(s_ - s_.max(1, keepdims=True)); P_ /= P_.sum(1, keepdims=True)
+    model = np.zeros((3, len(policy.EDGES) + 1))
+    for md in range(3):
+        for bk in range(len(policy.EDGES) + 1):
+            model[md, bk] = (P_ * ((mode_of == md) & (bucket == bk) & m)).sum() / len(y)
+    target = pl_shares()
+    off = np.clip(np.log(np.maximum(target, 1e-4) / np.maximum(model, 1e-4)), -3., 4.)
+    print("share by mode (rows ground, air, through) and length bucket", list(policy.EDGES))
+    print("  sample (model)"); print(model.round(3))
+    print("  Premier League"); print(target.round(3))
+    print("  offsets"); print(off.round(2))
+    (ROOT / "reference" / "pass_policy.json").write_text(json.dumps({"names": policy.NAMES, "beta": [round(float(v), 4) for v in b], "offsets": off.round(3).tolist(), "edges": list(policy.EDGES),
         "source": "StatsBomb Open Data, Euro 2020 360 freeze frames (even-id matches), conditional logit", "n_passes": len(tr)}, indent=1))
 
 
