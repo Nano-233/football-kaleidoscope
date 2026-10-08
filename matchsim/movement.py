@@ -176,9 +176,11 @@ def seek_space(m, t, P, O, C, zone, role, out_f, skip, line):
         else:
             score = (1. + .5 * marked) * open_ * TP.get("open_w", 1.) + .9 * lane * TP.get("lane_w", 1.) + .7 * thr + .5 * pref - 1.2 * spacing - 2. * offside - .6 * dev - TP.get("way_pen", 0.) * in_way + m.rng.normal(0, .05, (n, K))
         best = score.argmax(1)
+        gain = score[np.arange(n), best] - score[:, 0]  # what the new spot is worth over staying where the shape puts him
+        m.space_gain[11 * t + idx] = gain + 10. * marked[:, 0]  # a man with a defender on him has to break away whatever it is worth
         m.space_off[11 * t + idx] = cand[np.arange(n), best] - zone[idx]
         m.space_until[11 * t + idx] = m.t + m.rng.uniform(.8, 1.6, n)
-    far_ = (nrm(m.space_off[sl], axis=1) > MOVE_BURST) & out_f & ~skip
+    far_ = (nrm(m.space_off[sl], axis=1) > MOVE_BURST) & out_f & ~skip & (m.space_gain[sl] > TP.get("burst_gain", -1e9))  # at pace only when the move is worth it
     m.space_burst[sl] = far_
     return zone + m.space_off[sl] * (out_f & ~skip)[:, None]
 
