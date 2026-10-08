@@ -437,6 +437,28 @@ Built behind flags, default off (so behaviour is unchanged): `follow_poss` (shar
 (passer's lofted odds from the engine's own `_aerial` rule), `xt_k` (expected-value utility). The calibration loss of the committed model is 287.7 on
 24 matches; the new structure needs a rebalancing pass before it can beat that, so none of it is switched on yet.
 
+### Who the ball goes to is now learned from real passers (2026-10-08)
+
+Source: Fernandez, Bornn and Cervone (2021) model the carrier as an agent with an "average policy learned from historical data"; the Helios
+engine keeps risk out of the value (a pass is a candidate only if it is safe, the value is the end position). Our hand-built utility mixed the
+two and its extra terms (`keep`, `usage`, onward `pot`) decided the choice among safe options.
+Built: `matchsim/policy.py` (features of every option: forward/back/lateral, length, room around the receiver, open lane, xT change, defenders
+still ahead of him, keeper, offside position, ground/air/through mode, and how pressure changes each), `scripts/fit_pass_policy.py` (conditional
+logit, maximum likelihood, 10,192 Euro 2020 passes with 360 frames, even match ids fitted, odd held out). Coefficients are in
+`reference/pass_policy.json`. The utility still decides whether to pass, carry, cross or clear; the policy decides whom and how.
+Check (held out, not tuned): the policy reproduces the real forward share (0.390 vs 0.389; unpressed own third 0.582 vs 0.582; pressed 0.296 vs
+0.280) and the share of air balls (0.117 vs 0.108). In the simulation the pass accuracy came out at 0.74 against 0.75 real without any change to the
+execution model, which is an independent check that the risk the policy takes is the risk real passers take.
+Also on by default: `follow_poss` 0.2 (the formation follows the ball a fifth as strongly in possession as in defence: receivers of passes from the
+back stood 9-24 m deeper than real).
+What it did not fix: the own-third forward share in the simulation stays at 0.41 (real 0.66). The same policy gives 0.48 on real positions, so the
+rest is the layout: in the middle third the real carrier has 5.1 team-mates 5-30 m ahead of him (count over frames whose camera covers the whole
+band, so no camera bias) and the simulated carrier 2.3. That is the next target. Tried on the way: scoring off-ball spots by the same policy (players
+crowd the carrier, because real passers choose near options: choice likelihood is not the right objective for positioning), doubling the
+possession push (no effect on those bands).
+Remaining gaps with this default (36 matches): own-third passes 145 vs 101, entry attempts 40 vs 54, clearances 48 vs 29, aerial duels 57 vs 22,
+offside 5.6 vs 2, carries 217 vs 154, shots 18 vs 13, long balls 5 % vs 13 %.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
