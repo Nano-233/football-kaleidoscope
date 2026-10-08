@@ -169,7 +169,12 @@ def seek_space(m, t, P, O, C, zone, role, out_f, skip, line):
         toward_goal = ((GOAL - a_pos) * vv).sum(-1) > 0  # (n,K)
         in_way = ((proj > .5) & (proj < vl[:, :, None]) & (perp_d < TP.get("way_r", 2.2))).sum(2) * toward_goal
         marked = (near[idx] < 2.2)[:, None]
-        score = (1. + .5 * marked) * open_ * TP.get("open_w", 1.) + .9 * lane * TP.get("lane_w", 1.) + .7 * thr + .5 * pref - 1.2 * spacing - 2. * offside - .6 * dev - TP.get("way_pen", 0.) * in_way + m.rng.normal(0, .05, (n, K))
+        if TP.get("pol_space", 0.) > 0:  # where to stand: where real passers choose to pass, free, an open lane, ahead, worth something (the learned choice, matchsim/policy.py)
+            from . import policy
+            pol = policy.scores(C, cand.reshape(-1, 2), O, float(np.sqrt(((O - C) ** 2).sum(-1)).min()), np.zeros(n * K, bool))[0].reshape(n, K)
+            score = TP["pol_space"] * pol - 1.2 * spacing - 2. * offside - .6 * dev - TP.get("way_pen", 0.) * in_way + m.rng.normal(0, .05, (n, K))
+        else:
+            score = (1. + .5 * marked) * open_ * TP.get("open_w", 1.) + .9 * lane * TP.get("lane_w", 1.) + .7 * thr + .5 * pref - 1.2 * spacing - 2. * offside - .6 * dev - TP.get("way_pen", 0.) * in_way + m.rng.normal(0, .05, (n, K))
         best = score.argmax(1)
         m.space_off[11 * t + idx] = cand[np.arange(n), best] - zone[idx]
         m.space_until[11 * t + idx] = m.t + m.rng.uniform(.8, 1.6, n)
@@ -467,7 +472,7 @@ def team_targets(m, t):
     by = Bs[1] - W / 2
     fd = float(m.poss_fade[t])  # 1 = a side that has had the ball for a while, 0 = one that has just lost it: the shape moves between the two smoothly
     ph = clip(.45 + Bs[0] / L, .5, 1.1)
-    tx = tx + fd * PUSH[role] * (.6 + .8 * tc.risk) * ph + (1 - fd) * DROP[role] * TP.get("drop_k", 1.) * clip(1.25 - tc.press, .3, 1.2)
+    tx = tx + fd * PUSH[role] * TP.get("push_k", 1.) * (.6 + .8 * tc.risk) * ph + (1 - fd) * DROP[role] * TP.get("drop_k", 1.) * clip(1.25 - tc.press, .3, 1.2)
     ty = (W / 2 + (A[:, 1] - W / 2) * (fd * (1 + (tc.width - .5) * .7) + (1 - fd) * (1 - NARROW * tc.compactness))
           + by * (fd * (.2 + FRONT_SHIFT * ((role == ST) | (role == AM))) + (1 - fd) * (.28 + .22 * tc.compactness)) * out_f)  # the front line drifts to the ball side to link up
     tx = np.maximum(tx, MIN_X[role])
