@@ -521,6 +521,19 @@ first, attackers last), on the halfway line paired goal-side with the outlets, a
 spots in role order. Sent-off players are excluded from the plan.
 Check: scenarios.py corner in the box 4.8 (expected 4-7), behind the keeper 0.0; sample corners show cover at x = 46-51, keeper 21-22, outlets 52-56.
 
+### Clear chances are taken (2026-10-08)
+
+Rule from the user: attackers always go for goal; they pass only when there is no clear chance or a team-mate has a better one.
+Measured on real data (Euro 2020 360, receipts within 32 m of goal, xG of the spot with the defenders around him, what the player does next): shoots
+3 % below xG 0.03, 18 % at 0.03-0.06, 47 % at 0.06-0.10, 63 % at 0.10-0.15, 74 % above 0.15 (pass 11 %, loses it 14 %). The simulation matched up to 0.10
+(18 %, 38 %, 57 %) and fell short on the clear chances: 49 % shot, 31 % pass, 20 % lost, and only 35 receipts of that quality in 24 matches against 109 in 30
+real ones.
+Built: a chance of xG >= 0.10 (`clear_xg`, the point where real players shoot about two times in three) is shot at once (dwell 0.05-0.3 s instead of a
+look-up) unless a team-mate's chance (pass success x his xG) is better than his own; the earlier rule needed the team-mate to be 1.5x better.
+Below 0.10 the learned gate is unchanged. Result: clear chances shot 64 % (real 74 %), passes 7 % (11 %), but 29 % are lost before he acts (14 % real);
+shots 17.6 (real 12.9), goals 1.49 (1.24). Big chances (xG >= 0.25) stay at 0.31 against 0.86: they are not decided at the shot but earlier, in how often the
+ball reaches the six-yard area, which is the box-entry gap.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
