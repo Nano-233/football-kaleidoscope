@@ -52,7 +52,7 @@ def from_statsbomb(events):
             recs[tm].append(dict(k="carry", t=t, x=loc[0], y=loc[1], ex=end[0], ey=end[1], dur=e.get("duration", 0.)))
         elif ty == "Shot":
             s = e["shot"]
-            ff = [(np.array(f["location"]) * SB, bool(f["teammate"]), bool(f.get("keeper"))) for f in s.get("freeze_frame", [])]
+            ff = [(np.array(f["location"]) * SB, bool(f["teammate"]), bool(f.get("keeper")) or f.get("position", {}).get("name") == "Goalkeeper") for f in s.get("freeze_frame", [])]  # PL 15/16 frames carry no keeper flag, only the position
             recs[tm].append(dict(k="shot", t=t, x=loc[0], y=loc[1], xg=s.get("statsbomb_xg", 0.), outcome=s["outcome"]["name"], kind=s["type"]["name"],
                                  head=s["body_part"]["name"] == "Head", first=bool(s.get("first_time")), press=press, ff=ff, play=e["play_pattern"]["name"]))
         elif ty == "Dribble":

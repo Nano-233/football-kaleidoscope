@@ -397,6 +397,19 @@ median 2.6 m vs 2.3, share with more than 4 m of space .19 vs .19).
 was wrong); reaction delay and target update rate (no effect); first-time-shot incentives; a flat 12 % block probability; a one-parameter-at-a-time
 calibration (three runs, no gain: the gaps were structural); a hard per-zone first-touch penalty (rejected: stat-fitting, not football).
 
+### Reference bug: the real keeper was counted as a defender (found 2026-10-08)
+
+Saw: real shots had 1.8 defenders in the shot triangle, only 1.5 % with a free look, the last defender 2.2 m from the goal line, 5.6 goal-side
+defenders; the simulation had 0.7, 65 %, 8.8 m and 4.1. That looked like the defence being far too loose, and the defence was rebuilt against it.
+Measured: the 2015/16 freeze frames carry no `keeper` flag (that field only exists in the 360 data). The keeper is marked by `position.name ==
+"Goalkeeper"`. `norms.from_statsbomb` read the missing flag, so the opposing keeper was always treated as an outfield defender: always on the
+line, always inside the triangle, always goal-side. The same bug sat under the lane-block fit.
+Fixed: keeper detected by position name. Real values become: blockers 0.87, free look 46 %, last defender 8.7 m, goal-side 4.6, defenders in the
+box 5.3 (simulation 0.63 / 66 % / 8.7 m / 4.0 / 5.4). Block model refit on the corrected frames: peak 0.60 per defender (was 0.47), lateral
+width 1.0 m, decay 10.6 m (was 11.3), base 0.035 (was 0.012).
+Effect: the shot-time defence gap was mostly a measurement error. Lesson: when a reference number looks extreme (1.5 % free look), check the
+extraction before building engine logic against it. The remaining real gaps are in build-up and progression (see the table of open gaps).
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
