@@ -428,6 +428,17 @@ def team_targets(m, t):
     # the team shapes itself around where the ball WILL be controlled, not where it is on its way (Helios and its descendants do the same: the
     # formation is set from the ball's position at the first interception step). Shaping on the flying ball makes the whole block swing 3 m a tick.
     Bs = f(m.flight["end"]) if m.state == "flight" and m.flight["kind"] in ("ground", "lofted") else B
+    if TP.get("block_v", 0.) > 0:  # the block cannot move faster than its players can run (Open Football's BLOCK_SPEED): a 40 m pass would otherwise swing every target 40 m at once and leave the team sprinting after a shape it could never reach
+        ref, last = m.bs_ref[t], m.bs_t[t]
+        if ref is None or m.t - last > 3. or m.state == "dead" and m.dead.get("kind") in ("kickoff",):
+            ref = Bs.copy()
+        else:
+            step = TP["block_v"] * float(m.vmax[sl][1:].mean()) * (m.t - last)
+            dv_ = Bs - ref
+            dn_ = float(nrm(dv_))
+            ref = Bs.copy() if dn_ <= step else ref + dv_ / dn_ * step
+        m.bs_ref[t], m.bs_t[t] = ref, m.t
+        Bs = ref
     A, role, tc = m.anchor[sl], m.role[sl], m.tact[t]
     has = m.poss == t
     out_f = (role > GK)
@@ -601,7 +612,7 @@ def team_targets(m, t):
                     m.commit_until[g] = m.t + m.rng.uniform(1., 2.)
                 zone[i] = C + Cv * .2 if m.t < m.commit_until[g] else (m._press_pts[i] if TP.get("assign_on", 1.) else tgt1)
                 urgent[i] = True
-                m.sprint_hint[g] = True  # the presser goes for the ball
+                m.sprint_hint[g] = bool(TP.get("hint_press", 1.))  # the presser goes for the ball
         elif m.state == "dead" and kind == "free_kick" and np.hypot(B[0], B[1] - W / 2) < 32:  # wall on the line to goal, 9.15 m back
             dist = float(np.hypot(B[0], B[1] - W / 2))
             n = 5 if dist < 19 else 4 if dist < 25 else 3
@@ -617,14 +628,14 @@ def team_targets(m, t):
                 d[role == GK] = 1e9
             for i in np.argsort(d)[:2]:
                 zone[i], urgent[i] = B + Bv * .6, True
-                m.sprint_hint[11 * t + i] = True  # a loose ball is chased flat out
+                m.sprint_hint[11 * t + i] = bool(TP.get("hint_loose", 1.))  # a loose ball is chased flat out
         elif m.state == "flight" and m.flight["kind"] == "lofted":  # win the second ball / header
             d = nrm(P - f(m.flight["end"]), axis=1)
             if f(m.flight["end"])[0] > 18:  # the keeper only comes for balls into his own area
                 d[role == GK] = 1e9
             for i in np.argsort(d)[:2]:
                 zone[i], urgent[i] = f(m.flight["end"]), True
-                m.sprint_hint[11 * t + i] = True  # the contest for a ball in the air
+                m.sprint_hint[11 * t + i] = bool(TP.get("hint_air", 1.))  # the contest for a ball in the air
         elif m.state == "flight" and m.flight["kind"] == "ground" and m.t - m.flight["t0"] > TP.get("react_def", .35):  # defenders react ~.35 s after release; nearest-in-time one moves to the lane
             fl = m.flight
             a, b = B, f(fl["end"])
@@ -638,7 +649,7 @@ def team_targets(m, t):
             for i in np.argsort(slack)[:2]:
                 if slack[i] < 1.2:
                     zone[i], urgent[i] = q[i], True
-                    m.sprint_hint[11 * t + i] = True  # getting to the lane in time
+                    m.sprint_hint[11 * t + i] = bool(TP.get("hint_lane", 1.))  # getting to the lane in time
                     taken.add(int(i))
             e_ = f(fl["end"])
             if e_[0] < 30. and role[0] == GK:  # the keeper comes for a ball into his area if he can get there no later than the nearest attacker
@@ -653,7 +664,7 @@ def team_targets(m, t):
             for i in np.argsort(de)[:2]:
                 if int(i) not in taken and de[i] < 12:
                     zone[i], urgent[i] = e_ + _unit(GOAL - e_) * TP.get("close_gap", 1.5), True
-                    m.sprint_hint[11 * t + i] = True  # closing the receiver
+                    m.sprint_hint[11 * t + i] = bool(TP.get("hint_close", 1.))  # closing the receiver
                     break
             if TP.get("assign_on", 1.) and m.flight["rcv"] >= 0 and m.flight["rcv"] // 11 == 1 - t:  # everyone else is covering as if the receiver already had it: the same assignment, around where the ball is going
                 avail = ~urgent
@@ -681,7 +692,7 @@ def team_targets(m, t):
                 zone[lim, 0] = np.minimum(zone[lim, 0], np.maximum(cover_x, MIN_X[role[lim]]))
             urgent |= (gate > .6) & (nrm(zone - P, axis=1) > 2.5)  # a man-marker in the danger area stays with his man at the man's pace
             behind_m = (gate > .6) & (nrm(zone - P, axis=1) > TP.get("mark_sprint_d", 3.0))  # a marker who is losing his man goes flat out: effort follows need, he does not jog after a sprinting forward
-            m.sprint_hint[11 * t + np.nonzero(behind_m)[0]] = True
+            m.sprint_hint[11 * t + np.nonzero(behind_m)[0]] = bool(TP.get("hint_mark", 1.))
             urgent |= out_f & (P[:, 0] - zone[:, 0] > 5.) & (Bs[0] < .65 * L)  # recovery run: well upfield of where he should be, ball in his half: sprint back, do not jog
     else:
         # runs in behind
@@ -716,7 +727,7 @@ def team_targets(m, t):
             for i in cand[np.argsort(nrm(P[cand] - C, axis=1))][:2]:
                 side = 1 if P[i, 1] >= C[1] else -1
                 th = .9 if pr < .5 else 2.3
-                zone[i] = .55 * (C + 15 * np.array([np.cos(th), side * np.sin(th)])) + .45 * zone[i]
+                zone[i] = TP.get("tri_w", .55) * (C + 15 * np.array([np.cos(th), side * np.sin(th)])) + (1 - TP.get("tri_w", .55)) * zone[i]
         holder = carrier - 11 * t if mine else (m.dead["taker"] - 11 * t if m.state == "dead" and kind in ("throw_in", "goal_kick", "drop_ball", "indirect_free_kick", "free_kick") else -1)
         if holder >= 0 and kind not in ("corner", "kickoff"):
             skip = (idx == holder) | urgent | (m.t < m.run_until[sl])
