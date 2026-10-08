@@ -410,6 +410,33 @@ width 1.0 m, decay 10.6 m (was 11.3), base 0.035 (was 0.012).
 Effect: the shot-time defence gap was mostly a measurement error. Lesson: when a reference number looks extreme (1.5 % free look), check the
 extraction before building engine logic against it. The remaining real gaps are in build-up and progression (see the table of open gaps).
 
+### Why the simulated side lingers in its own third (analysis, 2026-10-08)
+
+Saw (corrected reference): forward passes in the own third match real (56 vs 58 unpressed per team-match) but sideways and back passes are
+2.5-4x real (GK, CB and FB), own-third sequences run 2.1 passes against 1.6, final-third entry attempts 34 vs 54, aerial duels 3.4x, clearances 1.9x.
+Measured (event data and 360 frames, probes kept in the session scratchpad, not in the repo):
+- Sequence starts per match are equal (66 vs 65): the gap is chain length, so it is the decision, not the number of regains.
+- Receivers of passes from the back stand 9-24 m deeper than real (CB 14 vs 23 m, FB 18 vs 33, DM 25 vs 33, attackers 26-33 vs 40-56). When the keeper
+  plays, the four deepest team-mates are 3 m ahead of him against 13 m in real. Cause: the whole formation block follows the ball (`FOLLOW` 0.5) in
+  possession as well as in defence; the defensive compaction idea was applied to the attacking shape.
+- Among safe options (p >= 0.93) a forward pass is only 0.04 better than a lateral one and the decision noise plus invented terms (`usage`, onward
+  `pot`, `keep`) are larger than that, so the choice follows the option count (more lateral candidates than forward ones). Forward share stayed at
+  0.40-0.47 under every single-term ablation (usage 0, pot 0, relief, risk exponent 1, weaker pressing); only the shape moved it.
+- Passer beliefs are miscalibrated: ground passes over-estimated by 0.04-0.07 in the 0.75-0.95 range, lofted passes estimated 0.19-0.56 while the
+  realised rate is flat at 0.48 (the estimate carries no information). This is why the code needed `air_base`, `long_bonus` and `gk_long`: they
+  compensate for a belief that is wrong.
+- Real own-third passes include 14 % balls of 45 m or more (28 % completed); the simulation has about 1 %, because a failed long ball is priced as a
+  clean turnover although it is a contested loose ball.
+- Aerial duels: 59 % of real high-pass receivers have a defender within 3.5 m (the simulation has the same), but only about 15 % of real high passes
+  produce a header contest; the simulation logs a duel for every landing with a marker within 3.5 m (66 %). Real headers are contested about half the time.
+Tried and rejected: removing `usage` (more ping-pong, n_own 190), onward potential relative to the passer (no effect), weaker pressing (no
+effect on own-third volume), duel reach 1.5 m (74 -> 47 duels but head passes fell), a full expected-possession-value utility in xT units (forward
+share and entries come out right but the game becomes frantic: shots 33, tackles 36, because estimated odds are still wrong and the carry and
+shot options were not yet on the same footing).
+Built behind flags, default off (so behaviour is unchanged): `follow_poss` (share of the ball-follow kept in possession), `pin_from`, `air_exact`
+(passer's lofted odds from the engine's own `_aerial` rule), `xt_k` (expected-value utility). The calibration loss of the committed model is 287.7 on
+24 matches; the new structure needs a rebalancing pass before it can beat that, so none of it is switched on yet.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

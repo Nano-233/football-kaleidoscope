@@ -462,7 +462,7 @@ def team_targets(m, t):
         return f(tg), urgent
 
     # ---- team block: follows the ball, shaped by tactic and phase ---------------------
-    kx = FOLLOW[role] * m.mod["follow"][sl] * (1 + .3 * (tc.compactness - .5))
+    kx = FOLLOW[role] * m.mod["follow"][sl] * (1 + .3 * (tc.compactness - .5)) * (TP.get("follow_poss", 1.) if has else 1.)
     tx = A[:, 0] + kx * (Bs[0] - L / 2) + (tc.line_height - .5) * 14 * out_f
     by = Bs[1] - W / 2
     fd = float(m.poss_fade[t])  # 1 = a side that has had the ball for a while, 0 = one that has just lost it: the shape moves between the two smoothly
@@ -494,7 +494,7 @@ def team_targets(m, t):
     if has:  # forwards hover around the last defender's shoulder: well timed they stay onside, mistimed they are flagged
         line = max(np.sort(O[:, 0])[-2], L / 2)
         att = (role == ST) | (role == WG) | (role == AM)
-        if Bs[0] > .35 * L:
+        if Bs[0] > TP.get("pin_from", .35) * L:
             tx = np.where(att, np.maximum(tx, line + SHOULDER[role] - TP.get("hover", .3) + .3 + 2. * np.sin(.5 * m.t + m.phase[sl])), tx)
         fw = att | (role == CM)  # nobody up front waits beyond the last defender and the ball (a timed run is a separate thing)
         tx = np.where(fw, np.minimum(tx, max(line, Bs[0]) - TP.get("hover", .3) + 1.0 * np.sin(.5 * m.t + m.phase[sl])), tx)
