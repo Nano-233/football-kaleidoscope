@@ -23,7 +23,7 @@ DT = 0.2
 # Single tuning table (calibrated by scripts/calibrate.py against real-football norms).
 TUNE = dict(xg_z0=-2.08, xg_d=-.07, xg_a=1.89, xg_h=-.2, xg_b=.72, xg_c=.25, clear_xg=.1, sprint_need=0., dp_on=1., cs0=3.5, cs_k=.9, dp0=120., dp_k=100., dp_tau=450., dp_floor=.15, ft_free=1., wait_on=0., wait_gate=.88, wait_max=8., clear_ev=1., policy_on=1., cal_on=0., cal_ga=.07, cal_gb=.77, cal_la=.18, cal_lb=.38, air_exact=0., carry_prog_xt=1., clear_keep=.4, lazy_thr=.04, tgt_every=2, catch_slack=2.0, catch_t=3.4, blk_a=.60, blk_sig=1.0, blk_lam=10.6, blk_b0=.035, shot_lane_k=1.0, xt_k=0., xt_opp=.6, risk_pow_xt=1.0, fk_cross=.5, head_shot_set=.4, free_dwell=.5, ball_v0=8.5, ball_v1=.25, read_press=.8, tackle_sel=8., exposed_k=1.2, surv_k=1.0, gk_shoot=1.4, contact_r=1.6, press_len=3.2, close_t=.5, hurry_k=.3, exec_k=2.0, exec_floor=.15, dec_noise=.15, windup_k=.35, hold_sigma=.7, fade_up=2.2, fade_dn=1.4, lazy_k=.6, xg_run=8., own_goal_cone=.0, head_run=4.2, head_rate=2.5, mom_k=.75, carry_v0=.9, carry_v1=.9, cruise_k=0.42, burst_hold=0.4, run_frac=-1., press_dist=1.75, air_base=0.5, head_on=0.28, head_clear=0.5, air_k=0.5, gk_air=0.6, block_base=0.12, block_nb=0.12, ft_shot=0.315, turn_cost=0.55, turn_rate=3.2, face_k=1.05, pot=2.2, relief=1.0, ft_slow=.0, drive=0.1,  cong_k=0.5, risk_pow=2.2, first_touch=3.0, wide_v=0.35, ctrl_marked=0.5, shoot_hold=0.98, shoot_slope=2.05, shoot_ref=0.168, shoot_press=0.56, adv_lin=.6, pack=.04, shoot_min=.12, react=1.84, patience=0.02, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.76, fk_bonus=0.05, long_bonus=0.163, prog_base=0.5, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=0.8, gk_long=.5, box_foul=1., home_edge=1.7, shot_cost=1.3, shot_k=3.15, shot_k_dir=5.0,
             carry_base=0.22, carry_prog=.2, carry_streak=.3, dwell_base=0.9, dwell_shape=2.4, dwell_scale=1.61,
-            tackle_rate=1.2, wide_error=3.2, off_miss=.2, off_mult=.02, off_lag=.25, rec_sprint=3., fk_xg=1., fk_shot_k=.5, fk_shot_d=27.2, foul_risk=6., box_avoid=.2, tackle_risk=2.2, tackle_danger=.7)
+            tackle_rate=1.2, wide_error=3.2, off_miss=.2, off_mult=.02, off_lag=.25, head_keep=.7, safe_out_x=.12, card_thr=.65, adv_sev=.13, clear_dir_sd=1.2, rec_sprint=3., fk_xg=1., fk_shot_k=.5, fk_shot_d=27.2, foul_risk=6., box_avoid=.2, tackle_risk=2.2, tackle_danger=.7)
 TUNE.update(burst_gain=-1e9, block_v=.8, push_k=1., pol_space=0., follow_poss=.2, pin_from=.35, recover_on=1., cover_margin=3., threat_depth=.34, threat_ball=25., mark_base=4., mark_reach=19., layer_bias=.9, space_cover=0., space_k=100., n_space=3, assign_on=1., press_v=7., cover_v=3.5, mark_k=100., lane_job_k=35., post_v=5., space_v=3., job_hyst=1.5, press_hyst=2.0, templ_w=.9, busy_gate=.6, flat_gate=.6, run_gate=.95, mark_sprint_d=3.0, box_start=38., wn_end=42., lag_k=1., drop_k=1., mark_gap=1.1, box_gate=.85, dang_far=38., dang_gate=.85, react_def=.35, close_gap=1.5, jock_k=1., press_k=1., open_w=1., lane_w=1., slot_gate=.5, lean_r=24., lean_min=.35, shoot_close=28., shot_gap=.7, jobs_on=1., jobs_d=38., jobs_att=40., jobs_w=.9, job_mark=3., job_lane=12., job_post=1.4, job_wv=4., way_pen=0., way_r=2.2, run_k=1., ball_side=.9, hover=.3)  # block shape (read by movement.py through TP)
 movement.TP = TUNE
 sig = lambda x: 1 / (1 + np.exp(-x))
@@ -306,6 +306,18 @@ class Match:
     def _out(s, b):
         x, y = b
         tl = s.last_touch // 11 if s.last_touch >= 0 else 0
+        if (x < 0 or x > L) and abs(y - W / 2) < GOAL_HALF and s.last_touch >= 0:  # over the line between the posts: in
+            sc_t = 1 if x < 0 else 0  # the side that attacks that goal
+            if s.pending_pass is not None:
+                s.pending_pass["outcome"], s.pending_pass = "out", None
+            s.score[sc_t] += 1
+            s.stop[s.period - 1] += 35
+            if tl == sc_t:
+                s.emit("goal", player=s.last_touch, pos=np.array([0. if x < 0 else L, y]), xg=.05, home=s.score[0], away=s.score[1], assist=None, body_part="foot")
+            else:
+                s.emit("own_goal", player=s.last_touch, team=sc_t, pos=np.array([0. if x < 0 else L, y]), home=s.score[0], away=s.score[1], scorer=None)
+            s._end_spell()
+            return s._kickoff(1 - sc_t, delay=65. + float(s.rng.uniform(0, 20)) if tl == sc_t else 28.)
         if s.pending_pass is not None:
             s.pending_pass["outcome"], s.pending_pass = "out", None
         if y < 0 or y > W:
@@ -686,7 +698,7 @@ class Match:
                     return
                 if s.rng.random() < p_win:
                     if s.rng.random() < (.4 + .2 * (1 - a["tackling"][o] / 20)) * s.mod["foul"][o] * (.75 + .5 * s.ref) * s._foul_scale(c):  # near his own box he stays on his feet: a foul there is a shot at his goal
-                        s._foul(o, c)
+                        s._foul(o, c, p_win)
                     else:
                         s.emit("tackle", player=o, pos=s.pos[c], target=s.ids[c], outcome="won")
                         if front[ia] > .7 and driving:  # he was running at a man and lost the duel: a failed dribble (a dispossession is losing it without trying to go past anyone)
@@ -737,7 +749,7 @@ class Match:
         in_box = pt[0] > L - 16.5 and abs(pt[1] - W / 2) < 20.16
         return min(1., (1. + TUNE["foul_risk"] * .15) / (1. + TUNE["foul_risk"] * v)) * (TUNE["box_avoid"] if in_box else 1.)
 
-    def _foul(s, o, c):
+    def _foul(s, o, c, p_w=.5):
         t = c // 11
         s.stop[s.period - 1] += 4
         pt0 = _tf(s.pos[c]) if t else s.pos[c]
@@ -759,9 +771,25 @@ class Match:
         reason = str(s.rng.choice(["tackle", "trip", "shirt_pull", "handball"], p=[.55, .2, .2, .05]))
         s.emit("foul", player=o, pos=s.pos[c], target=s.ids[c], reason=reason)
         s.emit("foul_won", player=c, pos=s.pos[c], by=s.ids[o])
-        u = s.rng.random()
+        # how serious it was, from the challenge itself: from behind, at speed, a lunge he was unlikely to win, a fast man stopped (a professional foul), or the last man
+        # denying a clear run at goal. The referee sees most of it; a stricter referee books more.
+        rel = s.pos[o] - s.pos[c]
+        behind = float(clip(-(rel @ s.head[c]) / max(float(nrm(rel)), 1e-6), 0., 1.))
+        speed_o = float(clip(nrm(s.vel[o]) / 7., 0., 1.))
+        fast = float(clip(nrm(s.vel[c]) / 6., 0., 1.))
+        cynical = fast * behind
+        others = _tf(s.pos[s._opp(t)]) if t else s.pos[s._opp(t)]
+        goal_d = float(np.hypot(L - pt0[0], pt0[1] - W / 2))
+        last_man = not bool(((others[:, 0] > pt0[0] - 1.) & (np.abs(others[:, 1] - pt0[1]) < 14.) & (s.role[s._opp(t)] > 0) & (np.arange(11) != (o - 11 * (1 - t)))).any())  # nobody else between him and goal
+        dogso = bool(goal_d < 35. and last_man and fast > .5)
+        sev = .3 * behind + .15 * speed_o + .25 * (1. - p_w) + .3 * cynical
         k = .7 + .6 * s.ref
-        card = "red" if (u < .005 * k and s.role[o] != 0) else ("yellow" if u < .13 * k else None)
+        card = None
+        if s.role[o] != 0:
+            if dogso and not in_box and s.rng.random() < .8:
+                card = "red"  # denying an obvious goal-scoring opportunity
+            elif s.rng.random() < k * float(sig(6. * (sev - TUNE["card_thr"]))) + (.4 * k if dogso else 0.):
+                card = "yellow"
         if card == "red" and s.rng.random() < .3:  # VAR looks at the challenge
             s._var_review(o // 11, o, "possible red card")
             if s.rng.random() < .3:
@@ -778,7 +806,11 @@ class Match:
         if s.rng.random() < .012:
             s._injury(c, "foul")
         p = s.pos[c].copy()
-        if not in_box and card != "red" and s.state == "held" and s.carrier == c and s.rng.random() < .14:
+        ahead_ = _unit(np.array([L if t == 0 else 0., W / 2]) - s.pos[c])
+        rel_o = s.pos[s._opp(t)] - s.pos[c]
+        cone = (rel_o @ ahead_ > 0) & (np.abs(rel_o[:, 0] * ahead_[1] - rel_o[:, 1] * ahead_[0]) < 4.) & (s.role[s._opp(t)] > 0)
+        free_ahead = float(nrm(rel_o[cone], axis=1).min()) if cone.any() else 40.
+        if not in_box and card != "red" and s.state == "held" and s.carrier == c and float(s.vel[c] @ ahead_) > 1.5 and sev < TUNE["adv_sev"] and (goal_d > 35. or free_ahead > 8.):  # advantage: the fouled man still has the ball and is moving on; near goal only if he has a clear run (otherwise the free kick is worth more)
             # the referee plays advantage: the fouled side keeps the ball and runs on
             s.emit("advantage", team=t, pos=p)
             s.block_until[o] = s.t + 2.
@@ -1046,6 +1078,8 @@ class Match:
             U.append(best_c[0]); K.append("carry"); X.append(best_c[1:])
             if C[0] < .2 * L and dnear < 3.5:
                 cand_c = [np.array([C[0] + 38 * np.cos(a_), clip(C[1] + 38 * np.sin(a_), 1., W - 1.)]) for a_ in np.radians([-65, -40, -15, 15, 40, 65])]
+                if C[0] < TUNE["safe_out_x"] * L:  # pressed in front of his own goal the safe clearance is out of play: over the byline for a corner, nothing for the opponent to win
+                    cand_c.append(np.array([-3., clip(C[1] + (6. if C[1] < W / 2 else -6.), 1., W - 1.)]))
                 sc_c = [-1.5 * float((nrm(O - q_, axis=1) < 9).sum()) + .03 * (q_[0] - C[0]) + (.8 if (q_[1] < 6 or q_[1] > W - 6) and C[0] < .12 * L else 0.) for q_ in cand_c]
                 land_c = cand_c[int(np.argmax(sc_c))]
                 if TUNE["xt_k"] > 0 or TUNE["clear_ev"] > 0:  # a ball hit up the pitch is a contest, not a pass: kept as often as the side gets under it, otherwise the opponent has it far from our goal
@@ -1107,7 +1141,7 @@ class Match:
                     s.emit("dribbled_past", player=o, pos=s.pos[o], by=s.ids[c])
                 if not won:
                     if s.rng.random() < .25 * s._foul_scale(c):  # beaten near his own box he does not drag the man down
-                        return s._foul(o, c)
+                        return s._foul(o, c, 1. - p_beat)
                     s.emit("tackle", player=o, pos=s.pos[c], target=s.ids[c], outcome="won")
                     s.block_until[c] = s.t + .8
                     s.last_touch = o
@@ -1149,10 +1183,16 @@ class Match:
         if hands or source == "throw_in":
             spd, lofted = min(spd, 15. if hands else 13.), False
         pe = s._exec_pressure(c)
+        if kind == "clearance":  # a hurried clearance is hit anywhere: the angle of the kick wanders with the pressure, so some go behind or wide
+            ang_c = float(s.rng.normal(0, TUNE["clear_dir_sd"] * pe * .6))
+            v_c = aim - start
+            aim = start + np.array([v_c[0] * np.cos(ang_c) - v_c[1] * np.sin(ang_c), v_c[0] * np.sin(ang_c) + v_c[1] * np.cos(ang_c)])
         al_p = float((1 + s.head[c] @ _unit(aim - start)) / 2)  # 1 = passing the way he faces
         sg = (.5 + .05 * d) * (TUNE["pass_sigma"] * (1 - .0353 * s.attr["passing"][c])) * s._exec_scale(pe) * (1.8 if lofted else 1) * sigma_scale * (1 + .5 * (1 - al_p) * (.4 + .6 * pe))  # with time he turns his body and sets the pass
         sg *= s.rain
         wide = min(aim[1], W - aim[1]) < 9
+        if kind in ("pass", "cross") and min(aim[0], L - aim[0]) < 2.5 * sg:  # the passer weights a ball to a team-mate by the goal line short of it, not over it
+            aim = aim + np.array([1. if aim[0] < L / 2 else -1., 0.]) * (2.5 * sg - min(aim[0], L - aim[0]))
         end = aim + s.rng.normal(0, sg * (1 + TUNE["wide_error"] * wide * (.3 + .7 * pe)), 2)
         dur = max(nrm(end - start) / spd, .3)
         beta = 0. if kind == "shot" else float(clip(.1 + .006 * nrm(end - start), .1, .5)) if not lofted else .12  # share of the average speed lost between launch and arrival
@@ -1172,7 +1212,10 @@ class Match:
             technique = "throw_in"
         if kind == "pass" and lofted and source is None and f_(start)[0] > .67 * L and abs(start[1] - W / 2) > 16 and f_(aim)[0] > L - 20 and abs(aim[1] - W / 2) < 22:
             kind, source = "cross", "open_play"  # a lofted ball from the flank into the area is a cross, whichever way the passer came to choose it (the data provider's definition)
-        ev = s.emit(kind, player=c, pos=start, end=aim, length=d, speed=spd, lofted=lofted, height="high" if lofted else "ground",
+        margin = None
+        if rcv is not None and source not in ("short_corner", "throw_in", "goal_kick") and f_(s.pos[rcv])[0] > L / 2:
+            margin = float(f_(s.pos[rcv])[0] - max(line, f_(start)[0]))  # how far beyond the last defender and the ball he stands when it is played (the referee's tolerance is 0.3 m)
+        ev = s.emit(kind, player=c, pos=start, end=aim, length=d, speed=spd, offside_margin=None if margin is None or margin < -3. else round(margin, 2), lofted=lofted, height="high" if lofted else "ground",
                     body_part="hands" if (hands or source == "throw_in") else body, technique=technique, hold=round(float(s.t - s.ctrl_t), 2), receiver=None if rcv is None else s.ids[rcv], p_success=est, exec_pressure=round(pe, 2),
                     difficulty=1 - est, progressive=bool(fwd >= 10), gain=round(float(fwd), 1), source=source, outcome=None, why=why)
         s._end_spell()
@@ -1260,8 +1303,8 @@ class Match:
             te["used"] = True  # the side that lost the ball in its own half gifted this shot
             err_ev = s.emit("error", player=te["loser"], team=1 - t, pos=te["pos"], leads_to="shot", delay=round(s.t - te["t"], 1), shooter=s.ids[c])
         var = None
-        if res == "goal" and kind != "penalty" and s.rng.random() < .05:
-            var = dict(overturn=bool(s.rng.random() < .5), reason=str(s.rng.choice(["offside in build-up", "foul in build-up", "handball"], p=[.55, .35, .1])))
+        if res == "goal" and kind != "penalty" and assist_ev is not None and (assist_ev.get("offside_margin") or -9.) > -.6:  # the pass that made the goal was played to a man on the line: the check is for the margin
+            var = dict(overturn=bool(assist_ev["offside_margin"] > 0), reason="offside in build-up")
         s._end_spell()
         if s.pending_pass is not None:
             s.pending_pass = None
@@ -1621,13 +1664,15 @@ class Match:
                 if s.pending_pass is not None:
                     s.pending_pass["outcome"], s.pending_pass = "intercepted", None
                 s.last_touch = i
-                if s.rng.random() < .22:  # headed behind for a corner
-                    cp = np.array([L if f["team"] == 0 else 0., 0. if pt[1] < W / 2 else W])
-                    s.emit("corner", team=f["team"], pos=cp)
-                    s._end_spell()
-                    return s._set_dead("corner", f["team"], cp, 32 + float(s.rng.uniform(0, 12)))
-                tow = np.array([L / 2, W / 2]) - pt
-                return s._loose_ball(_unit(tow + s.rng.normal(0, .8, 2)) * 8)
+                # a header is cleared away from his own goal and out to the flank; one made under pressure keeps part of the ball's own momentum, so a ball
+                # coming at his byline can be carried over it. A corner is whatever the ball then does (`_out`), never a dice roll.
+                away = _unit(pt - np.array([0. if t == 0 else L, W / 2]))
+                v_in = (f["end"] - f["start"]) / max(f["dur"], .3)
+                pe_h = s._exec_pressure(i)
+                dir_h = _unit(away + .8 * np.array([0., 1. if pt[1] > W / 2 else -1.]))
+                ang_h = float(s.rng.normal(0, .25 + TUNE["clear_dir_sd"] * pe_h))  # the more he is hurried the more erratic the direction of the header
+                out = np.array([dir_h[0] * np.cos(ang_h) - dir_h[1] * np.sin(ang_h), dir_h[0] * np.sin(ang_h) + dir_h[1] * np.cos(ang_h)]) * 8. + TUNE["head_keep"] * pe_h * v_in
+                return s._loose_ball(out)
             if s.role[i] > 0 and u < TUNE["head_clear"] + TUNE["head_on"] and s._header_on(i, pt):
                 return
         if s.rng.random() < .62:  # he controls it
@@ -1677,7 +1722,8 @@ class Match:
                 s.emit("save", player=opp0, pos=f["end"], save_type="parry", technique=dive, outcome="rebound", penalty=f["ev"]["kind"] == "penalty")
                 s.last_touch = opp0
                 away = np.array([-1. if t == 0 else 1., 0.])
-                s._loose_ball(_unit(away + s.rng.normal(0, .9, 2)) * s.rng.uniform(3, 7))
+                ang_p = float(s.rng.uniform(-1.2, 1.2))  # at most 70 degrees off straight back out: the keeper pushes it away from his goal, wide or out
+                s._loose_ball(np.array([away[0] * np.cos(ang_p) - away[1] * np.sin(ang_p), away[0] * np.sin(ang_p) + away[1] * np.cos(ang_p)]) * s.rng.uniform(3, 7))
             else:
                 s.emit("save", player=opp0, pos=f["end"], save_type="tip_over", technique=dive, outcome="corner", penalty=f["ev"]["kind"] == "penalty")
                 cp = np.array([L if t == 0 else 0., 0. if f["end"][1] < W / 2 else W])
@@ -1693,20 +1739,13 @@ class Match:
             opp_f = opp_f[(s.role[opp_f] > 0) & ~s.off[opp_f]]
             blocker = int(opp_f[np.argmin(nrm(s.pos[opp_f] - f["end"], axis=1))])
             s.emit("block", player=blocker, pos=f["end"], shooter=s.ids[c], kind="shot")
-            if s.rng.random() < .02:  # deflects past his own keeper
-                s.score[t] += 1
-                s.stop[s.period - 1] += 35
-                s.emit("own_goal", player=blocker, team=t, pos=f["end"], home=s.score[0], away=s.score[1], scorer=s.ids[c])
-                s._end_spell()
-                return s._kickoff(1 - t, delay=28.)
-            s.last_touch = blocker if s.rng.random() < .7 else c
-            if s.rng.random() < .4:
-                cp = np.array([L if t == 0 else 0., 0. if f["start"][1] < W / 2 else W])
-                s.emit("corner", team=t, pos=cp)
-                s._end_spell()
-                s._set_dead("corner", t, cp, 32 + float(s.rng.uniform(0, 12)))
-            else:
-                s._loose_ball(s.rng.normal(0, 4, 2))
+            s.last_touch = blocker  # he put his body in the way: his was the last touch
+            # the ball comes off the blocker at a random angle to the shot, slower than it came: over the goal line (a corner, or a goal kick if the shooter touched it last) only if it goes there
+            ang = float(s.rng.choice([-1., 1.]) * s.rng.uniform(.6, 2.6))  # off the body: sideways or back, 35 to 150 degrees off the line of the shot
+            sd = _unit(f["end"] - f["start"])
+            s.ball = f["end"].copy()
+            s.block_until[blocker] = s.t + .5  # the man who took it on the body cannot play it again at once
+            s._loose_ball(np.array([sd[0] * np.cos(ang) - sd[1] * np.sin(ang), sd[0] * np.sin(ang) + sd[1] * np.cos(ang)]) * float(f["ev"].get("speed", 20.) * s.rng.uniform(.2, .5)))  # it keeps a fifth to a half of the shot's pace
 
     # ------------------------------------------------------------------ loose ball
     def _loose(s):
@@ -1722,7 +1761,8 @@ class Match:
         spn = clip(((s.pos - a0) @ ab) / max(ab @ ab, 1e-9), 0, 1) if ab @ ab > 1e-9 else np.zeros(22)
         q = a0 + spn[:, None] * ab
         d = nrm(s.pos - q, axis=1)
-        close = [i for i in np.argsort(d / (s.vmax * .5 + 1)) if d[i] <= 1.3 and s.block_until[i] <= s.t]
+        reach_ = np.where(s.role == 0, 2.6, 1.3)  # a keeper dives
+        close = [i for i in np.argsort(d / (s.vmax * .5 + 1)) if d[i] <= reach_[i] and s.block_until[i] <= s.t]
         for i in close:
             if s.rng.random() < s._claim_p(i, nsp, i // 11, b, False) * .9:
                 rival = [j for j in close if j // 11 != i // 11]

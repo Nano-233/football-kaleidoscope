@@ -675,6 +675,20 @@ Same evening, own-third and middle-third passing traced (`fwd_opts`, `poss_start
 - Possession starts per team-match (own / middle / final third) are 65 / 58 / 24 in the sim against 42 / 34 / 18 in the real events; the definitions of a possession differ (the sim counts every change of the ball between teams), so this is only a pointer that the sim turns the ball over about 1.4-1.6x as often, which is where the extra own-third sequences (84 vs 62) come from.
 Open, in order of what a viewer or an agent would notice: turnovers 1.4-1.6x too frequent, own-third and middle-third passes 1.5x, big chances at half the real rate, fouls 17-35 m from goal 2x.
 
+### Dice where there should be physics (2026-10-09, late)
+
+The user watched a corner given at one end seconds after play in the other half. Cause: when a defender won a header, the engine rolled 22% for "headed behind for a corner" and put the corner at the byline the attackers attack, wherever the header was won (16.3 corners per match, 3.3 of them from play more than 40 m from that end). Rule from the user: an outcome is what physically happens, not a probability attached to an event. Audit of the 39 random draws in `engine.py`; fixed:
+- Headed clearance: away from his own goal and out to the flank, direction error growing with pressure, plus a share of the ball's own momentum (`head_keep`); a corner is whatever `_out` then says (last touch, which byline).
+- Hurried foot clearances: kick angle scatter grows with pressure (`clear_dir_sd`).
+- Blocked shot: the last touch is the blocker's; the ball comes off the body sideways or back at a fifth to a half of the shot's pace, the blocker cannot play it again for 0.5 s; the 40% corner dice and the 2% own-goal dice are gone. A loose ball over the goal line between the posts is a goal (own goal if the defender touched it last).
+- Keeper parry: pushed away from his goal (within 70 degrees of straight out), it can no longer go into his own net; a keeper dives for loose balls within 2.6 m.
+- A pass to a man by the goal line is weighted short of it (own goals from back-passes: 0.66 per match -> 0.1-0.3, real 0.11).
+- Cards: yellow and red follow the challenge (from behind, speed, a lunge he was unlikely to win, a fast man stopped, the last man denying a run at goal = red), not 13% / 0.5% per foul. Yellows 3.2-4.0 per match (real 3.1), 0.14 per foul (0.13).
+- Advantage: the fouled man still has the ball, is moving on, the contact was light and (inside 35 m of goal) he has a clear run: 0.13-0.15 of fouls (real 0.14).
+- VAR on a goal: only when the pass that made it was played to a man within the 0.3 m line tolerance, overturned if he was beyond the line (`offside_margin` on every pass into the opposition half). No more random "handball" or "foul in build-up" reasons.
+Left as dice for now (contests between players with skill-based odds, or choices): tackle and take-on outcomes, whether a won tackle is a foul (a constant by tackling skill and referee, should use the angle and speed of the challenge), a keeper's foul on a smother (0.12), a header on goal when a cross is won (0.13), whether a ball dropping between two players is controlled (0.62), keeper punch (0.3), VAR checks of penalties and red cards, who takes a short corner (0.16), substitution and time-wasting timing.
+Restarts per match now: throw-ins 44.6 (real 45.4), goal kicks 15.8 (17.1), free kicks 24.2 (22.9), corners 3.7 (real 11.6): real corners come 29% from saves tipped behind (3.2), 24% from blocks (2.7), 12% from duels (1.4), 27% from clearances (3.0), 4% from interceptions; the sim has saves (2.0) but only about one corner per match from all the others, which needs the box defending (crosses blocked, headed or hacked behind under pressure) to be modelled, not a probability.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
