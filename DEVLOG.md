@@ -659,6 +659,15 @@ Same day, after the port: the box places that make chances (back post and the ed
 Own-third play in numbers (`chain_len.py`): real 62 sequences per team-match, 1.6 passes each (60% a single pass, 2% five or more, 55% leave the third); sim 84 sequences, 2.1 passes (47% single, 7% five or more, 56% leave). Own-third pass accuracy is 0.82 against 0.73 real: the sim's build-up is too safe (the `keep` and `usage` terms of the pass utility are hand-set, Open Football and Helios have neither).
 Next: (1) the defence's resistance to progression (Open Football's DefensivePlan press and cover, its standoff line), (2) build-up decision from Open Football's PassEvaluator instead of the `keep`/`usage` utility, (3) ground deliveries from wide (cut-back, driven low) and the through-ball meeting point.
 
+### Evaluating each port against ours (2026-10-09, evening)
+
+Rule from the user: do not port a module wholesale, measure it against what we have and keep the better. Results:
+- Open Football's defending block (rear a standoff goal-side of the ball, `of_def`) against our follow-the-ball block: goal-side defenders 4.59 vs 4.58 (real 6.4), passes into the final third 46 -> 37 (real 54), loss 202 -> 221. Ours kept, the port stays off.
+- Open Football's near-post and penalty-spot places: more shots, not more chances (xG 1.58 vs 1.26): off; back post and edge: kept (`of_mask` 12).
+- Removing our hand-set `keep` and `usage` terms (Open Football and Helios have neither) to cure own-third recycling: own-third passes 176 -> 158-174, forward share unchanged: they are not the cause, left alone.
+- Defenders more often in front of the ball than behind it when the ball is near their goal (goal-side 4.6 of 10 against 6.4 of 9 visible, the same with only the nine nearest men counted): not the block formula, not the marking, not the target speed, not the striker's outlet allowance. It was effort: a man who is upfield of his place trots at 1.7-2.4 m/s (`CRUISE` x `cruise_k`) because effort follows need and the gap looks small. Fix: with the ball in his half a man more than 3 m upfield of where he should be runs flat out (`rec_sprint`, Open Football's recovery run). Goal-side 4.6 -> 5.6 (real 6.4), 4.1 -> 5.1 (5.6), loss 202 -> 184. Running distance rose to 12.0 km, so the jog speed factor was lowered from 0.65 to 0.42 to put it back at 11.0 km (real 10.8): jogging is walking pace in real play anyway.
+State after the day (48 matches): shots 16.6 vs 13.1, xG 1.39 vs 1.29, goals 1.18 vs 1.24, penalties 0.19 vs 0.18, loss 184 (229 at the start of the day). Still open: own-third passing (199 passes per team vs 101, forward share 0.41 vs 0.66), big chances (0.4 vs 0.86), the central lane (44% of final-third actions vs 15%), fouls 17-35 m from goal (3.95 vs 1.96), balls behind the last defender (1.6% vs 6.9%).
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

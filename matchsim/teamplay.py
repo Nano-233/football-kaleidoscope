@@ -124,3 +124,24 @@ def support_target(P_i, carrier_pos, presser_pos, goal):
     dist = float(np.clip(np.clip(n, NEAR, FAR) * .45 + want * .55, NEAR, FAR))
     return carrier_pos + d * dist
 
+
+
+STANDOFF_PASSIVE, STANDOFF_PRESS = 25., 16.   # how far goal-side of the ball the deepest line stands, at a passive and at a hunting press
+SLIDE_DEF = .55                               # a defending block slides over to the ball's side much further than an attacking one
+DEF_WID = (37.5, 56.)
+
+
+def defending_anchors(A, out_f, ball, tc):
+    """The defending block (Open Football's ShapeBuilder, out of possession): the back line a standoff goal-side of the ball, capped by the tactic's line height,
+    the block 27-41 m long and 37-56 m wide, sliding 55% of the ball's lateral offset. Own goal at x = 0."""
+    xs, ys = A[out_f, 0], A[out_f, 1]
+    depth = (A[:, 0] - xs.min()) / max(float(np.ptp(xs)), .01)
+    lat = (A[:, 1] - ys.min()) / max(float(np.ptp(ys)), 1.)
+    standoff = STANDOFF_PASSIVE - (STANDOFF_PASSIVE - STANDOFF_PRESS) * tc.press
+    cap = L * (.30 + .35 * tc.line_height)
+    rear = float(np.clip(min(ball[0] - standoff, cap), REAR_FLOOR, L))
+    length = LEN_STRETCH - (LEN_STRETCH - LEN_COMPACT) * tc.compactness
+    width = DEF_WID[0] + (DEF_WID[1] - DEF_WID[0]) * tc.width
+    half = min(width / 2, W / 2 - MARGIN)
+    cy = float(np.clip(W / 2 + (ball[1] - W / 2) * SLIDE_DEF, MARGIN + half, W - MARGIN - half))
+    return np.stack([rear + depth * length, cy + (lat - .5) * width], 1)

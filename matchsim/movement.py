@@ -574,6 +574,9 @@ def team_targets(m, t):
     carrier = m.carrier if m.state == "held" else -1
     bx = Bs[0] + (max(float(Bv[0]), 0.) if m.state != "flight" else 0.)  # the team moves up with the play: look a second ahead along the ball's path
     wt = 0.  # how far the attacking shape has taken over from the block (the box slots outrank a width anchor)
+    if not has and m.state != "dead" and TP.get("of_def", 0.):  # the defending block of the Open Football plan, in place of the follow-the-ball formula above
+        da = teamplay.defending_anchors(A, out_f, Bs, tc)
+        zone = np.where(out_f[:, None], zone * fd + da * (1 - fd), zone)
     plan_skip = np.zeros(11, bool)  # the men the team plan placed: they are not left to look for space on their own
     of = bool(has and m.state != "dead" and TP.get("of_plan", 1.))
     GOAL_ATT = np.array([L, W / 2])
@@ -788,13 +791,16 @@ def team_targets(m, t):
             # stops a job putting him on the wrong side of the ball. It is inert for a defender already goal-side of the cover point.
             if TP.get("recover_on", 1.):
                 engaged = m.sprint_hint[sl]  # the presser and the men closing the receiver are going to the ball
-                lim = out_f & (role != ST) & ~engaged
+                lim = out_f & ((role != ST) | (Bs[0] < TP.get("recover_st", 0.))) & ~engaged
                 cover_x = Bs[0] - TP.get("cover_margin", 3.)
                 zone[lim, 0] = np.minimum(zone[lim, 0], np.maximum(cover_x, MIN_X[role[lim]]))
             urgent |= (gate > .6) & (nrm(zone - P, axis=1) > 2.5)  # a man-marker in the danger area stays with his man at the man's pace
             behind_m = (gate > .6) & (nrm(zone - P, axis=1) > TP.get("mark_sprint_d", 3.0))  # a marker who is losing his man goes flat out: effort follows need, he does not jog after a sprinting forward
             m.sprint_hint[11 * t + np.nonzero(behind_m)[0]] = bool(TP.get("hint_mark", 1.))
-            urgent |= out_f & (P[:, 0] - zone[:, 0] > 5.) & (Bs[0] < .65 * L)  # recovery run: well upfield of where he should be, ball in his half: sprint back, do not jog
+            rec = out_f & (P[:, 0] - zone[:, 0] > 5.) & (Bs[0] < .65 * L)
+            urgent |= rec  # recovery run: well upfield of where he should be, ball in his half: sprint back, do not jog
+            if TP.get("rec_sprint", 0.):
+                m.sprint_hint[sl] |= rec & (P[:, 0] - zone[:, 0] > TP["rec_sprint"])  # with his goal under threat a man who is beaten by the ball runs flat out
     else:
         # runs in behind
         if mine and m.state == "held":
