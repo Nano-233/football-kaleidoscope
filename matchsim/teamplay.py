@@ -32,13 +32,13 @@ NEAR, FAR, SETTLED, CONTEST = 9.5, 20., .45, 5.5   # the short outlet's distance
 GK, CB, FB, DM, CM, WG, AM, ST = range(8)
 
 
-def block_anchors(A, out_f, ball, tc):
+def block_anchors(A, out_f, ball, tc, line=0.):
     """Anchor of every player in the attacking block (11, 2). A: the formation's own positions, out_f: outfield mask, ball: where the shape is built round."""
     xs, ys = A[out_f, 0], A[out_f, 1]
     depth = (A[:, 0] - xs.min()) / max(float(np.ptp(xs)), .01)
     lat = (A[:, 1] - ys.min()) / max(float(np.ptp(ys)), 1.)
     length = LEN_STRETCH - (LEN_STRETCH - LEN_COMPACT) * tc.compactness
-    front = min(ball[0] + FRONT_LEAD, FRONT_CEIL)
+    front = min(max(ball[0] + FRONT_LEAD, line - 1.), FRONT_CEIL)  # the front rank leads the ball, and in any case plays on the shoulder of the last defender
     rear = float(np.clip(front - length, REAR_FLOOR, REAR_CEIL))
     length = min(length, max(L - rear - MARGIN, LEN_COMPACT * .5))
     width = WID_NARROW + (WID_WIDE - WID_NARROW) * tc.width

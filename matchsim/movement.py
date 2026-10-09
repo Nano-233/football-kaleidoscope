@@ -578,8 +578,8 @@ def team_targets(m, t):
     of = bool(has and m.state != "dead" and TP.get("of_plan", 1.))
     GOAL_ATT = np.array([L, W / 2])
     if of:  # the attacking block (Open Football's ShapeBuilder): everybody is in a 27-41 m rectangle whose front rank leads the ball
-        ba = teamplay.block_anchors(A, out_f, Bs, tc)
         line_o = max(np.sort(O[:, 0])[-2], L / 2)
+        ba = teamplay.block_anchors(A, out_f, Bs, tc, line_o if TP.get("front_line", 1.) else 0.)
         cap_o = max(line_o, Bs[0]) - TP.get("hover", .3) + np.sin(.5 * m.t + m.phase[sl])  # nobody up front waits beyond the last defender and the ball
         att_o = (role == ST) | (role == WG) | (role == AM)
         ba[:, 0] = np.where(att_o, np.minimum(ba[:, 0], cap_o), ba[:, 0])
