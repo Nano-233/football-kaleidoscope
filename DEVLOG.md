@@ -578,6 +578,14 @@ Crosses did NOT rise (7.0 -> 5.8): holding the line is necessary, not sufficient
   ground passes along the wide channel 23 vs 44. The sim lofts instead (air passes from there to places other than the box 10.5 vs 2.6).
 - The cross option has its own hand utility (p_c about 0.15, loses to the best alternative by 0.8 on average) rather than the learned pass policy.
 
+Labelling (same day). Counting passes from the wide final third (x>70, |y-34|>16) into the area by height: real 9.8 lofted per team-match (74% of
+them flagged `cross` by the provider) and 11.6 on the ground (23% flagged); sim 8.3 lofted of which only 3.1 were flagged because the learned pass
+policy chose the rest as ordinary passes. They were crosses in everything but the label, so deliveries are now labelled by what they are: a lofted
+ball from a flank (past 0.67 L, more than 16 m off the centre line) into the area (last 20 m, within 22 m of the centre line) is a `cross`
+(`_pass`; offside is still judged as for a pass). Open-play crosses 5.8 -> 11.0 (real 11.8), loss 210 -> 208. Because crosses are excluded from the
+box-entry metrics, the non-cross box entries fell to 7.8 vs 16.6 real, which is the honest size of the penetration gap: ground balls into the box
+(cut-backs, low crosses, through balls) are about half of real. Through balls are over-attempted (3.8 vs 2.1) rather than missing.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

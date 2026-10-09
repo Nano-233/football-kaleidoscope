@@ -1159,6 +1159,8 @@ class Match:
             technique = "keeper_throw"
         elif source == "throw_in":
             technique = "throw_in"
+        if kind == "pass" and lofted and source is None and f_(start)[0] > .67 * L and abs(start[1] - W / 2) > 16 and f_(aim)[0] > L - 20 and abs(aim[1] - W / 2) < 22:
+            kind, source = "cross", "open_play"  # a lofted ball from the flank into the area is a cross, whichever way the passer came to choose it (the data provider's definition)
         ev = s.emit(kind, player=c, pos=start, end=aim, length=d, speed=spd, lofted=lofted, height="high" if lofted else "ground",
                     body_part="hands" if (hands or source == "throw_in") else body, technique=technique, hold=round(float(s.t - s.ctrl_t), 2), receiver=None if rcv is None else s.ids[rcv], p_success=est, exec_pressure=round(pe, 2),
                     difficulty=1 - est, progressive=bool(fwd >= 10), gain=round(float(fwd), 1), source=source, outcome=None, why=why)
