@@ -534,6 +534,20 @@ Below 0.10 the learned gate is unchanged. Result: clear chances shot 64 % (real 
 shots 17.6 (real 12.9), goals 1.49 (1.24). Big chances (xG >= 0.25) stay at 0.31 against 0.86: they are not decided at the shot but earlier, in how often the
 ball reaches the six-yard area, which is the box-entry gap.
 
+### Why the simulation has so few big chances (2026-10-08)
+
+Saw: 0.17-0.31 shots per team-match with xG >= 0.25 against 0.86 real, and 1.5 clear chances (xG >= 0.15 on receiving the ball) per match against 3.6.
+Measured (scripts in the session scratchpad): (1) real big chances come from every kind of ball into the box: rebounds/carries/solo 0.29, other passes
+0.24, crosses 0.15, through balls 0.11, set-piece deliveries 0.07 per team-match; the simulation has 0.08 / 0.03 / 0.014 / 0.014 / 0.00. (2) It is not
+tighter marking at the shot: close central shooters have the nearest defender at 2.0 m (real 1.6) and fewer defenders in the triangle (0.29, real 0.56).
+(3) The simulation takes MORE close central shots (5.1 per team-match against 3.9) but they are worse and convert worse: goal 0.10 against 0.16, saved 0.30
+against 0.19, mean xG 0.11 against 0.17. (4) Cause of the conversion: a shot's goal probability IS the simulator's own xG, and that formula is too flat.
+On 1,733 real shots it predicts 0.078 / 0.136 in the 0.06-0.10 / 0.10-0.20 bands where the real rate is 0.099 / 0.180, and 0.54 at the top where the
+real rate is 0.38. `scripts/fit_xg.py` refits it (log-lik -439.7 against -451.4; StatsBomb's own model -414.3).
+Tried: switching the refit on. Per-shot xG then matches (0.09) and big chances rise to 0.54-0.76, but the shooting gate (balanced against the old scale)
+over-shoots from 12-20 m: shots 18-19, goals 1.7-1.85, loss 256-288 against 228. So the gate has to be re-derived from real data (shoot vs pass at the
+release, from receipts in the 360 frames) rather than nudged; that and the refit go together and are the next step.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
