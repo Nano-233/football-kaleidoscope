@@ -25,6 +25,7 @@ TUNE = dict(xg_z0=-2.08, xg_d=-.07, xg_a=1.89, xg_h=-.2, xg_b=.72, xg_c=.25, cle
             carry_base=0.22, carry_prog=.2, carry_streak=.3, dwell_base=0.9, dwell_shape=2.4, dwell_scale=1.61,
             tackle_rate=1.2, wide_error=3.2, off_miss=.2, off_mult=.02, off_lag=.25, head_keep=.7, safe_out_x=.12, card_thr=.85, adv_sev=.14, clear_dir_sd=1.2, rec_sprint=3., fk_xg=1., fk_shot_k=.5, fk_shot_d=27.2, foul_risk=6., box_avoid=.2, tackle_risk=2.2, tackle_danger=.7)
 TUNE.update(burst_gain=-1e9, block_v=.8, push_k=1., pol_space=0., follow_poss=.2, pin_from=.35, recover_on=1., cover_margin=3., threat_depth=.34, threat_ball=25., mark_base=4., mark_reach=19., layer_bias=.9, space_cover=0., space_k=100., n_space=3, assign_on=1., press_v=7., cover_v=3.5, mark_k=100., lane_job_k=35., post_v=5., space_v=3., job_hyst=1.5, press_hyst=2.0, templ_w=.9, busy_gate=.6, flat_gate=.6, run_gate=.95, mark_sprint_d=3.0, box_start=38., wn_end=42., lag_k=1., drop_k=1., mark_gap=1.1, box_gate=.85, dang_far=38., dang_gate=.85, react_def=.35, close_gap=1.5, jock_k=1., press_k=1., open_w=1., lane_w=1., slot_gate=.5, lean_r=24., lean_min=.35, shoot_close=28., shot_gap=.7, jobs_on=1., jobs_d=38., jobs_att=40., jobs_w=.9, job_mark=3., job_lane=12., job_post=1.4, job_wv=4., way_pen=0., way_r=2.2, run_k=1., ball_side=.9, hover=.3)  # block shape (read by movement.py through TP)
+TUNE.update(body_r=.5, contact_mu=.35, contact_e=.3, loose_k=.07, loose_v0=5., touch_r=.9, take_tau=.35, take_k=.04, take_v0=10.)  # a player's body as the ball meets it: radius with a leg out (m), friction that takes pace off a glancing ball, how much a head-on ball comes back
 movement.TP = TUNE
 sig = lambda x: 1 / (1 + np.exp(-x))
 
@@ -85,6 +86,7 @@ class Match:
         s.windows = [[(s.rng.uniform(9, 16), 2), (s.rng.uniform(24, 30), 2), (s.rng.uniform(34, 40), 1)] for _ in (0, 1)]
         s.mark = [-np.ones(11, int), -np.ones(11, int)]
         s.run_until, s.run_cool = np.zeros(22), np.zeros(22)
+        s.deflected = None  # the last shot that came off a defender: who struck it, who deflected it, when
         s.box_prev = [[-1] * 4, [-1] * 4]  # who held each box place last time (incumbents keep the job)
         s.wide_hold = [[-1, -1], [-1, -1]]  # who holds each touchline, per team (low-y, high-y)
         s.run_tgt = np.zeros((22, 2))
@@ -236,17 +238,23 @@ class Match:
         line of the shot and the nearer he is to the shooter. The constants are the fit of this exact form to real shots (1481 non-header shots with
         freeze frames: blocked or not against where the defenders stood): at most about .47 for a man right on the line, a lateral width of about
         1 m, falling over about 11 m along the line. C and defenders are in the attacking-left-to-right frame, the keeper is not in `defenders`."""
+        if not len(defenders) or float(np.hypot(L - C[0], W / 2 - C[1])) < 1e-6:
+            return TUNE["blk_b0"]
+        bj = s._lane_terms(C, defenders)[0]
+        return float(1. - (1. - TUNE["blk_b0"]) * np.prod(1. - bj))
+
+    def _lane_terms(s, C, defenders):
+        """What each defender contributes to blocking a shot from C at goal centre: his chance, how far along the line of the shot he stands and how far to its left."""
         g = np.array([L, W / 2]) - C
         dg = float(np.hypot(*g))
-        if dg < 1e-6 or not len(defenders):
-            return TUNE["blk_b0"]
         u = g / dg
         rel = np.asarray(defenders, float) - C
         al = rel @ u
-        perp = np.abs(rel[:, 0] * u[1] - rel[:, 1] * u[0])
+        off = rel[:, 1] * u[0] - rel[:, 0] * u[1]  # positive: to the left of the ball's direction
         m = (al > .3) & (al < dg)
-        bj = TUNE["blk_a"] * np.exp(-(perp[m] / TUNE["blk_sig"]) ** 2) * np.exp(-al[m] / TUNE["blk_lam"])
-        return float(1. - (1. - TUNE["blk_b0"]) * np.prod(1. - bj))
+        bj = np.zeros(len(rel))
+        bj[m] = TUNE["blk_a"] * np.exp(-(np.abs(off[m]) / TUNE["blk_sig"]) ** 2) * np.exp(-al[m] / TUNE["blk_lam"])
+        return bj, al, off
 
     def _xg(s, C, defenders, header=False):
         dx, dy = L - C[0], C[1] - W / 2
@@ -312,7 +320,11 @@ class Match:
                 s.pending_pass["outcome"], s.pending_pass = "out", None
             s.score[sc_t] += 1
             s.stop[s.period - 1] += 35
-            if tl == sc_t:
+            dfl = s.deflected
+            if tl != sc_t and dfl is not None and dfl["blocker"] == s.last_touch and s.t - dfl["t"] < 6.:  # the shot was going at goal and came off a defender on the way in: still the shooter's goal
+                s.emit("goal", player=dfl["shooter"], pos=np.array([0. if x < 0 else L, y]), xg=.05, home=s.score[0], away=s.score[1], assist=None, body_part="foot", deflected=True)
+                tl = sc_t
+            elif tl == sc_t:
                 s.emit("goal", player=s.last_touch, pos=np.array([0. if x < 0 else L, y]), xg=.05, home=s.score[0], away=s.score[1], assist=None, body_part="foot")
             else:
                 s.emit("own_goal", player=s.last_touch, team=sc_t, pos=np.array([0. if x < 0 else L, y]), home=s.score[0], away=s.score[1], scorer=None)
@@ -627,6 +639,23 @@ class Match:
             if d > 4:
                 s.emit("carry", player=i, pos=p0, end=s.pos[i], distance=d, duration=s.t - t0)
             s.spell = None
+
+    def _body_hit(s, i, at, v_in):
+        """The ball (velocity v_in) hits player i's body at `at` without being controlled. Where it strikes his surface decides the deflection: head-on it
+        comes back at a fraction of its pace, a graze carries on, bent away from the side he stands on. Nothing here is a roll except how stiff the leg is."""
+        sp = float(nrm(v_in))
+        if sp < 1e-6:
+            return np.zeros(2)
+        d = v_in / sp
+        left = np.array([-d[1], d[0]])
+        b = float((s.pos[i] - at) @ left)  # his centre to the left of the ball's line (+) or right (-)
+        sn = b / TUNE["body_r"] if abs(b) < TUNE["body_r"] else float(s.rng.uniform(-1., 1.))  # a ball that hits the trunk strikes it where the line crosses it; one that was reached by a leg stretched across hits the limb at no fixed point
+        sn = float(clip(sn, -.98, .98))
+        cs = float(np.sqrt(1. - sn * sn))
+        mu, e = TUNE["contact_mu"], float(clip(s.rng.normal(TUNE["contact_e"], .1), .05, .6))
+        vx = sp * ((1. - mu) * sn * sn - e * cs * cs)
+        vy = -sp * sn * cs * ((1. - mu) + e)
+        return d * vx + left * vy
 
     def _loose_ball(s, v):
         s._end_spell()
@@ -1277,11 +1306,19 @@ class Match:
                 p_block = s._lane_block(C, Oo)
             p_off = clip(clip(.55 - 1.0 * xg - .01 * (fin - 10), .2, .6) * (.75 + .5 * pe), .08, .7)  # hurried shots go wide, a free one is placed
             res = "blocked" if r < p_block else ("off_target" if r < p_block + p_off else "saved")
+        blocker, blk_spot = -1, None
+        if res == "blocked":  # whoever stands in the lane stops it, where he stands on the line of the shot (the lane model's own weights)
+            ids_ = np.array([j for j in range(11 * (1 - t), 11 * (1 - t) + 11) if s.role[j] > 0 and not s.off[j]])
+            bj, al_, off_ = s._lane_terms(C, f(s.pos[ids_]))
+            w_ = bj + 1e-3 * np.exp(-np.abs(off_) / 2.) * (al_ > .3)
+            k_ = int(s.rng.choice(len(ids_), p=w_ / w_.sum())) if w_.sum() > 0 else int(np.argmin(np.abs(off_)))
+            blocker, dg_ = int(ids_[k_]), float(np.hypot(L - C[0], W / 2 - C[1]))
+            blk_spot = list(C + _unit(np.array([L, W / 2]) - C) * float(clip(al_[k_], .8, dg_ - 1.)))
         start = s.ball.copy()
         wy = s.rng.uniform(-3.2, 3.2)
         endt = {"goal": [L + .5, W / 2 + wy], "saved": [L - .5, W / 2 + wy],
                 "off_target": [L + .5, W / 2 + s.rng.choice([-1, 1]) * s.rng.uniform(4, 8)],
-                "blocked": list(C + _unit(np.array([L, W / 2]) - C) * s.rng.uniform(1.5, 3))}[res]
+                "blocked": blk_spot}[res]
         end = f(np.array(endt))
         spd = float(clip(20 + .5 * fin + s.rng.normal(0, 2), 16, 33))
         lp = s.last_pass_to.get(t)
@@ -1311,7 +1348,7 @@ class Match:
             s.pending_pass = None
         s.state, s.carrier = "flight", -1
         s.flight = dict(start=start, end=end, aim=end, t0=s.t, dur=max(nrm(end - start) / spd, .25), speed=spd,
-                        kind="shot", team=t, passer=c, rcv=-1, res=res, ev=ev, var=var, assist_ev=assist_ev, err_ev=err_ev)
+                        kind="shot", team=t, passer=c, rcv=-1, res=res, ev=ev, var=var, assist_ev=assist_ev, err_ev=err_ev, blocker=blocker)
         s.ball_v = (end - start) / s.flight["dur"]
         s.last_touch = c
         s.block_until[c] = s.t + .6
@@ -1557,7 +1594,18 @@ class Match:
                     p = max(p, float(clip(.45 + .03 * (s.attr["gk"][i] - 10), .3, .85)))
                 if s.rng.random() < p:
                     s.ball = q[i]
-                    return s._gain_control(i, q[i])
+                    # A defender who gets a foot to a pass takes it down only if he saw it coming and it is not hit too hard for him to set himself; otherwise it comes off him
+                    # as a block, still moving, and the ball goes wherever his body sends it.
+                    p_take = 1. if (mine or s.role[i] == 0) else float(clip((s.t - f["t0"] - .1) / TUNE["take_tau"], 0., 1.)) * float(clip(1. - TUNE["take_k"] * max(0., f["speed"] - TUNE["take_v0"]), .2, 1.))  # about a third of a second to read the pass and set a foot to it; a hard-hit one is harder to kill
+                    if p_take >= 1. or s.rng.random() < p_take:
+                        return s._gain_control(i, q[i])
+                    pp = s.pending_pass
+                    if pp is not None:
+                        pp["outcome"], s.pending_pass = "deflected", None
+                        s.emit("block", player=i, pos=q[i], shooter=pp["player"], kind="pass", deflected=True)
+                    s.last_touch = i
+                    s.block_until[i] = s.t + .4
+                    return s._loose_ball(s._body_hit(i, q[i], s.ball_v.copy()))
                 if mine:  # first touch lost
                     s.emit("miscontrol", player=i, pos=q[i])
                     s.block_until[i] = s.t + .5
@@ -1565,10 +1613,6 @@ class Match:
                         s.pending_pass["outcome"], s.pending_pass = "incomplete", None
                     return s._loose_ball(_unit(ab + s.rng.normal(0, .8, 2)) * s.rng.uniform(2, 5))
                 s.block_until[i] = s.t + .4
-                if s.rng.random() < .2:
-                    if s.pending_pass is not None:
-                        s.pending_pass["outcome"], s.pending_pass = "deflected", None
-                    return s._loose_ball(_unit(ab + s.rng.normal(0, 1.0, 2)) * f["speed"] * .35)
         if not (0 <= b[0] <= L and 0 <= b[1] <= W) and f["kind"] != "shot":
             return s._out(b)
         if u >= 1:
@@ -1737,17 +1781,13 @@ class Match:
             s.ball = f["end"].copy()
             s._out(f["end"])
         else:  # blocked: a defender gets in the way
-            opp_f = np.arange(11 * (1 - t), 11 * (1 - t) + 11)
-            opp_f = opp_f[(s.role[opp_f] > 0) & ~s.off[opp_f]]
-            blocker = int(opp_f[np.argmin(nrm(s.pos[opp_f] - f["end"], axis=1))])
+            blocker = f["blocker"]
             s.emit("block", player=blocker, pos=f["end"], shooter=s.ids[c], kind="shot")
             s.last_touch = blocker  # he put his body in the way: his was the last touch
-            # the ball comes off the blocker at a random angle to the shot, slower than it came: over the goal line (a corner, or a goal kick if the shooter touched it last) only if it goes there
-            ang = float(s.rng.choice([-1., 1.]) * s.rng.uniform(.6, 2.6))  # off the body: sideways or back, 35 to 150 degrees off the line of the shot
-            sd = _unit(f["end"] - f["start"])
             s.ball = f["end"].copy()
             s.block_until[blocker] = s.t + .5  # the man who took it on the body cannot play it again at once
-            s._loose_ball(np.array([sd[0] * np.cos(ang) - sd[1] * np.sin(ang), sd[0] * np.sin(ang) + sd[1] * np.cos(ang)]) * float(f["ev"].get("speed", 20.) * s.rng.uniform(.2, .5)))  # it keeps a fifth to a half of the shot's pace
+            s.deflected = dict(shooter=c, blocker=blocker, t=s.t)
+            s._loose_ball(s._body_hit(blocker, f["end"], _unit(f["end"] - f["start"]) * f["speed"]))  # off his body as it met it, at the pace the shot was struck (a flight of a metre or two is padded to a minimum time): the corner, the throw or the second ball is wherever that sends it
 
     # ------------------------------------------------------------------ loose ball
     def _loose(s):
@@ -1766,12 +1806,22 @@ class Match:
         reach_ = np.where(s.role == 0, 2.6, 1.3)  # a keeper dives
         close = [i for i in np.argsort(d / (s.vmax * .5 + 1)) if d[i] <= reach_[i] and s.block_until[i] <= s.t]
         for i in close:
-            if s.rng.random() < s._claim_p(i, nsp, i // 11, b, False) * .9:
+            ready = float(clip(1. - TUNE["loose_k"] * max(0., nsp - TUNE["loose_v0"]), .1, 1.))  # a ball nobody played to him comes too fast to take down: little time to see it and set himself
+            if s.rng.random() < s._claim_p(i, nsp, i // 11, b, False) * .9 * ready:
                 rival = [j for j in close if j // 11 != i // 11]
                 if rival:
                     s.emit("fifty_fifty", player=i, pos=b, target=s.ids[rival[0]], outcome="won")
                 return s._gain_control(i, b)
             s.block_until[i] = s.t + .4
+            if d[i] < TUNE["touch_r"]:  # he got something on it without taking it down: the ball goes on off his foot or body
+                s.last_touch = i
+                if s.role[i] == 0:  # the keeper pushes it away from his goal
+                    ang_k = float(s.rng.uniform(-1.2, 1.2))
+                    aw = np.array([-1. if i < 11 else 1., 0.])
+                    s.ball_v = np.array([aw[0] * np.cos(ang_k) - aw[1] * np.sin(ang_k), aw[0] * np.sin(ang_k) + aw[1] * np.cos(ang_k)]) * max(.5 * nsp, 3.)
+                else:
+                    s.ball_v = s._body_hit(i, q[i], s.ball_v)
+                return
 
     # ------------------------------------------------------------------ dead ball
     def _dead_step(s):
