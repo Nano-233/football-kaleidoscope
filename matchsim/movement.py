@@ -80,6 +80,10 @@ NARROW = .3   # how much a defending block squeezes in from its formation width 
 SPACING = 7.   # minimum gap between defenders who are holding zones
 COMMIT_DANGER = 2.
 GOAL_HALF = 3.66
+INSET = 4.3          # a width holder stands this far off the touchline: on the line without being out of play every time he is found (Open Football's WidePlan)
+WIDE_SLOT = .5       # a slot is a candidate for a touchline when it lies in the outer quarter of the formation's own width
+WINGER_DEPTH = .45   # a slot this far up the formation or better is a winger; below it a full-back, who holds the line only when nobody is in front of him
+INCUMBENCY = .15     # the man already holding a touchline keeps it unless another is clearly better
 
 
 _OFF = np.array([L, W])
@@ -420,6 +424,33 @@ def cut_lanes(zone, urgent, gate, role, P, O, C, ci):
     return zone, urgent
 
 
+def wide_holders(m, t, A, role, out_f):
+    """One man per touchline holds the width while the team has the ball (Open Football's WidePlan).
+
+    Width is not an average of where everybody stands, it is two named players standing where nobody else is. Without them the wingers drift
+    infield to where the threat is, nobody is on the line to be found, and the side crosses far less than real teams (that engine measured 2.2
+    open-play crosses per team against a real 16-18 before it added this). The man is the one whose formation slot is widest and highest, a
+    winger before the full-back behind him, ties decided by delivery, 1v1 ability and legs; the incumbent keeps the line, so two men do not
+    trade the job every tick."""
+    sl = slice(11 * t, 11 * t + 11)
+    live = out_f & ~m.off[sl]
+    ys, xs = A[live, 1], A[live, 0]
+    lat = (A[:, 1] - ys.min()) / max(float(np.ptp(ys)), 1.)
+    depth = (A[:, 0] - xs.min()) / max(float(np.ptp(xs)), 1.)
+    a = {k: m.attr[k][sl] / 20. for k in ("passing", "dribbling", "accel", "stamina", "pace")}
+    fit = (clip((depth - WINGER_DEPTH) / (1. - WINGER_DEPTH), 0, 1) * .45 + a["passing"] * .2
+           + (.6 * a["dribbling"] + .4 * a["accel"]) * .2 + (.5 * a["stamina"] + .5 * a["pace"]) * .15)
+    wide = live & (np.abs(lat - .5) * 2. >= WIDE_SLOT)
+    for k, low in enumerate((True, False)):
+        side = wide & ((A[:, 1] < W / 2) == low)
+        if side.any():
+            sc = np.where(side, fit + INCUMBENCY * (np.arange(11) == m.wide_hold[t][k]), -1e9)
+            m.wide_hold[t][k] = int(sc.argmax())
+        else:
+            m.wide_hold[t][k] = -1
+    return m.wide_hold[t]
+
+
 def team_targets(m, t):
     """Returns (targets (11,2) in world coords, urgent (11,) bool) for team t."""
     sl, osl = slice(11 * t, 11 * t + 11), slice(11 * (1 - t), 11 * (1 - t) + 11)
@@ -538,11 +569,12 @@ def team_targets(m, t):
     zone = np.stack([clip(tx, 2, L - 2), clip(ty, 2, W - 2)], 1)
     carrier = m.carrier if m.state == "held" else -1
     bx = Bs[0] + (max(float(Bv[0]), 0.) if m.state != "flight" else 0.)  # the team moves up with the play: look a second ahead along the ball's path
+    wt = 0.  # how far the attacking shape has taken over from the block (the box slots outrank a width anchor)
     if has and bx > .5 * L:
         # attacking shape near the box: every role has a job (near post, far post, edge of the box, overlap, cover),
         # mirrored to the side the ball is on. Blended in as the ball gets closer to goal.
         sd = 1 if Bs[1] > W / 2 else -1
-        w = float(clip((bx - .5 * L) / (.2 * L), 0, 1)) * TP.get("templ_w", .9)
+        w = wt = float(clip((bx - .5 * L) / (.2 * L), 0, 1)) * TP.get("templ_w", .9)
         line_t = max(np.sort(O[:, 0])[-2], L / 2) + .5
         templ = {ST: [(L - 9, W / 2 - sd * 2.5), (L - 11, W / 2 + sd * 6)], WG: [(L - 13, W / 2 + sd * 22), (L - 17, W / 2 - sd * 21)],
                  AM: [(L - 19, W / 2 + sd * 2), (L - 21, W / 2 - sd * 7)], CM: [(L - 21, W / 2 + sd * 9), (L - 23, W / 2 - sd * 8), (L - 31, W / 2)],
@@ -761,6 +793,15 @@ def team_targets(m, t):
             push_ = (dz_ / dd_[..., None] * np.maximum(ATT_SPACING - dd_, 0)[..., None] * (fwp[:, None] & fwp[None])[..., None] * .5).sum(1)
             zone = zone + push_ * fwp[:, None]
             zone[fwp, 0] = np.minimum(zone[fwp, 0], max(float(np.sort(O[:, 0])[-2]), L / 2, float(Bs[0])) + 1.0)  # and the push does not take anyone beyond the offside limit
+        if has and kind not in ("corner", "kickoff") and TP.get("wide_on", 1.):
+            # the width plan: the man holding a touchline stands on it, moving up and down the line but not infield to where the threat is.
+            # The far-side holder is the one who attacks the back post once the ball is in the final third, so the box slot outranks his width anchor.
+            hug = float(clip(2. * tc.width, 0, 1)) * fd  # how committed the side is to playing wide
+            for k, h in enumerate(wide_holders(m, t, A, role, out_f)):
+                if h < 0 or h == holder or (m.t < m.run_until[11 * t + h]):
+                    continue
+                far = (k == 0) != (Bs[1] < W / 2)  # the flank the ball is not on
+                zone[h, 1] += ((INSET if k == 0 else W - INSET) - zone[h, 1]) * hug * ((1. - wt) if far else 1.)
         running = has & (m.t < m.run_until[sl])
         for i in np.nonzero(running)[0]:
             zone[i], urgent[i] = m.run_tgt[11 * t + i], True

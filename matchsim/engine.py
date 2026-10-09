@@ -85,6 +85,7 @@ class Match:
         s.windows = [[(s.rng.uniform(9, 16), 2), (s.rng.uniform(24, 30), 2), (s.rng.uniform(34, 40), 1)] for _ in (0, 1)]
         s.mark = [-np.ones(11, int), -np.ones(11, int)]
         s.run_until, s.run_cool = np.zeros(22), np.zeros(22)
+        s.wide_hold = [[-1, -1], [-1, -1]]  # who holds each touchline, per team (low-y, high-y)
         s.run_tgt = np.zeros((22, 2))
         s.commit_until = np.zeros(22)  # presser committed to a tackle until this time
         s.block_until = np.zeros(22)   # cannot claim the ball (just lost / just passed it)

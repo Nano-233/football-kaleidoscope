@@ -548,6 +548,36 @@ Tried: switching the refit on. Per-shot xG then matches (0.09) and big chances r
 over-shoots from 12-20 m: shots 18-19, goals 1.7-1.85, loss 256-288 against 228. So the gate has to be re-derived from real data (shoot vs pass at the
 release, from receipts in the 360 frames) rather than nudged; that and the refit go together and are the next step.
 
+## Nobody holds the touchline: the width plan (2026-10-08)
+
+Saw: the user asked whether the sim still does not cross, carry or play through balls. Counts per team-match, sim vs real: carries 201 vs 154,
+take-ons 31 vs 17, through balls 4.1 vs 2.1 (all too many), open-play crosses 7.0 vs 11.8 (too few). Only crossing is short.
+Measured (scratchpad probes `cross_zone`, `chan_map`, `width_role`, `touchline_hold`, `wide_to_box`, `box_when_wide`, `line_depth`):
+- Where the on-ball actions happen. Real: 40% wide channels, 35% half-spaces, 25% centre (the areas are 40/33/27). Sim: 25/30/45. In the final third the
+  sim has 0.5-0.7x the real wide actions and 3x the central ones. In the deep wide zone (x>88, |y-34|>20): real 24 actions per team-match
+  (passes 12, crosses 5.4, carries 6.7), sim 11.
+- Strikers, midfielders and wingers touch the ball much closer to the middle than real ones (striker mean |y-34| 7 m vs 15, centre-mid 8 vs 15-18).
+- Real 360 frames, ball-side flank, final third: a team-mate within 8 m of the touchline on 79% of passes (1.24 players); sim 37% (0.42). Wingers
+  were within 8 m of the line 9% of the time. (Far flank 18% real vs 12-16% sim: the far-side winger already tucks in correctly.)
+Read: Open Football's `teamplay/plans/wide.rs` documents the very same defect ("nothing in the model ever told anybody to stand on a touchline": 2.2
+open-play crosses per team against a real 16-18 and 5 cut-backs in 200 matches; widening the rectangle did nothing). Its fix: width is not an
+average of where everybody stands, it is two named players standing where nobody else is. A `WidePlan` names one holder per flank (the widest,
+highest formation slot, a winger before the full-back behind him; delivery, 1v1 and legs break ties; incumbent keeps the job), who stands 4.3 m off
+the line; the far-side holder is released to attack the back post once the ball is in the final third (box slot outranks width anchor).
+Fixed: `movement.wide_holders` + a lateral override on the holders in the possession branch of `team_targets` (hug scales with the width tactic and
+the possession fade; the carrier and men on a timed run are left alone). Switch: `wide_on` (default 1).
+Effect (32 matches, same seeds): loss 229 -> 210; ball-side touchline presence in the final third 0.37 -> 0.52 (ball central 0.40 vs real 0.27,
+half-space 0.51 vs 0.53, ball wide 0.70 vs 0.91); shots 18.1 -> 16.2 (real 12.9), goals 1.66 -> 1.28 (1.24), passes 607 -> 583, take-ons 31 -> 27.
+Crosses did NOT rise (7.0 -> 5.8): holding the line is necessary, not sufficient. What else the probes showed (next steps):
+- Cross availability: the cross option exists in only 27% of wide final-third decisions (it needs a team-mate already in the area). With the ball wide at
+  x 70-88 real teams have 2.3 team-mates in the area, the sim 0.3 (byline zone 2.7 vs 1.5). Forwards stand on the last defender's shoulder and the
+  box slots (`templ`) sit mostly outside the area.
+- The back line is 4 m too high against wide balls (x 76-88: 85.1 / 88.0 vs real 89.0 / 92.3) while against central balls it matches (87.6 / 92.2 vs
+  89.1 / 91.7); forwards cannot be in the box when the line is outside it.
+- Low balls: passes from the wide final third into the box area on the ground 3.0 vs 11.6 real (cut-backs, low crosses; the sim has no low crosses at all),
+  ground passes along the wide channel 23 vs 44. The sim lofts instead (air passes from there to places other than the box 10.5 vs 2.6).
+- The cross option has its own hand utility (p_c about 0.15, loses to the best alternative by 0.8 on average) rather than the learned pass policy.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
