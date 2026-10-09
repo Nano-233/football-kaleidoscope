@@ -633,6 +633,15 @@ Tried and reverted (do not repeat):
 Next (ordered by measured gap): box arrival staging and a waiting point; byline ladder and cut-back / driven-low deliveries; a meeting-point through ball with the race
 (the sim's best ball in behind has a success estimate of 0.10 against real completion of 78%); the defensive line against wide balls; winger take-ons in the wide third.
 
+## Where the extra goals came from (2026-10-09)
+
+Question: big chances (0.4 vs 0.86) and box entries (19.5 vs 24.9) are low, yet goals are high (1.65 vs 1.24 per team). By shot xG band and type (24 matches, per team-match):
+- Mid-xG shots (0.06-0.20): 9.2 vs 4.6 real, 1.0 goals vs 0.46. The sim gets the ball to the central lane 12-22 m out twice as often (the central channel holds 2-3x the real share of on-ball actions), and those shots convert at their xG. Big chances (xG over 0.35): 0.27 shots vs 0.68.
+- Free kicks: 1.96 shots vs 0.51, 0.25 goals vs 0.03 (8x). Free kicks within 28 m: 2.65 per team vs 0.6. Two causes: the sim fouled 3x as often 17-35 m from its own goal (6.1 vs 2.0 per team-match; real fouls there are fewer than in midfield, the sim's were more: a tackle multiplier of 1 + 1.5 x danger made defenders go in harder the closer to goal) and every free kick in range with xG over 0.08 was shot with an xG inflated 2.2x (shot xG 0.12 vs real 0.07 at 18-23 m).
+- Penalties: 0.02 shots vs 0.18 real. A foul in the box was given 4% of the time (`box_foul`), so almost no penalties.
+Fixed: a defender needs better odds to go to ground the closer to goal (threshold from the cost of losing the duel at the carrier's spot, the value of that spot to the attack), the danger multiplier is 0.7 instead of 1.5, the chance a challenge becomes a foul falls with the cost of the set piece at that spot (a free kick in range is a shot, a foul in the box a penalty, xG 0.76), free-kick xG is the clean-look xG without the 2.2x, and the choice to shoot a free kick follows the real shot share by distance (88% at 18-23 m, 69% at 23-28, 9% at 28-35; `fk_shot_k`, `fk_shot_d`), every foul in the box is a penalty (`box_foul` 1). Effect: free-kick shots 1.96 -> 1.5, free-kick goals 0.25 -> about 0.08, penalties 0.02 -> 0.23 per team-match (real 0.18), fouls 17-35 m 6.1 -> 3.9 (real 2.0, still high).
+Measuring: with 24 matches the loss moves by +-10 and goals per team by +-0.2 between identical-quality configurations, so loss and goals cannot judge a change. Use event-level rates with many events (fouls by zone, free kicks by distance, shots by band) to judge a mechanism. Speed: `nrm` uses hypot and `XT` indexes the grid directly (a match takes about 31 s, was 34 s; most of the rest is `team_targets`).
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

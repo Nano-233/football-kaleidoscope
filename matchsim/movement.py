@@ -44,12 +44,14 @@ _XTG = _load_xt()
 
 def XT(p):
     """Bilinear xT at points p (..., 2) in the attacking-left-to-right frame (the opponent's goal at x = L)."""
-    from scipy.ndimage import map_coordinates
     p = np.asarray(p, float)
     nx, ny = _XTG.shape
-    cx = np.clip(p[..., 0] / L * nx - .5, 0, nx - 1)
-    cy = np.clip(p[..., 1] / W * ny - .5, 0, ny - 1)
-    return map_coordinates(_XTG, [np.atleast_1d(cx).ravel(), np.atleast_1d(cy).ravel()], order=1, mode="nearest").reshape(np.shape(cx))
+    cx = np.minimum(np.maximum(p[..., 0] * (nx / L) - .5, 0.), nx - 1.)
+    cy = np.minimum(np.maximum(p[..., 1] * (ny / W) - .5, 0.), ny - 1.)
+    x0, y0 = np.minimum(cx.astype(int), nx - 2), np.minimum(cy.astype(int), ny - 2)
+    fx, fy = cx - x0, cy - y0
+    g = _XTG
+    return g[x0, y0] * (1 - fx) * (1 - fy) + g[x0 + 1, y0] * fx * (1 - fy) + g[x0, y0 + 1] * (1 - fx) * fy + g[x0 + 1, y0 + 1] * fx * fy
 TUNE_COMMIT = .08
 RING_MIN = 11.       # supporting players do not want to stand closer than this to the carrier (m)
 RING_K = 1.8         # how much they mind
@@ -92,7 +94,7 @@ _OFF = np.array([L, W])
 
 def nrm(a, axis=-1, keepdims=False):
     """Euclidean norm over the last axis (a faster stand-in for np.linalg.norm on small arrays)."""
-    r = np.sqrt(np.einsum("...i,...i->...", a, a))
+    r = np.hypot(a[..., 0], a[..., 1]) if a.shape[-1] == 2 else np.sqrt(np.einsum("...i,...i->...", a, a))
     return r[..., None] if keepdims else r
 
 
