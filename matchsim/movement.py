@@ -582,6 +582,9 @@ def team_targets(m, t):
         templ = {ST: [(L - 9, W / 2 - sd * 2.5), (L - 11, W / 2 + sd * 6)], WG: [(L - 13, W / 2 + sd * 22), (L - 17, W / 2 - sd * 21)],
                  AM: [(L - 19, W / 2 + sd * 2), (L - 21, W / 2 - sd * 7)], CM: [(L - 21, W / 2 + sd * 9), (L - 23, W / 2 - sd * 8), (L - 31, W / 2)],
                  FB: [(L - 18, W / 2 + sd * 29), (L - 33, W / 2 - sd * 22)], DM: [(L - 32, W / 2)], CB: [(L - 44, W / 2 + 8), (L - 44, W / 2 - 8), (L - 46, W / 2)]}
+        if TP.get("templ_hs", 1.):  # the second line stands in the half-spaces, not on the edge of the area's centre: real teams play 32% of final-third actions there and 15% down the middle
+            templ[AM] = [(L - 19, W / 2 + sd * 12), (L - 21, W / 2 - sd * 11)]
+            templ[CM] = [(L - 22, W / 2 + sd * 14), (L - 24, W / 2 - sd * 13), (L - 31, W / 2 + sd * 4)]
         slots = [(r, np.array(sp, float)) for r, spots in templ.items() for sp in spots if r not in (CB,)]  # the centre-backs are rest defence, not part of the attack
         cand_i = [i for i in idx if role[i] > GK and role[i] != CB and 11 * t + i != carrier]
         if slots and cand_i:
