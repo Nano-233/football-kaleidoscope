@@ -586,6 +586,53 @@ ball from a flank (past 0.67 L, more than 16 m off the centre line) into the are
 box-entry metrics, the non-cross box entries fell to 7.8 vs 16.6 real, which is the honest size of the penetration gap: ground balls into the box
 (cut-backs, low crosses, through balls) are about half of real. Through balls are over-attempted (3.8 vs 2.1) rather than missing.
 
+## Research round: what the open-source engines do about wide play, runs in behind and box arrival (2026-10-08)
+
+The user asked to copy what open source does instead of fixing symptoms. Read in full: Open Football (`teamplay/plans/wide.rs`, `attack.rs`,
+`block.rs`, `duties.rs`; `passing/cross.rs`, `flank.rs`, `through_ball.rs`; `ops/attacking/box_movement.rs`, `support.rs`), Helios-base
+(`actgen_cross`, `cross_generator`: a cross is just another chain action to a team-mate within 16 m of goal, scored by the same end-state evaluator as a
+pass; no separate cross rules), CYRUS2D (same generators). Web: no other open-source engine models cut-backs, byline play or box runs as mechanics;
+papers give the shape of the models (Spearman's pitch control / OBSO, coordinated multi-agent imitation of roles, ball-conditioned positioning) but no code to take.
+What Open Football has that this engine lacked, with its own evidence in the comments:
+- `WidePlan`: named touchline holders and an overlap runner (ported, see the width entry above).
+- `FlankPlay` ladder for a wide carrier: release the man who has run outside you; deliver only with two bodies in the area (one at the byline) and no
+  defender on the striking line; otherwise drive the byline (carry aim at the corner of the area). Crossing volume was throttled by the box-occupancy rule.
+- `CrossModel`: five deliveries (floated back post, whipped near post, driven low, cut-back, early ball) aimed at a patch of the area, not at a player; a
+  cut-back is chosen at the byline when the runner trails the ball. Our engine only has one lofted ball at a player; we have no low crosses or cut-backs.
+- `BoxMovement`: box occupants do not camp on the finishing spot; they hold a waiting point, in the defender's back, and all go at once when the ball is
+  struck (staging by ball progress 0.48 to 0.65, then the flight of the ball within 35 m of goal). Camping measured 39% of the match in the area against 5-10% real.
+- `ThroughBall`: a meeting point solved from the runner's own line and pace (lead 5-22 m), onside when struck, wins the race, corridor open, value above a
+  bar drawn once per possession.
+- `rest_fit`: who stays home = centre-backs, the screen, the full-back away from the ball; never a man holding a touchline.
+Measured against real data (all coverage-corrected where the 360 camera is involved; scratchpad probes, kept in this log by name):
+- Layout around a wide ball in the final third (inverse-visibility-weighted team-mate density, `layout_map`): real teams have 2.7 team-mates on the
+  ball-side flank (x 60-105, beyond the passer) and 1.2 in the central x 90-105 patch; the sim 0.9 and 0.3. The sim keeps them central at x 70-85.
+- Real passes that end beyond the last defender: ground 6.9% of final-third passes (78% complete), lofted another 4.9%; sim 0.8% (44%) and 0.5%. Half of the real
+  ground ones go into the wide channel behind the full-back, 44% into the area. Only 5% of them carry the provider's `through_ball` flag, so the flag is not a usable
+  target for the geometric ball in behind (real flagged 2.1 per team-match, the sim's label is purely geometric and counts 5.1).
+- Real final-third wide play is much more contested: wingers attempt 5.6 take-ons there (sim 2.0), 4.0 dispossessions (sim 0.5), the defence makes 6.5 tackles,
+  4.3 blocks, 2.6 interceptions in its own wide third (sim 3.5, 1.1, 1.2).
+- Defensive depth: at shots the sim's deepest defender is 2.2 m and its fifth 2.8 m higher than real; goal-side defenders 3.3 vs 4.6; against a wide ball at x 76-88
+  the last defender is 3-4 m higher than for a central ball (real: equal). The block formula puts the centre-backs 10 m behind the ball; marking and pressing
+  pull the final targets about 4-5 m forward of that, and their positions lag the targets by 2-3 m.
+Changes kept:
+- Runs in behind go where the ball will be put: the run target is the last defender plus the distance he covers while the ball travels (0.8 vmax x 1.5 s,
+  clipped to Open Football's 5-22 m) instead of one metre either side of the line (`run_lead`; 0 gives the old behaviour). Loss 215 -> 203. Ground balls beyond the line
+  0.7% -> 2.0% of final-third passes, into the box 14.2 -> 19.5 (real 24.9), box entries by pass 7.8 -> 11.2 (16.6), big chances 0.19 -> 0.38 (0.86), goals 1.3 -> 1.7.
+- That made offsides jump to 5.9 per team (real 2.0). Cause: a man the passer sees offside was only discounted to 25% (`off_mult`), so attackers standing 3-4 m
+  beyond the line were still chosen. A passer does not pass to a man he sees offside; offsides come from perception and timing only, so `off_mult` is 0.02 and
+  the perception delay is the 0.25 s of a visual reaction instead of 0.5 s. Offsides 2.7, loss 202.
+- Who stays home uses `rest_fit` (neutral on the loss; the ball-side full-back is free to go, a touchline holder never stays home).
+Tried and reverted (do not repeat):
+- Box positions moved inside the area (near post, penalty spot, back post, edge) from Open Football's BoxSlot: loss 208 -> 220 and no more bodies in the area. The
+  offside cap on forwards (the last defender) is what holds them outside it, so the slots alone do nothing.
+- Excluding the carrier from the touchline holders so the next man takes the line (Open Football does): loss 212 -> 221.
+- Raising the team's lateral follow of the ball in possession from 0.2 to 0.6: centroid slope then matches the 360 data (real 0.14 per metre of ball offset, sim 0.055)
+  but the ball-side flank density did not move (the final-third template overrides it) and the loss rose 208 -> 216.
+- A perception delay of 0.1-0.5 s on its own did not change offsides while off_mult stayed at 0.25.
+Next (ordered by measured gap): box arrival staging and a waiting point; byline ladder and cut-back / driven-low deliveries; a meeting-point through ball with the race
+(the sim's best ball in behind has a success estimate of 0.10 against real completion of 78%); the defensive line against wide balls; winger take-ons in the wide third.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

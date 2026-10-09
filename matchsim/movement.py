@@ -84,6 +84,7 @@ INSET = 4.3          # a width holder stands this far off the touchline: on the 
 WIDE_SLOT = .5       # a slot is a candidate for a touchline when it lies in the outer quarter of the formation's own width
 WINGER_DEPTH = .45   # a slot this far up the formation or better is a winger; below it a full-back, who holds the line only when nobody is in front of him
 INCUMBENCY = .15     # the man already holding a touchline keeps it unless another is clearly better
+REST_CB, REST_SCREEN, REST_FAR = 17.5, 21.25, 8.75  # metres of 'depth' a centre-back, the screening midfielder and the full-back away from the ball are worth when choosing who stays home (Open Football's rest_fit)
 
 
 _OFF = np.array([L, W])
@@ -589,12 +590,17 @@ def team_targets(m, t):
                 tgt_ = np.array([min(sp_[0], line_t - 1.4 + 1.6 * np.sin(.5 * m.t + m.phase[11 * t + i])), sp_[1]])  # on the shoulder of the last defender, now and then mistimed
                 zone[i] = zone[i] * (1 - w) + tgt_ * w
 
-    if has:  # rest defence: the deepest-anchored players stay well behind the ball and never cross a limit just inside the opposition half
-        deep = np.argsort(np.where(out_f, A[:, 0], 1e9))[:REST_N]
+    mine = 11 * t <= carrier < 11 * t + 11
+    hold = (-1, -1)
+    if has and kind not in ("corner", "kickoff") and TP.get("wide_on", 1.):
+        hold = wide_holders(m, t, A, role, out_f)  # who holds each touchline is decided before who stays home
+    if has:  # rest defence: who stays well behind the ball (Open Football's rest_fit: the centre-backs, the screen in front of them, the full-back away from the ball; never a man holding a touchline), never beyond a limit just inside the opposition half
+        eff = A[:, 0] - TP.get("rest_fit", 1.) * (REST_CB * (role == CB) + REST_SCREEN * (role == DM) + REST_FAR * ((A[:, 1] < W / 2) != (Bs[1] < W / 2)))
+        eff = np.where(out_f, eff, 1e9)
+        eff[[h for h in hold if h >= 0]] = 1e9
+        deep = np.argsort(eff)[:REST_N]
         cap = float(clip(Bs[0] - REST_LAG, 20., REST_MAX))
         zone[deep, 0] = np.minimum(zone[deep, 0], np.maximum(cap, MIN_X[role[deep]]))
-
-    mine = 11 * t <= carrier < 11 * t + 11
 
     if not has:
         # man/zone marking: blend zone slot with a goal-side spot next to the assigned opponent
@@ -752,7 +758,8 @@ def team_targets(m, t):
             start = elig & (m.rng.random(11) < (.07 + .15 * tc.directness) * m.mod["runs"][sl] * m.dt * TP.get("run_k", 1.))
             for i in np.nonzero(start)[0]:
                 line = max(np.sort(O[:, 0])[-2], L / 2)
-                m.run_tgt[11 * t + i] = (min(line + m.rng.uniform(-1.4, 1.0), C[0] + 40), clip(A[i, 1] + m.rng.uniform(-9, 9), 4, W - 4))
+                lead = TP.get("run_lead", 1.) * float(clip(.8 * m.vmax[11 * t + i] * 1.5, 5., 22.))  # a run in behind goes where the ball will be put: as far as he covers while it travels (Open Football's through-ball lead, 5-22 m)
+                m.run_tgt[11 * t + i] = (min(line + (lead if lead > 0 else m.rng.uniform(-1.4, 1.0)), C[0] + 40, L - 4.), clip(A[i, 1] + m.rng.uniform(-9, 9), 4, W - 4))
                 m.run_until[11 * t + i] = m.t + m.rng.uniform(2.5, 4.0)
                 m.run_cool[11 * t + i] = m.t + m.rng.uniform(6, 12)
             if abs(C[1] - W / 2) > 15 and C[0] > .62 * L:  # ball wide in the final third: get bodies into the box
@@ -797,7 +804,7 @@ def team_targets(m, t):
             # the width plan: the man holding a touchline stands on it, moving up and down the line but not infield to where the threat is.
             # The far-side holder is the one who attacks the back post once the ball is in the final third, so the box slot outranks his width anchor.
             hug = float(clip(2. * tc.width, 0, 1)) * fd  # how committed the side is to playing wide
-            for k, h in enumerate(wide_holders(m, t, A, role, out_f)):
+            for k, h in enumerate(hold):
                 if h < 0 or h == holder or (m.t < m.run_until[11 * t + h]):
                     continue
                 far = (k == 0) != (Bs[1] < W / 2)  # the flank the ball is not on
