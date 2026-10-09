@@ -617,7 +617,7 @@ def team_targets(m, t):
         deep = np.argsort(eff)[:REST_N]
         cap = float(clip(Bs[0] - REST_LAG, 20., REST_MAX))
         zone[deep, 0] = np.minimum(zone[deep, 0], np.maximum(cap, MIN_X[role[deep]]))
-        if of and TP.get("of_slots", 0.):
+        if of and (TP.get("of_slots", 0.) or TP.get("of_mask", 12.)):
             side_o = 1. if Bs[1] >= W / 2 else -1.
             carrier_l = carrier - 11 * t if 11 * t <= carrier < 11 * t + 11 else -1
             held = np.zeros(11, bool)
@@ -625,6 +625,8 @@ def team_targets(m, t):
             if hold[0 if Bs[1] < W / 2 else 1] >= 0:
                 held[hold[0 if Bs[1] < W / 2 else 1]] = True  # only the ball-side holder is reserved: the far-side one may attack the back post
             ids = teamplay.box_slots(m, t, role, out_f, P, Bs, side_o, held, carrier_l, m.box_prev[t])
+            if not TP.get("of_slots", 0.):
+                ids = [i_ if (int(TP.get("of_mask", 12.)) >> k_) & 1 else -1 for k_, i_ in enumerate(ids)]  # only the places in the mask are filled
             m.box_prev[t] = ids
             st = teamplay.stage(Bs[0] / L, teamplay.in_flight_to_goal(m, t))
             for k_, i_ in enumerate(ids):
@@ -633,7 +635,7 @@ def team_targets(m, t):
                     zone[i_] = (min(pt_[0], max(cap_o[i_], ba[i_, 0])), pt_[1])
                     plan_skip[i_] = True
                     held[i_] = True
-            if carrier_l >= 0 and m.state == "held":  # the short outlet
+            if carrier_l >= 0 and m.state == "held" and TP.get("of_slots", 0.):  # the short outlet
                 held[carrier_l] = True
                 C_ = P[carrier_l]
                 free_ = [i_ for i_ in range(11) if out_f[i_] and not held[i_] and float(nrm(P[i_] - Bs)) < 27.5]
