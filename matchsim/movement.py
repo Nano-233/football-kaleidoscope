@@ -12,6 +12,7 @@ import numpy as np
 from scipy.optimize import linear_sum_assignment
 from scipy.spatial.distance import cdist
 from .teams import L, W
+from . import teamplay
 
 GK, CB, FB, DM, CM, WG, AM, ST = range(8)
 PUSH = np.array([0, 3, 9, 2, 4, 8, 7, 6.])        # metres forward when we have the ball
@@ -263,7 +264,7 @@ def defend_assign(m, t, zone, urgent, role, P, O, Ov, C, Cv, ci, tc, tgt1, cover
             lane_open = 1.
         gain = max(xt_a - xt_c, 0.) + TP.get("back_w", .2) * xt_a  # what a pass to him could add to the threat: a man behind the ball only offers a ball back, so he is not worth leaving the goal side of the ball for
         v = TP.get("mark_k", 100.) * gain * (.3 + .7 * lane_open) * (1. + .7 * run) * float(np.exp(-dl / 45.))
-        near_goal = o[0] <= TP.get("threat_depth", .34) * L  # he is dangerous to our goal (about 36 m out) ...
+        near_goal = o[0] <= TP.get("threat_depth", .34) * L and abs(o[1] - W / 2) <= TP.get("threat_wide", 22.)  # he is dangerous to our goal (about 36 m out, and not on the far touchline: the zone has him until the ball comes across) ...
         near_ball = dl <= TP.get("threat_ball", 25.)  # ... or the carrier can find him with his next pass
         if not (near_goal or near_ball):
             continue
@@ -573,7 +574,17 @@ def team_targets(m, t):
     carrier = m.carrier if m.state == "held" else -1
     bx = Bs[0] + (max(float(Bv[0]), 0.) if m.state != "flight" else 0.)  # the team moves up with the play: look a second ahead along the ball's path
     wt = 0.  # how far the attacking shape has taken over from the block (the box slots outrank a width anchor)
-    if has and bx > .5 * L:
+    plan_skip = np.zeros(11, bool)  # the men the team plan placed: they are not left to look for space on their own
+    of = bool(has and m.state != "dead" and TP.get("of_plan", 1.))
+    GOAL_ATT = np.array([L, W / 2])
+    if of:  # the attacking block (Open Football's ShapeBuilder): everybody is in a 27-41 m rectangle whose front rank leads the ball
+        ba = teamplay.block_anchors(A, out_f, Bs, tc)
+        line_o = max(np.sort(O[:, 0])[-2], L / 2)
+        cap_o = max(line_o, Bs[0]) - TP.get("hover", .3) + np.sin(.5 * m.t + m.phase[sl])  # nobody up front waits beyond the last defender and the ball
+        att_o = (role == ST) | (role == WG) | (role == AM)
+        ba[:, 0] = np.where(att_o, np.minimum(ba[:, 0], cap_o), ba[:, 0])
+        zone = np.where(out_f[:, None], zone * (1 - fd) + ba * fd, zone)
+    if has and bx > .5 * L and not of:
         # attacking shape near the box: every role has a job (near post, far post, edge of the box, overlap, cover),
         # mirrored to the side the ball is on. Blended in as the ball gets closer to goal.
         sd = 1 if Bs[1] > W / 2 else -1
@@ -606,6 +617,33 @@ def team_targets(m, t):
         deep = np.argsort(eff)[:REST_N]
         cap = float(clip(Bs[0] - REST_LAG, 20., REST_MAX))
         zone[deep, 0] = np.minimum(zone[deep, 0], np.maximum(cap, MIN_X[role[deep]]))
+        if of and TP.get("of_slots", 0.):
+            side_o = 1. if Bs[1] >= W / 2 else -1.
+            carrier_l = carrier - 11 * t if 11 * t <= carrier < 11 * t + 11 else -1
+            held = np.zeros(11, bool)
+            held[deep] = True
+            if hold[0 if Bs[1] < W / 2 else 1] >= 0:
+                held[hold[0 if Bs[1] < W / 2 else 1]] = True  # only the ball-side holder is reserved: the far-side one may attack the back post
+            ids = teamplay.box_slots(m, t, role, out_f, P, Bs, side_o, held, carrier_l, m.box_prev[t])
+            m.box_prev[t] = ids
+            st = teamplay.stage(Bs[0] / L, teamplay.in_flight_to_goal(m, t))
+            for k_, i_ in enumerate(ids):
+                if i_ >= 0:
+                    pt_ = teamplay.staged_point(k_, side_o, st, ba[i_])
+                    zone[i_] = (min(pt_[0], max(cap_o[i_], ba[i_, 0])), pt_[1])
+                    plan_skip[i_] = True
+                    held[i_] = True
+            if carrier_l >= 0 and m.state == "held":  # the short outlet
+                held[carrier_l] = True
+                C_ = P[carrier_l]
+                free_ = [i_ for i_ in range(11) if out_f[i_] and not held[i_] and float(nrm(P[i_] - Bs)) < 27.5]
+                if free_:
+                    j_ = min(free_, key=lambda i_: float(nrm(P[i_] - Bs)))
+                    pr_ = O[int(nrm(O - C_, axis=1).argmin())]
+                    tg_ = teamplay.support_target(P[j_], C_, pr_, GOAL_ATT)
+                    if tg_ is not None:
+                        zone[j_] = tg_
+                        plan_skip[j_] = True
 
     if not has:
         # man/zone marking: blend zone slot with a goal-side spot next to the assigned opponent
@@ -767,7 +805,7 @@ def team_targets(m, t):
                 m.run_tgt[11 * t + i] = (min(line + (lead if lead > 0 else m.rng.uniform(-1.4, 1.0)), C[0] + 40, L - 4.), clip(A[i, 1] + m.rng.uniform(-9, 9), 4, W - 4))
                 m.run_until[11 * t + i] = m.t + m.rng.uniform(2.5, 4.0)
                 m.run_cool[11 * t + i] = m.t + m.rng.uniform(6, 12)
-            if abs(C[1] - W / 2) > 15 and C[0] > .62 * L:  # ball wide in the final third: get bodies into the box
+            if abs(C[1] - W / 2) > 15 and C[0] > .62 * L and not of:  # ball wide in the final third: get bodies into the box
                 sd = 1 if C[1] > W / 2 else -1
                 line_ = max(np.sort(O[:, 0])[-2], L / 2)
                 order = ([i for i in idx if role[i] == ST] + [i for i in idx if role[i] == AM]
@@ -786,13 +824,13 @@ def team_targets(m, t):
             # support triangles around the carrier
             pr = clip(1 - np.min(nrm(O - C, axis=1)) / 5, 0, 1)
             cand = np.nonzero(out_f & (idx != carrier - 11 * t))[0]
-            for i in cand[np.argsort(nrm(P[cand] - C, axis=1))][:2]:
+            for i in (cand[np.argsort(nrm(P[cand] - C, axis=1))][:2] if not of else []):
                 side = 1 if P[i, 1] >= C[1] else -1
                 th = .9 if pr < .5 else 2.3
                 zone[i] = TP.get("tri_w", .55) * (C + 15 * np.array([np.cos(th), side * np.sin(th)])) + (1 - TP.get("tri_w", .55)) * zone[i]
         holder = carrier - 11 * t if mine else (m.dead["taker"] - 11 * t if m.state == "dead" and kind in ("throw_in", "goal_kick", "drop_ball", "indirect_free_kick", "free_kick") else -1)
         if holder >= 0 and kind not in ("corner", "kickoff"):
-            skip = (idx == holder) | urgent | (m.t < m.run_until[sl])
+            skip = (idx == holder) | urgent | (m.t < m.run_until[sl]) | plan_skip
             zone = seek_space(m, t, P, O, P[holder] if mine else B, zone, role, out_f, skip, max(np.sort(O[:, 0])[-2], L / 2))
         urgent |= out_f & (zone[:, 0] - P[:, 0] > 6.) & (Bs[0] > .3 * L)  # joining the attack: well behind where he should be with the ball in the opposition half, he sprints up instead of jogging
         urgent |= m.space_burst[sl] & has & out_f & (m.t < m.space_until[sl] - .3)  # moving into space at pace, not drifting
@@ -834,6 +872,16 @@ def team_targets(m, t):
             if 0 <= r < 11:
                 zone[r], urgent[r] = f(m.flight["end"]), True  # receiver tracks the real ball flight
                 m.sprint_hint[11 * t + r] = True
+
+    if not has and m.state != "dead" and TP.get("area_w", 1.):
+        # a defence with the ball in its final third protects the area in front of goal: nobody not engaging the ball stands wider than the penalty area (40 m), the
+        # ball-side men go as wide as the ball needs. Real teams have every defender inside it (0.15 per pass beyond 20 m of the centre line against 0.5 here).
+        wthr = float(clip((50. - Bs[0]) / 15., 0, 1))
+        if wthr > 0:
+            dy = zone[:, 1] - W / 2
+            lim = np.where(np.sign(dy) == np.sign(by), 20.2 + max(abs(by) - 14., 0.) * .8, 20.2)
+            keep = out_f & ~m.sprint_hint[sl]
+            zone[:, 1] = np.where(keep, W / 2 + dy * (1 - wthr) + np.clip(dy, -lim, lim) * wthr, zone[:, 1])
 
     # ---- goalkeeper ---------------------------------------------------------------------
     sw = 1 + 1.2 * m.mod["sweep"][11 * t]  # sweeper keepers play higher
