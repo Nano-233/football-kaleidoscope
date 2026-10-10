@@ -730,6 +730,18 @@ What did it (each tested alone and together on the panel):
 Still open (panel, sim | real): wide share of pass starts 0.32 | 0.40 (final third 0.36 | 0.52); centre-mids and strikers receive 22 and 26 balls at x 70-88 (real 7 and 12.5) while wingers and full-backs get 13.5 and 8 (real 24 and 14); wingers are still too wide (0.72 | 0.58). Corners 4.2 | 11.6 and throw-ins 48.8 | 45.4 (still from `wide_error`; ground passes out 31 | 5). Lowering `wide_error` for ground passes to a realistic level (0.15-0.5) raises wide receptions (full-back 8 -> 11, winger 13.5 -> 16) and wide completion (0.66 -> 0.77, real 0.84) but cuts throw-ins to about 27 and raises shots and pass volume (loss 195 -> 217-246), so it stays 3.2 until the contested-ball sources of throw-ins (tackles 6.3, blocks 6.1, miscontrols 4.2 per match in real data; here about 2 in total) exist on the flanks.
 Rejected again on the panel: folding positions that would overflow the touchline back inside (worse than queueing on the line), squeezing every player toward the ball (loss), the flank template.
 
+### The touchline as a physical thing (2026-10-10)
+
+Saw: real ground contests pile up on the line. Per match, tackles within 5 m of a touchline 9.7 (the 20-35 m band, twice as wide, 11.9), 44% of them followed by a throw-in; miscontrols 5.5 there, half followed by a throw-in. The sim had 2.9 tackles in the 0-5 m band (28-30 in the middle), 16% followed by a throw-in, and 1.5 miscontrols.
+Fixed (all `engine.py`, `TUNE`: `pin_d`, `pin_p`, `pin_r`, `stop_a`, `touch_sd`):
+- A carrier near the line is pinned: a defender on the pitch side of him wins more (`pin_p`) and goes in more often (`pin_r`), because the line takes away the way out. Tackles in the 0-5 m band 2.9 -> 5.0, throw-ins from them 0.46 -> 1.5.
+- A receiver can only control a ball running at a line if he has room to kill it: it needs about v^2/(2 x 15) m (a cushioned first touch stops a ball within a metre or two); with less room than that the control odds fall away. At 6 m/s^2 the rule made miscontrols at the line four times real, 15 m/s^2 gives 5.1 (real 5.5) in the 0-5 m band.
+- A heavy touch leaves the foot in the direction the ball was going turned by N(0, 0.9 rad), 2-6 m/s, not along the pass.
+- Bug found on the way: a keeper's touch on a loose ball pushed it toward his own goal (the sign of "away" was reversed for the touch rule I added on Oct 9). Own goals 0.34 -> 0.16 per match (real 0.11).
+Effect (48 matches): loss 198 (noise +-10), shots 14.2, goals 1.32, throw-ins 48.9, corners 4.3, free kicks 20.8.
+Tried and not kept: lowering `tackle_rate` to 0.6-0.9 with a larger pin effect (central tackles 29 -> 17, but the band at the line saturates at about 5.5: not enough carriers reach the line, and loss 212); lowering the ground-pass error near the touchline (`wide_error` 1.6-0.5) with these rules on: wide completion 0.63 -> 0.69-0.75 (real 0.84), full-back and winger receptions up 20-30%, but throw-ins 38 -> 27 and shots/passes up (loss 218-246); `dwell_scale` above 2.0 is clipped, no effect.
+Still open: central tackles 29 vs real 12 and central miscontrols 21 vs 11; carriers in the wide/half lanes; centre-start passes 132 vs 64 per team-match and centre-mid/striker receptions at x 70-88 (19 and 25 vs 7 and 12.5); corners 4.3 vs 11.6; throw-ins still depend on `wide_error` for ground passes out (31 vs real 5).
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

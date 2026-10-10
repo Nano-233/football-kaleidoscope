@@ -25,7 +25,7 @@ TUNE = dict(xg_z0=-2.08, xg_d=-.07, xg_a=1.89, xg_h=-.2, xg_b=.72, xg_c=.25, cle
             carry_base=0.22, carry_prog=.2, carry_streak=.3, dwell_base=0.9, dwell_shape=2.4, dwell_scale=1.61,
             tackle_rate=1.2, wide_error=3.2, off_miss=.2, off_mult=.02, off_lag=.25, head_keep=.7, safe_out_x=.12, card_thr=.85, adv_sev=.14, clear_dir_sd=1.2, rec_sprint=3., fk_xg=1., fk_shot_k=.5, fk_shot_d=27.2, foul_risk=6., box_avoid=.2, tackle_risk=2.2, tackle_danger=.7)
 TUNE.update(burst_gain=-1e9, block_v=.8, push_k=1., pol_space=0., follow_poss=.2, pin_from=.35, recover_on=1., cover_margin=3., threat_depth=.34, threat_ball=25., mark_base=4., mark_reach=19., layer_bias=.9, space_cover=0., space_k=100., n_space=3, assign_on=1., press_v=7., cover_v=3.5, mark_k=100., lane_job_k=35., post_v=5., space_v=3., job_hyst=1.5, press_hyst=2.0, templ_w=.9, busy_gate=.6, flat_gate=.6, run_gate=.95, mark_sprint_d=3.0, box_start=38., wn_end=42., lag_k=1., drop_k=1., mark_gap=1.1, box_gate=.85, dang_far=38., dang_gate=.85, react_def=.35, close_gap=1.5, jock_k=1., press_k=1., open_w=1., lane_w=1., slot_gate=.5, lean_r=24., lean_min=.35, shoot_close=28., shot_gap=.7, jobs_on=1., jobs_d=38., jobs_att=40., jobs_w=.9, job_mark=3., job_lane=12., job_post=1.4, job_wv=4., way_pen=0., way_r=2.2, run_k=1., ball_side=.9, hover=.3)  # block shape (read by movement.py through TP)
-TUNE.update(slide_c=1., lat_def_c=1., fb_up=6., far_tuck=1., tackle_dir_sd=.5, tackle_v0=2.5, tackle_v1=6., body_r=.5, contact_mu=.35, contact_e=.3, loose_k=.07, loose_v0=5., touch_r=.9, take_tau=.35, take_k=.04, take_v0=10.)  # a player's body as the ball meets it: radius with a leg out (m), friction that takes pace off a glancing ball, how much a head-on ball comes back
+TUNE.update(stop_a=15., touch_sd=.9, pin_d=4., pin_p=.6, pin_r=1.5, slide_c=1., lat_def_c=1., fb_up=6., far_tuck=1., tackle_dir_sd=.5, tackle_v0=2.5, tackle_v1=6., body_r=.5, contact_mu=.35, contact_e=.3, loose_k=.07, loose_v0=5., touch_r=.9, take_tau=.35, take_k=.04, take_v0=10.)  # a player's body as the ball meets it: radius with a leg out (m), friction that takes pace off a glancing ball, how much a head-on ball comes back
 movement.TP = TUNE
 sig = lambda x: 1 / (1 + np.exp(-x))
 
@@ -705,11 +705,13 @@ class Match:
             dface = clip(.5 + .5 * ((s.head[opp] * -rel).sum(1) / np.maximum(d, 1e-6) + 1) / 2, .5, 1.)  # defenders who face the carrier can challenge, those looking elsewhere less so
             a = s.attr
             edge_v = clip(.12 * (nrm(s.vel[c]) - nrm(s.vel[opp], axis=1)), -.25, .25)  # a clear pace advantage lets the carrier slip past
-            p_w = sig(.22 * ((a["tackling"][opp] + .3 * a["strength"][opp]) - (a["dribbling"][c] + .3 * a["strength"][c])) - .1 - edge_v * 3 + TUNE["exposed_k"] * (contact - .4))  # a ball close to his foot is a ball he wins
+            yc_ = float(s.pos[c][1])
+            pin = np.exp(-min(yc_, W - yc_) / TUNE["pin_d"]) * np.clip((s.pos[opp][:, 1] - yc_) * np.sign(W / 2 - yc_) / 1.5, 0., 1.)  # a defender on the pitch side of a carrier who is near the line: the line takes away the way out, so he can go in harder and wins more
+            p_w = sig(.22 * ((a["tackling"][opp] + .3 * a["strength"][opp]) - (a["dribbling"][c] + .3 * a["strength"][c])) - .1 - edge_v * 3 + TUNE["exposed_k"] * (contact - .4) + TUNE["pin_p"] * pin)  # a ball close to his foot is a ball he wins
             vc = float(np.exp(-np.hypot(L - xt, W / 2 - s.pos[c][1]) / 22.))  # what the carrier's spot is worth to the attack
             thr = max(.4, TUNE["tackle_risk"] * vc / (1. + TUNE["tackle_risk"] * vc))  # a lost tackle (a foul, or being beaten) costs more the closer to goal: he needs better odds before he goes to ground
             sel = sig(TUNE["tackle_sel"] * (p_w - thr))  # a defender goes in when he likes his chances; otherwise he contains and waits
-            lam = TUNE["tackle_rate"] * dface * s.mod["tackle"][opp] * (1 + TUNE["tackle_danger"] * danger) * (1 + TUNE["first_touch"] * np.exp(-(s.t - s.ctrl_t) / .5)) * front * contact * sel * (s.block_until[opp] <= s.t)
+            lam = TUNE["tackle_rate"] * dface * s.mod["tackle"][opp] * (1 + TUNE["tackle_danger"] * danger) * (1 + TUNE["first_touch"] * np.exp(-(s.t - s.ctrl_t) / .5)) * front * contact * sel * (1. + TUNE["pin_r"] * pin) * (s.block_until[opp] <= s.t)
             lam[s.role[opp] == 0] = (TUNE["tackle_rate"] * dface * s.mod["tackle"][opp] * (1 + 1.5 * danger) * front * contact * (s.block_until[opp] <= s.t))[s.role[opp] == 0]  # the keeper commits to a ball at the feet whatever the odds
             att = np.nonzero(s.rng.random(11) < lam * s.dt)[0]  # the first touch is the moment the ball is most exposed
             if len(att):
@@ -1561,7 +1563,12 @@ class Match:
         tech = (a["dribbling"][i] + a["composure"][i]) / 2
         al = float((1 + s.head[i] @ -_unit(s.ball_v)) / 2) if nrm(s.ball_v) > .5 else 1.  # 1 = facing the ball, 0 = ball arriving behind him
         mk = float(np.exp(-max(dn - .5, 0.) / 3.))  # a marker near him: how hard a firm ball is to take
-        return float(clip((.995 - .012 * max(0, speed - 12) * (.3 + .7 * mk) + .012 * (tech - 10) - TUNE["ctrl_marked"] * np.exp(-(dn - .5) / 1.6)) * np.exp(-TUNE["cong_k"] * max(np.exp(-dd / 3.).sum() - 1., 0)) * (.95 + .05 * al), .2, .995))  # a defender on the receiver contests the first touch
+        a_ = np.asarray(at, float)
+        bv_ = s.ball_v
+        v_out = max(0., -bv_[1]) if a_[1] < W / 2 else max(0., bv_[1])
+        need = max(0., v_out ** 2 / (2. * TUNE["stop_a"]) - min(a_[1], W - a_[1])) + max(0., (-bv_[0] if a_[0] < L / 2 else bv_[0]) ** 2 / (2. * TUNE["stop_a"]) - min(a_[0], L - a_[0]))  # a ball running at the line is killed over about v^2/12 m; the receiver who has less room than that cannot control it
+        edge = float(np.exp(-need / 1.5))
+        return float(clip((.995 - .012 * max(0, speed - 12) * (.3 + .7 * mk) + .012 * (tech - 10) - TUNE["ctrl_marked"] * np.exp(-(dn - .5) / 1.6)) * np.exp(-TUNE["cong_k"] * max(np.exp(-dd / 3.).sum() - 1., 0)) * (.95 + .05 * al) * edge, .2, .995))  # a defender on the receiver contests the first touch
 
     def _flight(s):
         f = s.flight
@@ -1618,7 +1625,9 @@ class Match:
                     s.block_until[i] = s.t + .5
                     if s.pending_pass is not None:
                         s.pending_pass["outcome"], s.pending_pass = "incomplete", None
-                    return s._loose_ball(_unit(ab + s.rng.normal(0, .8, 2)) * s.rng.uniform(2, 5))
+                    a_m = float(s.rng.normal(0, TUNE["touch_sd"]))  # the touch squirts off his foot: the way the ball was going, turned by how badly he caught it
+                    d_m = _unit(ab)
+                    return s._loose_ball(np.array([d_m[0] * np.cos(a_m) - d_m[1] * np.sin(a_m), d_m[0] * np.sin(a_m) + d_m[1] * np.cos(a_m)]) * s.rng.uniform(2, 6))
                 s.block_until[i] = s.t + .4
         if not (0 <= b[0] <= L and 0 <= b[1] <= W) and f["kind"] != "shot":
             return s._out(b)
@@ -1824,7 +1833,7 @@ class Match:
                 s.last_touch = i
                 if s.role[i] == 0:  # the keeper pushes it away from his goal
                     ang_k = float(s.rng.uniform(-1.2, 1.2))
-                    aw = np.array([-1. if i < 11 else 1., 0.])
+                    aw = np.array([1. if i < 11 else -1., 0.])  # out of his goal: team 0 defends x = 0
                     s.ball_v = np.array([aw[0] * np.cos(ang_k) - aw[1] * np.sin(ang_k), aw[0] * np.sin(ang_k) + aw[1] * np.cos(ang_k)]) * max(.5 * nsp, 3.)
                 else:
                     s.ball_v = s._body_hit(i, q[i], s.ball_v)
