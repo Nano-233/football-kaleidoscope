@@ -24,6 +24,16 @@ def test_deterministic_and_consistent():
     subs = [e for e in a["events"] if e["type"] == "substitution"]
     assert len(subs) <= 10 and all(sum(e["team"] == t for e in subs) <= 5 for t in (0, 1))
     assert all(e["type"] != "shot" or e.get("why") is None or e["why"]["options"] for e in a["events"])
+    ev = a["events"]
+    for g in (e for e in ev if e["type"] == "goal"):  # every goal is a shot by the same man that was logged as scoring (a deflected or loose-ball goal included)
+        last_shot = next((e for e in reversed(ev[:g["id"]]) if e["type"] == "shot"), None)
+        assert last_shot is not None and last_shot["outcome"] == "goal" and last_shot["player"] == g["player"] and last_shot["xg"] == g["xg"]
+    seen = set()
+    for c in (e for e in ev if e["type"] == "card"):  # a second yellow follows a first, and nobody is booked after being sent off
+        assert (c["card"] == "second_yellow") == (c["player"] in seen) or c["card"] == "red"
+        seen.add(c["player"])
+    for so in (e for e in ev if e["type"] == "sent_off"):
+        assert not any(e.get("player") == so["player"] and e["type"] in ("pass", "shot", "tackle", "carry") for e in ev[so["id"] + 1:])
 
 
 if __name__ == "__main__":

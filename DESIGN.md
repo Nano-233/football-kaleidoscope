@@ -48,7 +48,7 @@ Three layers, deliberately separate:
 
 ## Event coverage
 
-46 event types, documented in [EVENTS.md](EVENTS.md) (regenerated from simulated matches by `scripts/event_schema.py`).
+51 event types, documented in [EVENTS.md](EVENTS.md) (regenerated from simulated matches by `scripts/event_schema.py`).
 Beyond the core pipeline events (passes, shots, tackles, possession changes, pressure, match metadata) a match also
 contains the stoppages and officiating a real feed has: injuries (knock / forced substitution / serious, with treatment
 stoppages), cards and sent-offs, offsides, VAR checks and disallowed goals, own goals, announced added time
@@ -56,8 +56,12 @@ stoppages), cards and sent-offs, offsides, VAR checks and disallowed goals, own 
 links with shot freeze-frames (positions of all 22 players at the moment of the shot). Goalkeepers catch, parry or
 tip over, throw or kick it out, claim, punch and sweep; free kicks have takers and a wall; corners have routines
 (short, near/far post, penalty spot, edge of the box); the manager changes formation (including ten-man shapes after a
-red card); VAR also reviews penalties and red cards; the referee plays advantage; bookings include dissent and time
-wasting. `scripts/export_tracking.py` turns a match into a 25 Hz provider-style tracking feed (speed, heading, ball height).
+red card); VAR also reviews penalties and red cards; the referee plays advantage; bookings include dissent (after a decision
+against the side, more under a strict referee) and time wasting (a side protecting a late lead holds up its own restarts; the
+taker is booked when it goes too far). A keeper can be carded and sent off like anyone else: an outfield player then makes way
+for the substitute keeper. Every goal follows a shot event (a deflected shot stays the shooter's, a pass or loose ball that runs
+in is logged as the touch that scored it, with its own xG), so goals, shots on target and assists always add up.
+`scripts/export_tracking.py` turns a match into a 25 Hz provider-style tracking feed (speed, heading, ball height).
 
 ## Players, traits and the manager
 
@@ -70,8 +74,9 @@ wasting. `scripts/export_tracking.py` turns a match into a 25 Hz provider-style 
   hard_tackler, target_man, sweeper_keeper, low_workrate. Each is a small modifier on decisions or movement.
 - **Stars**: each squad has three standout players (a forward, a creative midfielder, a defender or keeper) with boosted
   key attributes and at least one trait. Every player has an `overall` rating.
-- **Bench and substitutions**: 7 on the bench, 5 substitutions in three windows. The manager chooses like-for-like fresh
-  legs, attacking changes when trailing, or defensive changes when protecting a late lead.
+- **Bench and substitutions**: 7 on the bench, up to 5 substitutions in four windows (a change at half time now and then, two
+  main windows, a late one when something is left to use; about 4.3 per side like real teams). The manager chooses
+  like-for-like fresh legs, attacking changes when trailing from the hour on, or defensive changes when protecting a late lead.
 - **In-match tactics**: every 30 s the manager shifts press, line height, risk, directness, compactness and width for the
   score, time and numbers (`tactic_change` events). Red cards (direct, or a second yellow) leave a team a man down.
 
@@ -92,4 +97,5 @@ action), interceptions and aerial duels, plus home advantage (`--home`) and comp
 - No side swap at half time; no VAR for penalties or red cards; offside is called on release against the defensive line as the passer last saw it.
 - Aerial play and goalkeeping are statistical, not simulated in 3D.
 - Corners and set-piece routines are simple.
-- Some aggregates sit at the edge of their bands (corners a little low, pass accuracy low end).
+- Some aggregates are still off their real values (see the DEVLOG entry of 2026-10-10 for the measured list): corners about a
+  third of real, passes and tackles too many, big chances too few, aerial duels and pressures over-counted.

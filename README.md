@@ -31,6 +31,7 @@ python scripts/realism.py 48       # style, wide play, restarts, pressing, offic
 python scripts/tune.py 24 2        # auto-tune TUNE so every metric sits inside its band (coordinate search)
 python scripts/tune_rs.py 24 3 36  # faster: regression surrogate + gradient descent, writes out/sensitivity.md
 python scripts/export_tracking.py out/match_1.json 25   # 25 Hz tracking feed (npz)
+python scripts/event_schema.py --from out/   # regenerate EVENTS.md from matches already written (or event_schema.py 24 to simulate)
 python tests/test_sim.py           # determinism + invariants
 ```
 

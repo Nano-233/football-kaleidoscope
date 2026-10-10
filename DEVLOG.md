@@ -742,6 +742,84 @@ Effect (48 matches): loss 198 (noise +-10), shots 14.2, goals 1.32, throw-ins 48
 Tried and not kept: lowering `tackle_rate` to 0.6-0.9 with a larger pin effect (central tackles 29 -> 17, but the band at the line saturates at about 5.5: not enough carriers reach the line, and loss 212); lowering the ground-pass error near the touchline (`wide_error` 1.6-0.5) with these rules on: wide completion 0.63 -> 0.69-0.75 (real 0.84), full-back and winger receptions up 20-30%, but throw-ins 38 -> 27 and shots/passes up (loss 218-246); `dwell_scale` above 2.0 is clipped, no effect.
 Still open: central tackles 29 vs real 12 and central miscontrols 21 vs 11; carriers in the wide/half lanes; centre-start passes 132 vs 64 per team-match and centre-mid/striker receptions at x 70-88 (19 and 25 vs 7 and 12.5); corners 4.3 vs 11.6; throw-ins still depend on `wide_error` for ground passes out (31 vs real 5).
 
+## Audit against real data: dice, inconsistencies and officiating (2026-10-10)
+
+The user asked for a check of the engine against real matches: too many hard-coded rules and inconsistencies, subpar statistics. Method as
+always: 12 matches on fixed seeds (`calibrate.run` fixtures), every number against the real per-team norms (`reference/norms_real.json`),
+the calibrate and realism bands and an audit of the event stream (card reasons, goal kinds, shot outcomes, substitution reasons, what
+precedes every own goal and corner). Same seeds after every change, so the columns below compare like with like (12 matches: goals move
+by +-0.3, cards by +-0.3; the event-level rates are what to read).
+
+What was wrong, and the cause in the code:
+- **Cards.** Yellows 1.5 per match (real 3.5-4.5), two thirds of them for dissent: a dice of 0.004 every 30 s per side (0.7 dissent
+  bookings per side per match) and a 0.012 dice for time wasting, both booking a random player; keepers could not be carded at all
+  (`if s.role[o] != 0`), nor sent off for a second yellow. The foul-severity threshold `card_thr` 0.85 gave 0.03 yellows per foul
+  (real 0.13-0.15).
+- **Own goals** 0.42 per match (real 0.11), all of them passes into the own net: a pass to a defender standing on his own goal line (the
+  post-covering job), a keeper throwing from his own goalmouth "under pressure" with the ball in his hands (the engine let him be
+  pressed and tackled like anyone else and gave him a quarter of a second), and a back-pass the keeper could not reach (a receiver
+  stretches 1.6 m, a keeper no further). The deliberate clearance over the byline (`safe_out_x`) was aimed at `y +- 6` from the
+  carrier, which from the middle of the six-yard box is the goal mouth; a headed clearance's direction scattered with
+  sd up to 1.45 rad (83 degrees) plus the incoming ball's momentum, so some went back over the defender's own line.
+- **Goals without a shot.** 0.25 goals per match came through `_out` (a deflected shot, a pass or a loose ball over the line) with a
+  hard-coded xG of 0.05, no assist and no shot event, so the shot stayed "blocked" in the feed and goals exceeded shots on target.
+- **Aerial duels** 262 events per match (real 50-110): any opponent within 3.5 m of the landing point was logged as a beaten rival.
+- **Free-kick shots** 3.2 per match (real about 1.0): fouls 20-40 m from the fouler's goal at twice the real rate.
+- **Substitutions** always 5 per side, all in the second half (real about 4.3, a sixth at or before half time); a trailing side
+  threw on a forward for a defender at the first window after the break whatever the minute.
+- **Pressures** were logged every 4 s per defender while within 1.7 m (300 per side; real 150).
+- **DOGSO reds** were given for fouls on a man running along the touchline by the corner flag ("last man" was a lateral strip only).
+
+Fixed (`engine.py`; new TUNE keys `dissent_p`, `waste_s`, `waste_book`, `second_thr`, `booked_care`, `gk_hold0/1`, `head_dir_sd`,
+`duel_r`, `duel_w`; `card_thr` 0.85 -> 0.62, `foul_risk` 6 -> 10, `tackle_danger` 0.7 -> 0.4, `safe_out_x` 0.12 -> 0.16, `tackle_rate` 1.2 -> 0.95):
+- Dissent follows a decision: after a foul against a side (twice the chance when it brought a card) the nearest unbooked man may be
+  booked, more under a strict referee. Time wasting is behaviour: a side protecting a lead from the 65th minute adds seconds to its own
+  goal kicks, throw-ins, free kicks and corners (growing to about 10 s late on; half of it is added back by the referee); a restart held up
+  beyond `waste_book` seconds books the taker, once per side. Keepers are carded like anyone else; a keeper sent off is replaced by the
+  bench keeper with the least useful forward sacrificed (`substitution` reason "keeper sent off"), or a defender takes the gloves. A booked
+  man is given more rope for a second yellow (`second_thr`) and tackles more carefully (`booked_care`). DOGSO needs the victim to be running
+  at goal, not along a line. Every foul event now carries its `severity` and `dogso` flag.
+- Every goal is a shot: a deflected shot that goes in keeps its shot event (outcome "goal", `deflected`), its xG and its assist; a pass,
+  cross or loose-ball touch that runs in is logged as a first-time shot from where it was struck with the xG of that spot, then the goal.
+- A keeper with the ball in his hands (anything but a deliberate pass from his own side) cannot be pressed or tackled and holds it 2.5-6 s.
+  A keeper reaches 3 m for a back-pass. Nobody passes to a team-mate standing in his own goalmouth. The byline clearance is aimed at the near
+  byline well clear of the posts; clearance and header direction errors are bounded (+-1.0 / +-1.1 rad) and a headed clearance never goes
+  back towards the defender's own goal.
+- An aerial duel is logged only when the beaten man was within `duel_r` of the ball and had at least `duel_w` of the winner's chance; the
+  control odds are unchanged. A pressure is logged once per defender per spell on the ball and not within 3 s of his last.
+- Substitutions: four windows (half time with probability 0.35, 1-2 changes around the hour, 2 around 70-75, a late one with
+  probability 0.6); the trailing side turns to its forwards from the 58th minute with a chance that grows with the deficit and the clock.
+- `scripts/event_schema.py --from <dir>` regenerates EVENTS.md from saved matches instead of re-simulating.
+
+Effect (12 matches, same seeds; per match unless stated; real in brackets):
+| metric | before | after | real |
+|---|---|---|---|
+| yellow cards | 1.50 | 3.67 | 3.5-4.5 |
+| of which dissent / time wasting | 0.67 / 0.08 | 0.33 / 0.08 | about 0.25 / 0.15 |
+| second yellows / direct reds | 0.00 / 0.08 | 0.00 / 0.17 | about 0.1 / 0.1 |
+| own goals | 0.42 | 0.17 | 0.11 |
+| goals logged without a shot | 0.25 | 0 | 0 |
+| aerial duel events | 262 | 115 | 50-110 |
+| free-kick shots | 3.17 | 2.33 | about 1.0 |
+| fouls | 27.8 | 25.8 | 24 |
+| substitutions | 10.0 | 8.7 | about 8.6 |
+| tackles (per team) | 37.5 | 28.6 | 20.5 |
+| pressures (per team) | 280 | 282 | 150 |
+| shots / on target / goals | 27.8 / 9.8 / 2.42 | 28.6 / 10.6 / 1.75 (goals 1.75-2.75 over the four rounds on the same seeds: finishing noise) | 25.8 / 7.7 / 2.5 |
+
+Home advantage, re-measured on 16 equal-quality fixtures (the open gap from the last entry): `home_edge` 1.7 attribute points on six attributes for
+every home player gave home win / draw / away win 0.62 / 0.19 / 0.19 and goals 1.81 vs 0.75 (real about 0.44 / 0.25 / 0.31, 1.5 vs 1.2).
+At 0.7 points: 0.44 / 0.31 / 0.25 and 1.25 vs 0.75 (16 matches: +-0.25 goals a side), so 0.7 it is; the goal ratio is still on the high
+side and is worth a 48-match check (`scripts/realism.py --home`).
+
+Measured and not fixed here (the structural list from the earlier entries, unchanged by this work): passes 1.3x real (own third 1.9x,
+forward share 0.44 vs 0.66), carries 1.45x, take-ons 1.7x, blocks 1.5x, big chances at a third of real, shots under pressure twice real,
+corners about a third of real (3.6-4.3 vs 11.6), aerial duel events still above the band, ball-side congestion (shot_free_look 0.75 vs 0.46,
+defenders goal-side of the shooter 3.2 vs 4.6). The volume excess (tackles, pressures, take-ons, blocks) has one cause, too much contested
+play, and is not a counting problem. `tackle_rate` 1.2 -> 0.95 took tackles from 1.95x to 1.4x real and take-ons from 1.7x to 1.3x without moving
+shots or goals (the earlier entry that rejected it judged by the composite loss); the pressure count did not move with the stricter logging rule,
+because each spell on the ball still has a defender within 1.7 m. xG per match sits at 2.07 (real 2.3) after the tackle change, worth watching.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
@@ -752,10 +830,11 @@ emulator of the simulator.
 
 ## Open gaps (as of this entry)
 
-Pass accuracy still a little low (0.74 vs 0.78+), pass volume low (about 690 vs 750-950), open-play crosses low (12-22 vs
-25+) because crosses created too many header shots (header conversion reduced, retune pending), aerial duels (44 vs 50+),
-strikers still take a large share of shots, home advantage and competitive balance need re-measuring after the latest
-changes, goalkeeper and free-kick detail, tracking orientation and 25 Hz output.
+Measured on 2026-10-10 against the real per-team norms (see the audit entry above): passes 1.3x real (own-third circulation, forward share
+0.44 vs 0.66), carries 1.5x, take-ons 1.35x, tackles 1.4x, blocks 1.5x, pressures 1.9x and passes under pressure 0.30 vs 0.17 (too much
+contested play, one cause); big chances at a quarter of real and shots under pressure at twice real; corners about a third of real
+(the box defending that produces real corners is not modelled); aerial duel events still above the band; home advantage and competitive
+balance need re-measuring after every change (`scripts/realism.py --home / --balance`); goalkeeper and free-kick detail.
 
 ## Entry template
 

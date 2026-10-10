@@ -1,8 +1,9 @@
 """Regenerate EVENTS.md from simulated matches: every event type, how often it occurs, its fields and categorical values.
 
-    python scripts/event_schema.py [N]
+    python scripts/event_schema.py [N]                 # simulate N matches
+    python scripts/event_schema.py --from out/dir      # or read match JSON files already written (run_match.py output)
 """
-import sys, pathlib, collections
+import sys, pathlib, collections, json, glob
 import os
 from multiprocessing import Pool
 import numpy as np
@@ -24,13 +25,13 @@ DOC = {  # one line per type for the agents reading this
     "ball_recovery": "Team wins a loose ball from the opposition.", "miscontrol": "Receiver fails to control a pass.",
     "duel": "Aerial duel won (target = the beaten opponent).", "pressure": "Defender closes within 3 m of the carrier.",
     "possession_change": "Team gains control from the opposition.", "shot": "Shot with xG, outcome goal|saved|off_target|blocked, body_part, first_time, under_pressure, big_chance, freeze_frame of all 22 players, why.",
-    "block": "Defender blocks a shot.", "save": "Goalkeeper save.", "goal": "Goal with scorer, assist, xG, running score.", "own_goal": "Deflection into the own net (team = credited side).",
+    "block": "Defender blocks a shot.", "save": "Goalkeeper save.", "goal": "Goal with scorer, assist, xG, running score (every goal follows a shot event, a deflected one carries deflected=True).", "own_goal": "Deflection into the own net (team = credited side).",
     "var_check": "VAR review of a goal (reason, duration).", "var_confirmed": "Goal stands after review.", "goal_disallowed": "Goal ruled out after review.",
-    "offside": "Offside flag: receiver, passer, offside line x.", "foul": "Foul (reason tackle|trip|shirt_pull|handball); player = offender, target = victim.",
-    "card": "yellow|second_yellow|red.", "sent_off": "Player leaves the pitch (men_left).", "free_kick": "Direct free kick awarded.", "penalty": "Penalty awarded.",
+    "offside": "Offside flag: receiver, passer, offside line x.", "foul": "Foul (reason tackle|trip|shirt_pull|handball); player = offender, target = victim; severity 0-1 of the challenge (from behind, at speed, a lunge, a fast man stopped) and whether it denied an obvious goal-scoring opportunity (dogso).",
+    "card": "yellow|second_yellow|red with the reason (the foul, dissent after a decision against the side, time wasting over a late restart).", "sent_off": "Player leaves the pitch (men_left).", "free_kick": "Direct free kick awarded.", "penalty": "Penalty awarded.",
     "corner": "Corner awarded.", "throw_in": "Throw-in awarded.", "goal_kick": "Goal kick awarded.",
     "injury": "Injury with severity knock (plays on)|substitution|serious, cause.", "play_stopped": "Referee stops play (injury treatment, duration).",
-    "injury_off": "Injured player leaves and cannot be replaced.", "substitution": "Substitution: off, on, reason (fresh legs|chasing the game|protecting the lead|injury), stamina of the departing player.",
+    "injury_off": "Injured player leaves and cannot be replaced.", "substitution": "Substitution: off, on, reason (fresh legs|chasing the game|protecting the lead|injury|keeper sent off), stamina of the departing player.",
     "formation_change": "Manager switches shape: formation, previous, reason (chasing the game|protecting the lead|man down|man advantage) and the role moves.",
     "advantage": "Referee plays advantage after a foul; the fouled side keeps the ball.",
     "var_overturned": "VAR changes the decision (penalty awarded or cancelled, red card downgraded).",
@@ -52,9 +53,14 @@ def one(seed):
 
 
 if __name__ == "__main__":
-    n = int(sys.argv[1]) if len(sys.argv) > 1 else 24
-    with Pool(WORKERS) as p:
-        evs = [e for m in p.map(one, range(700, 700 + n)) for e in m]
+    if "--from" in sys.argv:
+        files = sorted(glob.glob(str(pathlib.Path(sys.argv[sys.argv.index("--from") + 1]) / "*.json")))
+        n = len(files)
+        evs = [e for f in files for e in json.loads(pathlib.Path(f).read_text())["events"]]
+    else:
+        n = int(sys.argv[1]) if len(sys.argv) > 1 else 24
+        with Pool(WORKERS) as p:
+            evs = [e for m in p.map(one, range(700, 700 + n)) for e in m]
     by = collections.defaultdict(list)
     for e in evs:
         by[e["type"]].append(e)
