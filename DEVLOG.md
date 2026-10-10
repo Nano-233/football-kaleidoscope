@@ -885,6 +885,48 @@ Still open after this pass, with the mechanism named where it is known:
 - corners 6-7 against 11.6: clearances and tackles at the byline (real 4.4 corners a match between them) need defenders who face their own goal.
 - pressures 2x by the engine's count: a defender within 1.7 m once per spell; with the marking change this is the number to re-read.
 
+### Third pass: runs in behind, who is at the passer's shoulder, and what the passer believes (2026-10-10, later)
+
+**Shots behind the line.** Frames at every shot: about six defenders are moving back towards their goal at the moment of the shot, and
+only 3.4-3.7 of ten are goal-side of the shooter (real 5.8); by how the ball arrived, a shot after a forward pass has 20% of the defence
+goal-side, after a carry 13%, after a through ball 3%. Through balls were played 7.9 times a match (the engine's geometric label, wider
+than StatsBomb's tag) and completed 54% (real 30-40%) while the passer's own estimate for them was 0.27: the decision rated them risky and
+the flight physics made them easy. Two causes in the code: the marker's target led a sprinting runner by only 0.5 s, so he trailed every
+run, and the intended receiver was always given the first touch over a defender who was earlier on the ball's path. Now a marker meets a
+man running at goal where he will be in 0.5 + 0.7 s (`run_lead_t`), and the receiver keeps his priority only over a man standing next to
+him, not over one clearly earlier on the path. Through-ball completion 0.54 -> 0.46, shots 31 -> 29, shots on target 13.2 -> 11.6,
+interceptions up to 15 per team (real 10.9), receipts within 8 m of goal 0.79 -> 1.00 (real 1.37).
+
+**Who is at the passer's shoulder.** Frames at pass release, by third: the defending block is not dense (nearest-neighbour spacing
+10-11 m in the sim's own and middle thirds, under two opponents within 10 m); the nearest man is one player closing at about 2 m/s, in the
+passer's own third the opposing striker or winger. Four engagement rules were tried on him, each alone on the same seeds, and none moved
+the median distance at release (2.9-3.0 m): the presser's standoff, the marking gap by distance to goal, the receiver-closing job held to
+the same trigger rule (`close_x`), and the counter-press window opened only after settled possession (`settled_s`: a ball that flips in a
+scramble is the same scramble). All four stay, as right football, but the man is not sent by any of them: he arrives because the pass is
+released when he arrives (the early-release rule) and because the carrier holds the ball 1.3 s while he closes from 5-6 m at 2-4 m/s. A
+real tracking benchmark for release distance is needed before this is pushed further; StatsBomb's `under_pressure` is not it.
+
+**What the passer believes.** Estimate against outcome over 12,000 ground passes: balls rated 0.16 were completed 55% of the time, 0.41
+rated 65%, 0.61 rated 72%, and only above 0.7 was the estimate honest (lofted: rated 0.19, completed 48%). The cause: the estimate counted
+every defender who could reach the lane before the ball at 90%, while the engine's own flight rule sends only the two best-placed men and
+gives them the interception odds. The pessimism made carrying (1.5x real) and the sideways ball look better than playing forward out of
+the back (the own-third audit: 21% of decisions passed up a forward option that rated higher, with the forward men's p at 0.57). The
+estimate now follows the flight rule (two best-placed defenders at `intercept` + 0.1), and the lofted estimate uses the engine's own aerial
+contest (`air_exact`, built earlier and left off). A learned calibration of the old estimate (`cal_on`, fitted to an earlier engine) was
+tried first: shots and goals right but passes +5% and interceptions 1.6x; aligning the model with the physics is the fix, not a correction
+on top of a wrong model.
+
+Effect (12 matches, same seeds): the estimate is honest (mean 0.80 against 0.81 completed; the 0.3-0.5 bucket 0.42 against 0.57, was 0.41
+against 0.65), shots 32 -> 27.6 (real 25.8), shots on target 14 -> 10.5 (7.7), xG 3.1 -> 2.32 (2.3), goals 2.8, big chances 0.33-0.5 per team
+(0.86), through balls 4.4 per team (the engine's label), interceptions 15.7 per team (10.9). The price: passes 1283 -> 1364 a match (real 968) and
+own-third passes 2.1x real, because an honest estimate makes passing beat carrying more often while the receiver choice still goes sideways:
+the pass count is now the one structural number left, and its decomposition is the turnover count (296 possession changes a match against about
+200 real: pass blocks 73 a match against about 32, miscontrols 1.4x, interceptions 1.4x), not the passes per possession (4.6, real 4-5).
+
+Open after this pass: possessions 1.5x real from in-flight touches and miscontrols (passes played through men standing on the lane: the
+receiver policy's lane penalty against the sim's cover shadows), own-third forward share 0.43 (0.66), corners 5-6 (11.6, clearances and byline
+tackles), receipts within 8 m of goal half of real, shots under pressure twice real.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

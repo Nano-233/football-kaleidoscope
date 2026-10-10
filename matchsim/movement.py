@@ -271,7 +271,8 @@ def defend_assign(m, t, zone, urgent, role, P, O, Ov, C, Cv, ci, tc, tgt1, cover
         v += TP.get("mark_base", 4.)  # somebody is responsible for every dangerous man: the assignment is made whatever the price, if a defender is within reach
         wb = TP.get("ball_side", BALL_SIDE) * float(clip(dl / 20., 0, 1)) * float(clip(dg / TP.get("lean_r", 24.), TP.get("lean_min", .35), 1.))
         loose = TP.get("mark_loose", 0.) * float(clip((dg - 25.) / 30., 0, 1))  # tight in and around the box, zonal out in the field: a receiver 55 m from goal is covered from 5-7 m, not marked at a stride (real build-up passers see about 2.5 free men ahead of the ball)
-        spot = o + Ov[j] * .5 + _unit(_unit(GOAL - o) + wb * _unit(C - o)) * (TP.get("mark_gap", MARK_GAP) + 1.4 * (1 - tc.marking) + loose)
+        lead_j = .5 + TP.get("run_lead_t", .7) * run  # a man running at goal is covered where he will be in a second, not half a second: the marker goes with the run instead of trailing it
+        spot = o + Ov[j] * lead_j + _unit(_unit(GOAL - o) + wb * _unit(C - o)) * (TP.get("mark_gap", MARK_GAP) + 1.4 * (1 - tc.marking) + loose)
         add(spot, v, j, "mark", can_mark & (nrm(P - spot, axis=1) <= TP.get("mark_reach", 19.)))
     # dangerous space nobody covers (pitch-control thinking: a cell is the attackers' if they can get there before any defender; its worth is the expected threat of
     # holding the ball there times the chance the ball gets there). The most valuable uncovered cells become jobs, so the block drops in front of goal and
@@ -660,7 +661,8 @@ def team_targets(m, t):
         ok = mk >= 0
         o = O[np.where(ok, mk, 0)]
         ov = fv(m.vel[osl])[np.where(ok, mk, 0)]
-        op = o + ov * .5  # stand goal-side of where he is going, not where he is
+        run_ = clip(((ov * _unit(GOAL - o)).sum(1)) / 6., 0, 1)  # how hard each marked man is running at our goal
+        op = o + ov * (.5 + TP.get("run_lead_t", .7) * run_)[:, None]  # stand goal-side of where he is going, not where he is; a sprinter is met a second ahead
         wb = TP.get("ball_side", BALL_SIDE) * clip(nrm(B - op) / 20., 0, 1)  # marking is goal-side AND ball-side: the further the ball, the more the marker stands on the pass lane
         wb = wb * clip(nrm(op - GOAL, axis=1) / TP.get("lean_r", 24.), TP.get("lean_min", .35), 1.)  # in the box he is between his man and the goal first: that is the shot lane
         loose = TP.get("mark_loose", 0.) * clip((nrm(op - GOAL, axis=1) - 25.) / 30., 0, 1)  # zonal cover out in the field (see defend_assign)
@@ -774,12 +776,16 @@ def team_targets(m, t):
                 if gk_t < att_t + GK_RISK:
                     zone[0], urgent[0] = e_, True
                     m.sprint_hint[11 * t] = True
-            # the nearest other defender closes the receiver so that he arrives with the ball
+            # the nearest other defender closes the receiver so that he arrives with the ball: to a stride when there is a reason to press him (the
+            # ball is coming into our defensive half, the counter-press window, a pressing plan, a receiver pinned on a touchline); otherwise he
+            # shows from a standoff on the line to goal, the same rule as for the carrier (press on a trigger, otherwise hold)
             de = nrm(P - e_, axis=1)
             de[role == GK] = 1e9
+            eng_r = e_[0] < TP.get("close_x", .5) * L or m.t < m.trans_until[t] or tc.press > .75 or min(e_[1], W - e_[1]) < 8.
+            gap_r = TP.get("close_gap", 1.5) if eng_r else TP.get("standoff", 5.5) * (1.3 - .6 * tc.press)
             for i in np.argsort(de)[:2]:
                 if int(i) not in taken and de[i] < 12:
-                    zone[i], urgent[i] = e_ + _unit(GOAL - e_) * TP.get("close_gap", 1.5), True
+                    zone[i], urgent[i] = e_ + _unit(GOAL - e_) * gap_r, True
                     m.sprint_hint[11 * t + i] = bool(TP.get("hint_close", 1.))  # closing the receiver
                     break
             if TP.get("assign_on", 1.) and m.flight["rcv"] >= 0 and m.flight["rcv"] // 11 == 1 - t:  # everyone else is covering as if the receiver already had it: the same assignment, around where the ball is going

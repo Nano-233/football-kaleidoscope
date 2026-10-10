@@ -21,7 +21,7 @@ checking come from real event/freeze-frame data (`scripts/norms.py`, `scripts/no
 | D6 | Tackle when the ball is away from the attacker's body or his back is turned, not when he faces you at speed | duel probability from ball distance, attacker heading and defender's closing speed; a booked man goes in less | partial (contact geometry, no heavy-touch model) |
 | D7 | Cover and balance: second defender behind the presser on the inside, third on the far side | slots derived from presser position, ball-goal line and lateral position | done |
 | D8 | Mark tight in the box: goal-side and ball-side so you see ball and man; man-orientated inside, zonal outside | marking gate by distance to goal; ball-side bias; the marking gap itself grows with the man's distance from goal (a stride in and around the box, 5-7 m of zonal cover in the middle third and beyond) | done |
-| D9 | Track runners, hand them over when they cross into another defender's zone | marking reassignment on zone crossing (Hungarian refresh) with hysteresis | partial |
+| D9 | Track runners, hand them over when they cross into another defender's zone | marking reassignment on zone crossing (Hungarian refresh) with hysteresis; a marker meets a man sprinting at goal where he will be in about a second, not half a second | partial |
 
 ## Defending, the team
 
