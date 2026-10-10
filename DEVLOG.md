@@ -1013,8 +1013,15 @@ without the ball the horizon is now the ball's own time to reach the target poin
 it, `ball_v_eff`, `horizon_min`): he has to be there before the ball can be. The side with the ball keeps the fixed horizon (its targets are
 shape, not threats). Effect on the same seeds: defenders in the cone at a 10-22 m shot 0.67 -> 0.83 (real 0.87), free looks on those shots
 0.44 -> 0.41 (0.46), distance covered unchanged (12.8 km), shots 30, xG 2.8; blocked shots and big chances moved within their noise. Still
-open: the nearest man at the shot is beside the shooter rather than in front of him (goal-side 0.39 against 0.58), which is the marker
-arriving from the side after a ball played beyond the line.
+open after that: the nearest man at the shot was beside the shooter rather than in front of him.
+
+**The presser on the line of the shot.** A static scenario (attackers waiting at 18 and 22 m with the ball wide) showed the striker gets a
+centre-back goal-side (67%) but the man at the edge of the box gets his midfield marker at his side (88%): the marking spot leans towards the
+ball, as it should, and once the man had the ball the presser was sent to the inside shoulder by the midfield rule "show him outside"
+(`FORCE_WIDE`), 30 degrees off the line to goal, where a man a stride away blocks nothing. Inside shooting range the presser now faces the
+man on the line of the shot (`in_range` switches the shading off, in both the press target and the assignment's press point). On the same
+seeds: blocked shots 2.3 -> 3.4 per team (real 3.9), free looks on 10-22 m shots 0.41-0.48 (0.46), nearest defender at the shot 2.8 m
+(2.5), shots 33, xG 3.1, goals 3.2. Open: goal-side of the shooter 0.37 against 0.58 (the balls played beyond the line), big chances 0.5 (0.9).
 
 ## Is the tuner machine learning?
 

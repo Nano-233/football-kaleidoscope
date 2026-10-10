@@ -234,7 +234,7 @@ def defend_assign(m, t, zone, urgent, role, P, O, Ov, C, Cv, ci, tc, tgt1, cover
     k_first = np.where(feas.any(1), feas.argmax(1), len(ts) - 1)
     t_int = np.where(feas.any(1), ts[k_first], 3.0 + reach[np.arange(len(P)), len(ts) - 1] - ts[-1])
     inside_ = np.array([0., np.sign(W / 2 - C[1]) * float(clip(abs(C[1] - W / 2) / 18., 0, 1))])
-    press_pts = path[k_first] + _unit(gvv + FORCE_WIDE * inside_) * (np.linalg.norm(tgt1 - C) if True else 2.5) * (.6 if float(nrm(Cv)) > 1.5 else 1.)
+    press_pts = path[k_first] + _unit(gvv + FORCE_WIDE * inside_ * (0. if in_range else 1.)) * (np.linalg.norm(tgt1 - C) if True else 2.5) * (.6 if float(nrm(Cv)) > 1.5 else 1.)  # inside shooting range the presser stands on the line of the shot, not on the inside shoulder
     m._press_pts = press_pts
     n_press = 1 + (tc.press > .8)
     back = (role == CB) | (role == FB)
@@ -715,7 +715,9 @@ def team_targets(m, t):
             engaged = (in_range or m.t < m.trans_until[t] or (held_for > TP.get("press_after", 1.2) and not beyond_line) or m._face_goal(carrier) < .35
                        or min(C[1], W - C[1]) < 8. or cs > 4. or tc.press > .75)
             gap = (2.4 + 1.4 * (1 - tc.press) + .15 * cs) * TP.get("jock_k", 1.) if engaged else TP.get("standoff", 5.5) * (1.3 - .6 * tc.press) * (TP.get("beyond_k", 1.6) if beyond_line else 1.)
-            tgt1 = C + _unit(gv + FORCE_WIDE * inside) * (gap * (TP.get("shot_gap", .7) if in_range else 1.)) + Cv * .2
+            # "show him outside" (the presser on the inside shoulder, FORCE_WIDE) is a midfield rule; inside shooting range the presser faces the man on the line of the
+            # shot: a man a stride away but 30 degrees off the line blocks nothing, and the shooter had a free look with a defender at 2 m
+            tgt1 = C + _unit(gv + FORCE_WIDE * inside * (0. if in_range else 1.)) * (gap * (TP.get("shot_gap", .7) if in_range else 1.)) + Cv * .2
             if in_range:
                 R = max(R, 12.)
             cover_pt = tgt1 + gv * COVER_GAP + inside * 2.0
