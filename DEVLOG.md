@@ -1005,6 +1005,17 @@ running budget was tuned with a line that did not, and is the next thing to re-r
 In the scenario the first centre-back now drops from 19.7 m to 13.9 m while the carrier runs from 29 m to 17 m, holding a 3-4 m gap, which
 is the real picture.
 
+**The effort horizon is set by the play.** With the line fixed, the shots from 10-22 m were measured second by second: 3 s before the shot 0.22
+defenders stood in the shot cone, 1 s before 0.32, at the shot 0.67 (real 0.87): the men assigned to the arriving shooter were sliding in as
+he struck it, a second late, and three quarters of those shots had nobody in front within 6 m. The cause was the same effort rule: a
+defender sent to a mark, a lane or a cover 8 m away was given a fixed 3.4 s horizon (`catch_t`) and moved at under 2 m/s. For the side
+without the ball the horizon is now the ball's own time to reach the target point (its travel at about 12 m/s plus the touch that releases
+it, `ball_v_eff`, `horizon_min`): he has to be there before the ball can be. The side with the ball keeps the fixed horizon (its targets are
+shape, not threats). Effect on the same seeds: defenders in the cone at a 10-22 m shot 0.67 -> 0.83 (real 0.87), free looks on those shots
+0.44 -> 0.41 (0.46), distance covered unchanged (12.8 km), shots 30, xG 2.8; blocked shots and big chances moved within their noise. Still
+open: the nearest man at the shot is beside the shooter rather than in front of him (goal-side 0.39 against 0.58), which is the marker
+arriving from the side after a ball played beyond the line.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
