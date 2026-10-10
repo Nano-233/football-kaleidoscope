@@ -977,6 +977,34 @@ passes per minute in play 18.7 (about 17), hold 1.54 s (1.52) with 12.7% over 3 
 (about 200), own-third passes 170 per team (101), shots 31, xG 3.1, goals 2.7, big chances 0.83 per team (0.86), interceptions 10.3 per team
 (10.9), take-ons 43 a match (18-45), tackles 25 per team (20.5), pass blocks 35 per team (20), own goals 0.17 (0.11).
 
+### The back line against a man running at it (2026-10-10, late night)
+
+The largest gap left was the shot context: 0.39 blockers per shot against 0.87, a third of the defence goal-side of the shooter against
+58%, shots on target 6.2 per team against 3.8. A controlled scenario (`scratchpad` scen_run_at_line: a carrier driving at a set back four
+from 32 m, central) showed the mechanism in one picture: as the carrier ran from 32 m to 20 m the four deepest defenders moved from 20.5 m
+to 18.5 m from their goal, so he arrived level with the line and shot with a free look. Instrumenting the four against their targets:
+- their targets were right (about 10 m behind the ball, `LAG`), but two things pulled the line's target forward: the compactness pull
+  towards the block centroid, which sits in front of the line because the midfield stands ahead of it (the line stood 5 m further out than
+  its own depth), and the step-up rule "pressure on the ball: step up", which fired on a carrier running at the line. Fixed: out of
+  possession the back line holds its own depth and the midfield compacts down onto it (`line_holds`), and a line never steps up into a man
+  driving at it, it drops in front of him (`drop_drive`). Alone these moved the line 1 m.
+- the real limit was effort: a non-urgent defender moves towards his target at the engine's jog, which with the running budget as tuned is
+  1.2 m/s, a walk; "effort follows need" used the distance to the target only, so a man 4 m from a target that was itself moving away at
+  5 m/s set off at walking pace. A target that moves away has to be matched, not only reached: the component of the target's own speed
+  along the way he must go is added to the effort (`tv_along`).
+That rule needed scoping, each step measured on the same 12 seeds: applied to everyone it added 3 km a match (attackers chased their
+sliding shape, the line dropped too deep, shooters got more room: goals 4.0); to the whole defending side, 2 km (every pass slides the
+block's targets and the defenders ran after the lateral shifts); to the retreating component only (the target moving towards the own goal,
+`track_v`), 1.1 km with goal-side 0.33 -> 0.37 of the defence, blocked shots 2.6 -> 3.0 per team, corners 5.4 -> 6.8; and bounded by what a
+controlled retreat can do, about 4.5 m/s (`retreat_v`: a target that jumps faster, a pass in flight, is not chased at a sprint): no further change (13.0 km); scoped
+to the last line only (centre-backs and full-backs, the men in front of it recover by the recovery-run rule), 12.9 km with blockers per shot
+0.39 -> 0.50 (real 0.87), blocked shots 2.6 -> 3.3 per team (3.9), shots on target 6.2 -> 5.3 per team (3.8), free looks 0.76 -> 0.70 (0.46),
+goal-side of the shooter 0.33 -> 0.36 (0.58), receipts within 8 m of goal 0.62 -> 1.00 (1.37), shots 30, xG 2.7, goals 3.0. That is the state
+kept. The 0.9 km of extra running (12.9 against 12.0 before, real 10.8) is the line dropping in front of attacks; the rest of the engine's
+running budget was tuned with a line that did not, and is the next thing to re-read (`cruise_k`, the jog).
+In the scenario the first centre-back now drops from 19.7 m to 13.9 m while the carrier runs from 29 m to 17 m, holding a 3-4 m gap, which
+is the real picture.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

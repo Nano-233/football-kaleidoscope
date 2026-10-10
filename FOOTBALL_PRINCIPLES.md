@@ -28,7 +28,7 @@ checking come from real event/freeze-frame data (`scripts/norms.py`, `scripts/no
 | # | Convention | Intrinsic expression | Status |
 |---|---|---|---|
 | D10 | The back line stays a line: same depth, moves together | back-line depth = common value, individual targets pulled to it | done |
-| D11 | Line height follows the ball: step up when the ball is pressured or played back, drop when it is free to be played in behind | line depth from ball depth, pressure on the carrier and tactic | done |
+| D11 | Line height follows the ball: step up when the ball is pressured or played back, drop when it is free to be played in behind | line depth from ball depth, pressure on the carrier and tactic; a line never steps up into a man driving at it, it drops in front of him and runs at his speed to hold the gap; the midfield compacts onto the line, not the line onto the midfield | done |
 | D12 | Offside trap / step-up together | line steps up as a unit on a trigger; attackers' offside check reads the line | partial |
 | D13 | Compact: short vertically, narrow horizontally, shift to the ball side, weak-side tuck | block width and depth pulled towards the block centroid; ball-side shift | partial |
 | D14 | Cut passing lanes (cover shadow): protect the centre first and show play wide | free defenders stand on the lanes to the most dangerous central receivers | done (effect on shots small) |

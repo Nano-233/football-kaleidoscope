@@ -551,14 +551,20 @@ def team_targets(m, t):
         cur = m.carrier if m.state == "held" and m.poss == 1 - t else -1
         if bl.sum() >= 2:
             step = 0.
-            if cur >= 0:  # pressure on the ball: step up together; free to look up: drop together
+            if cur >= 0:  # pressure on the ball: step up together; free to look up, or running at us: drop together
                 dn = float(nrm(P[out_f] - O[cur - 11 * (1 - t)], axis=1).min())
-                step = LINE_STEP * (float(clip(1 - dn / 6., 0, 1)) - .4)
+                drive = float(clip(-fv(m.vel[cur])[0] / 5., 0, 1))  # the carrier driving towards our goal (his speed along -x in our frame)
+                step = LINE_STEP * ((float(clip(1 - dn / 6., 0, 1)) - .4) * (1. - drive) - TP.get("drop_drive", 1.) * drive)  # a line never steps up into a man running at it: it back-pedals in front of him
             lx = tx[bl].mean()
             tx = np.where(bl, lx + step + LINE_FLAT * (tx - lx), tx)  # one depth for the line, a little individual variation
     blk = out_f & (COMPRESS[role] > .5)  # compaction acts on the block (back line and midfield), not on the outlets up front
-    cx = tx[blk].mean() if blk.any() else tx[out_f].mean()  # compact the block around its own centre
-    tx = np.where(blk, cx + (tx - cx) * (.9 - .2 * tc.compactness), tx)
+    cx = tx[blk].mean() if blk.any() else tx[out_f].mean()  # compact the block around its own centre ...
+    bl_ = (role == CB) | (role == FB)
+    if not has and TP.get("line_holds", 1.) > 0:  # ... but out of possession the back line holds its own depth and the midfield compacts down onto it: pulled towards a centroid that sits in front of it, the line stood 5 m further out than its target and a carrier running at it arrived level with it
+        cx = tx[bl_].mean() if bl_.any() else cx
+        tx = np.where(blk & ~bl_, cx + (tx - cx) * (.9 - .2 * tc.compactness), tx)
+    else:
+        tx = np.where(blk, cx + (tx - cx) * (.9 - .2 * tc.compactness), tx)
     if has and Bs[0] > .62 * L:  # midfielders arrive late at the edge of the box; wingers tuck in when the ball is on the far side
         late = (role == CM) | (role == AM)
         tx = np.where(late, np.maximum(tx, np.minimum(Bs[0] - 3, L - 20)), tx)
