@@ -923,9 +923,21 @@ own-third passes 2.1x real, because an honest estimate makes passing beat carryi
 the pass count is now the one structural number left, and its decomposition is the turnover count (296 possession changes a match against about
 200 real: pass blocks 73 a match against about 32, miscontrols 1.4x, interceptions 1.4x), not the passes per possession (4.6, real 4-5).
 
-Open after this pass: possessions 1.5x real from in-flight touches and miscontrols (passes played through men standing on the lane: the
-receiver policy's lane penalty against the sim's cover shadows), own-third forward share 0.43 (0.66), corners 5-6 (11.6, clearances and byline
-tackles), receipts within 8 m of goal half of real, shots under pressure twice real.
+**Nobody plays a ground ball through a man on its line.** Frames at release: 13% of the sim's open-play ground passes had an opponent within
+1 m of the lane between the two (24% within 2 m); a third of those were blocked or intercepted, and they were a large part of the 73 pass
+blocks a match (real about 32). A ground option whose line has a man on it (within `lane_block_r`, between 15% and 85% of the way) is no
+option now: the chip over him and the other men remain. Interceptions 15.7 -> 11.4 per team (real 10.9), pass blocks 46 -> 34 (20),
+recoveries 71 -> 63 (54), miscontrols 1.4x -> 1.26x, take-ons 38 -> 33 (real 18-45 a match), carries 1.48x -> 1.40x, passes 1364 -> 1311 a
+match, shots and xG unchanged (26.7, 2.6).
+
+**Corners from clearances, tried twice.** Body orientation at a walking back-pedal limit (`head_run` 4.2 -> 3.2 m/s, so a recovering
+defender turns and faces his own goal sooner) moved corners from clearances not at all (1.0 -> 1.1 a match) and was reverted. Letting a
+headed clearance keep its backward momentum, with the goal mouth excluded the same way as a kick, gives 0.25 corners a match from
+headers at no own goals. Corners stand at 5-6 (real 11.6): the missing 5 a match are low balls blocked or hacked behind at the byline and
+tackles there, which need box-defending contact the engine does not yet have.
+
+Open after this pass: passes 1.35x real (own third 2x, forward share 0.43 against 0.66; the receiver policy's choice on the sim's positions),
+carries 1.4x, corners 5-6 (11.6), receipts within 8 m of goal about 0.6 of real, shots under pressure twice real, blocked shots 0.6 of real.
 
 ## Is the tuner machine learning?
 
