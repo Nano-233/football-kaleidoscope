@@ -32,8 +32,9 @@ NEAR, FAR, SETTLED, CONTEST = 9.5, 20., .45, 5.5   # the short outlet's distance
 GK, CB, FB, DM, CM, WG, AM, ST = range(8)
 
 
-def block_anchors(A, out_f, ball, tc, line=0.):
-    """Anchor of every player in the attacking block (11, 2). A: the formation's own positions, out_f: outfield mask, ball: where the shape is built round."""
+def block_anchors(A, out_f, ball, tc, line=0., slide=SLIDE, wid_scale=1.):
+    """Anchor of every player in the attacking block (11, 2). A: the formation's own positions, out_f: outfield mask, ball: where the shape is built round.
+    slide: share of the ball's lateral offset each player follows (a number or one per player): the men who are not on the wing follow the ball across the pitch."""
     xs, ys = A[out_f, 0], A[out_f, 1]
     depth = (A[:, 0] - xs.min()) / max(float(np.ptp(xs)), .01)
     lat = (A[:, 1] - ys.min()) / max(float(np.ptp(ys)), 1.)
@@ -41,10 +42,9 @@ def block_anchors(A, out_f, ball, tc, line=0.):
     front = min(max(ball[0] + FRONT_LEAD, line - 1.), FRONT_CEIL)  # the front rank leads the ball, and in any case plays on the shoulder of the last defender
     rear = float(np.clip(front - length, REAR_FLOOR, REAR_CEIL))
     length = min(length, max(L - rear - MARGIN, LEN_COMPACT * .5))
-    width = WID_NARROW + (WID_WIDE - WID_NARROW) * tc.width
-    half = min(width / 2, W / 2 - MARGIN)
-    cy = float(np.clip(W / 2 + (ball[1] - W / 2) * SLIDE, MARGIN + half, W - MARGIN - half))
-    return np.stack([rear + depth * length, cy + (lat - .5) * width], 1)
+    width = (WID_NARROW + (WID_WIDE - WID_NARROW) * tc.width) * wid_scale
+    y = W / 2 + (lat - .5) * width + (ball[1] - W / 2) * slide
+    return np.stack([rear + depth * length, np.clip(y, MARGIN + 1.5, W - MARGIN - 1.5)], 1)
 
 
 def slot_point(slot, side, wait=False):

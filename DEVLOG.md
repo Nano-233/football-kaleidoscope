@@ -713,7 +713,22 @@ What is still missing, and it is not corners: the sim plays down the middle. Per
 
 Tried and rejected on the lane/density probes (`near_ball.py`, `lane_occ.py`, `cell_occ.py`, `role_lat.py`, `central_who.py`): far-side holder tucks in when the ball is wide (far wide lane 0.93 -> 0.74, no change in flows); defending block width/slide (no effect, that block is off); attacking slide 0.3 -> 0.6 and width x0.85 (small); full-backs following the ball more (none); closer support distances (none, the ring is not the constraint); lateral squeeze of every player toward the ball side (matches near-ball density exactly at 0.3 but loss 177 -> 207 and fewer wide actions); a second wide player job and a six-place flank template (ahead on the line, behind on the line, two half-space places, target man, far outlet; Hungarian assignment with role costs) both worked as designed but players only close 2 m of the 10 m to their place in 2.5 s and keep a place for 1.4 s, so the lane occupancy at the moment of the pass did not move. A reactive shape cannot produce real fluid positioning; it needs the shape in place before the ball arrives.
 
-Next if the engine is reopened: positional fluidity (central roles drifting into the ball-side channel before the ball gets there, a rotation rather than a fixed lane) is the single change that touches corners, throw-ins, crosses, wide duels and the central ping-pong at once.
+Next: positional fluidity for the central roles (done in the next entry as ball-following lanes).
+
+### Width, for the other eight men (2026-10-09)
+
+The user asked why width keeps flipping. It did not flip: the Oct 8 width plan put two men per side (the winger and the full-back, `wide_holders`) on the touchlines and nothing else; the other eight kept their formation lanes (centre-mid, striker, defensive mid and centre-back are within 14 m of a touchline for 6-7% of their touches, real 31-37%). Judging that by one metric at a time is why it looked like a yo-yo, so `scripts/lateral_panel.py` now prints every width measure from one batch of matches next to the real figure (pass lanes, wide-to-wide flow, each role's wide share in attack and defence, receptions by role at x 70-88, receiver room and completion by lane, players in the wide band around a wide ball). Run it before and after any change to shape.
+
+Checked first that the pass policy is not the cause: applied to real freeze-frame positions it sends 41% of passes (x>=55) to the wide lanes, real 40.5%. So it is where the men stand.
+
+What did it (each tested alone and together on the panel):
+- Attack: the central roles (DM, CM, AM, ST) follow the ball across the pitch (`slide_c` 1.0 of its lateral offset in `teamplay.block_anchors`, was 0.3 and clamped to +-7 m by the block margin); winger/full-back keep the touchline job. Wide share of pass starts 0.27 -> 0.32 (final third 0.33 -> 0.36), wide-to-wide completed passes 0.31 -> 0.41, centre-start passes 166 -> 133 per team-match (real 64), centre-mid wide share 0.07 -> 0.15, striker 0.06 -> 0.20.
+- Defence: the same roles shade across to the ball's side (`lat_def_c` 1.0, was 0.28-0.5): defenders in the wide band around a wide ball 1.5 -> 2.2 (real 2.6), their wide share in own half 0.05-0.10 -> 0.21-0.26 (real 0.30). Alone it also raises shots and goals (the middle is left open); together with the attack change shots stay at 14.2 (real 13.1).
+- The ball-side full-back comes up to level with the ball (`fb_up` 6 m behind it, was 13 m behind), the far-side winger and full-back tuck in when the ball is wide (`far_tuck`).
+- Team-mates in the wide band around a wide ball 0.66 -> 1.31 (real 1.72). Loss 184 -> 195 (noise +-10), goals 1.03, shots 14.2.
+
+Still open (panel, sim | real): wide share of pass starts 0.32 | 0.40 (final third 0.36 | 0.52); centre-mids and strikers receive 22 and 26 balls at x 70-88 (real 7 and 12.5) while wingers and full-backs get 13.5 and 8 (real 24 and 14); wingers are still too wide (0.72 | 0.58). Corners 4.2 | 11.6 and throw-ins 48.8 | 45.4 (still from `wide_error`; ground passes out 31 | 5). Lowering `wide_error` for ground passes to a realistic level (0.15-0.5) raises wide receptions (full-back 8 -> 11, winger 13.5 -> 16) and wide completion (0.66 -> 0.77, real 0.84) but cuts throw-ins to about 27 and raises shots and pass volume (loss 195 -> 217-246), so it stays 3.2 until the contested-ball sources of throw-ins (tackles 6.3, blocks 6.1, miscontrols 4.2 per match in real data; here about 2 in total) exist on the flanks.
+Rejected again on the panel: folding positions that would overflow the touchline back inside (worse than queueing on the line), squeezing every player toward the ball (loss), the flank template.
 
 ## Is the tuner machine learning?
 

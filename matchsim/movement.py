@@ -538,7 +538,7 @@ def team_targets(m, t):
     ph = clip(.45 + Bs[0] / L, .5, 1.1)
     tx = tx + fd * PUSH[role] * TP.get("push_k", 1.) * (.6 + .8 * tc.risk) * ph + (1 - fd) * DROP[role] * TP.get("drop_k", 1.) * clip(1.25 - tc.press, .3, 1.2)
     ty = (W / 2 + (A[:, 1] - W / 2) * (fd * (1 + (tc.width - .5) * .7) + (1 - fd) * (1 - NARROW * tc.compactness))
-          + by * (fd * (.2 + FRONT_SHIFT * ((role == ST) | (role == AM))) + (1 - fd) * (.28 + .22 * tc.compactness)) * out_f)  # the front line drifts to the ball side to link up
+          + by * (fd * (.2 + FRONT_SHIFT * ((role == ST) | (role == AM))) + (1 - fd) * np.where(np.isin(role, (DM, CM, AM, ST)), TP.get("lat_def_c", .28 + .22 * tc.compactness), .28 + .22 * tc.compactness)) * out_f)  # the front line drifts to the ball side to link up
     tx = np.maximum(tx, MIN_X[role])
     if not has:  # defending: near our goal the block follows the ball, each line a fixed distance behind it
         wn = float(clip((TP.get("wn_end", WN_END) - Bs[0]) / 12., 0, 1)) * COMPRESS[role]  # how far this role is pulled onto the ball: the back line fully, forwards hardly (they are the outlet)
@@ -582,10 +582,13 @@ def team_targets(m, t):
     GOAL_ATT = np.array([L, W / 2])
     if of:  # the attacking block (Open Football's ShapeBuilder): everybody is in a 27-41 m rectangle whose front rank leads the ball
         line_o = max(np.sort(O[:, 0])[-2], L / 2)
-        ba = teamplay.block_anchors(A, out_f, Bs, tc, line_o if TP.get("front_line", 1.) else 0.)
+        ba = teamplay.block_anchors(A, out_f, Bs, tc, line_o if TP.get("front_line", 1.) else 0., np.where(np.isin(role, (DM, CM, AM, ST)), TP.get("slide_c", .3), .3), TP.get("wid_att", 1.))
         cap_o = max(line_o, Bs[0]) - TP.get("hover", .3) + np.sin(.5 * m.t + m.phase[sl])  # nobody up front waits beyond the last defender and the ball
         att_o = (role == ST) | (role == WG) | (role == AM)
         ba[:, 0] = np.where(att_o, np.minimum(ba[:, 0], cap_o), ba[:, 0])
+        if TP.get("fb_up", 0.) > 0 and Bs[0] > .45 * L:  # the full-back on the ball's flank comes up to support the winger: level with the ball or a little behind, not at the back of the block
+            ball_side_fb = (role == FB) & ((A[:, 1] > W / 2) == (Bs[1] > W / 2))
+            ba[:, 0] = np.where(ball_side_fb, np.maximum(ba[:, 0], np.minimum(Bs[0] - TP["fb_up"], max(line_o, L / 2) - 2.)), ba[:, 0])
         zone = np.where(out_f[:, None], zone * (1 - fd) + ba * fd, zone)
     if has and bx > .5 * L and not of:
         # attacking shape near the box: every role has a job (near post, far post, edge of the box, overlap, cover),
@@ -859,7 +862,7 @@ def team_targets(m, t):
                 if h < 0 or h == holder or (m.t < m.run_until[11 * t + h]):
                     continue
                 far = (k == 0) != (Bs[1] < W / 2)  # the flank the ball is not on
-                zone[h, 1] += ((INSET if k == 0 else W - INSET) - zone[h, 1]) * hug * ((1. - wt) if far else 1.)
+                zone[h, 1] += ((INSET if k == 0 else W - INSET) - zone[h, 1]) * hug * (((1. - wt) * (1. - TP.get("far_tuck", 0.) * float(clip((abs(Bs[1] - W / 2) - 10.) / 17., 0, 1)))) if far else 1.)
         running = has & (m.t < m.run_until[sl])
         for i in np.nonzero(running)[0]:
             zone[i], urgent[i] = m.run_tgt[11 * t + i], True
