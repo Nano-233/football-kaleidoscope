@@ -702,9 +702,13 @@ def team_targets(m, t):
             # the side presses as a plan; without a trigger he stands off on the line to goal (about 5-6 m, nearer for a pressing side) and screens. Real passers
             # have an opponent within 5 m on about a fifth of their passes; with a presser sent to every carrier it was three quarters.
             held_for = m.t - m.ctrl_t
-            engaged = (in_range or m.t < m.trans_until[t] or held_for > TP.get("press_after", 1.2) or m._face_goal(carrier) < .35
+            # the line of engagement: a side presses the man on the ball once he is inside its territory (a low block from about 40 m out, a high press
+            # from 75 m, by the press tactic); beyond it the forwards screen from a distance and a centre-back is left to carry and look up, which is
+            # where real long holds (3-8 s on the ball) come from
+            beyond_line = TP.get("engage_on", 1.) > 0 and C[0] > L * (TP.get("engage_lo", .38) + TP.get("engage_k", .38) * tc.press)
+            engaged = (in_range or m.t < m.trans_until[t] or (held_for > TP.get("press_after", 1.2) and not beyond_line) or m._face_goal(carrier) < .35
                        or min(C[1], W - C[1]) < 8. or cs > 4. or tc.press > .75)
-            gap = (2.4 + 1.4 * (1 - tc.press) + .15 * cs) * TP.get("jock_k", 1.) if engaged else TP.get("standoff", 5.5) * (1.3 - .6 * tc.press)
+            gap = (2.4 + 1.4 * (1 - tc.press) + .15 * cs) * TP.get("jock_k", 1.) if engaged else TP.get("standoff", 5.5) * (1.3 - .6 * tc.press) * (TP.get("beyond_k", 1.6) if beyond_line else 1.)
             tgt1 = C + _unit(gv + FORCE_WIDE * inside) * (gap * (TP.get("shot_gap", .7) if in_range else 1.)) + Cv * .2
             if in_range:
                 R = max(R, 12.)

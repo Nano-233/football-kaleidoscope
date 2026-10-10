@@ -939,6 +939,44 @@ tackles there, which need box-defending contact the engine does not yet have.
 Open after this pass: passes 1.35x real (own third 2x, forward share 0.43 against 0.66; the receiver policy's choice on the sim's positions),
 carries 1.4x, corners 5-6 (11.6), receipts within 8 m of goal about 0.6 of real, shots under pressure twice real, blocked shots 0.6 of real.
 
+### Pace of play: why there are too many passes (2026-10-10, night)
+
+The user's steer: a pass count is a result, look for the pace. Decomposed from saved matches (post the lane rule): possessions carry the same
+number of passes as real ones (5.0 against about 4.8) but a pass comes every 2.6 s of possession instead of about 3.5 s, i.e. 21 open-play
+passes per minute in play against about 17. The hold-time distribution says where: median 1.0 s (real 1.02) and one-touch share 0.33
+(real 0.31) are right, the long tail is missing (8% of holds over 3 s against 12%, unpressed holds 1.38 s), and carries are chopped: 432 a
+match of 7.2 m (real 308 of 10.5 m) with the same number of 10 m+ carries as real, so 120 extra short ones.
+
+Three mechanisms in the code, tested one on top of the other on the same seeds:
+- **Nobody holds the ball.** The author had built the behaviour (a man with nothing forward on sits on the ball and releases when the press
+  arrives, `wait_on`) and left it off. On: hold mean 1.26 -> 1.39 s, holds over 3 s 8% -> 10%, open-play passes 1200 -> 1116 a match, own-third
+  forward share 0.44 -> 0.47, passes per minute in play 21.2 -> 19.8.
+- **The press trigger "he has held it 1.2 s" fired anywhere on the pitch.** A mid-block striker does not engage a centre-back in his own third;
+  sides have a line of engagement (about 40 m from their own goal for a low block, 75 m for a high press, by the press tactic): beyond it the
+  forwards screen from further off and the centre-back is left to carry and look up, which is where real long holds come from
+  (`engage_lo`, `engage_k`, `beyond_k`). On top of the hold: 1.42 s, 10.8% over 3 s, unpressed 1.60 s.
+- **The carry-streak penalty** (a hand-set "do not carry for long" term) was removed on top: no effect on carry length (7.7 m) or count, so it
+  was put back as it was; carries end because the carrier looks again every half second and a pass then rates higher.
+Shots and goals on these seeds: 28.5 / 2.8 before, 32.9 / 3.6, 30.8 / 3.7 and 27.8 / 2.8 across the three runs (finishing noise at this
+size; the mean is about 2 shots a match up, which is a held ball drawing the press and finding the space behind it, as intended).
+
+- **A carry keeps the ball as a pass does.** The carry option's keep-the-ball constant (`carry_base` 0.22) was half a pass's (`keep` 0.455), a
+  hand-set preference for passing: at every half-second look the carrier gave the ball up. With one constant for both: hold mean 1.54 s
+  (real 1.52), holds over 3 s 12.7% (12%), open-play passes 1116 -> 1052 a match, own-third passes 185 -> 170 per team, progressive carries
+  46 per team (real 39), carries into the box 5.3 (5.6), take-ons 43 a match (18-45), big chances 0.83 per team (0.86), goals 2.7.
+- **Blocks at the kicker's feet.** 41 of 64 pass blocks a match were a presser a stride away blocking the kick as it left (mean 1.1 m from
+  the kick). A rule that takes a pass kicked straight into a man a stride away out of the options (`feet_block_r`) is in the code and off: on
+  the same seeds it moved those passes into carries (carries 458 -> 488 a match, passes up 40, blocks 35 -> 32 per team, tackles up) and
+  gained nothing on possessions. The behaviour that is missing is the shield and lay-off under a man at the feet.
+- **A bug on the way, and what it taught.** While putting the carry constant in, a comment appended to the carry-utility line commented
+  out the carry's loss term and streak penalty for four runs: carries cost nothing, take-ons doubled (75-84 a match) and the feet rule was
+  blamed for it. The restored line reproduces the earlier run bit for bit. Lesson for this file: a conclusion drawn from one run that
+  contradicts the previous one is a diff to read, not a result.
+State after the pace work (12 matches, same seeds): open-play passes 1052 a match (real about 870 open play), total passes 1150 (968),
+passes per minute in play 18.7 (about 17), hold 1.54 s (1.52) with 12.7% over 3 s (12%), carries 458 of 7.7 m (308 of 10.5), possessions 254
+(about 200), own-third passes 170 per team (101), shots 31, xG 3.1, goals 2.7, big chances 0.83 per team (0.86), interceptions 10.3 per team
+(10.9), take-ons 43 a match (18-45), tackles 25 per team (20.5), pass blocks 35 per team (20), own goals 0.17 (0.11).
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
