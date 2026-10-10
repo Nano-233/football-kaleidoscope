@@ -22,7 +22,9 @@ can cite real causes, and a fact-checker agent can verify claims against it.
 **On-ball (event-driven).** When the carrier decides, he evaluates every visible option from the actual geometry:
 - passes: lane interception risk (can an opponent reach the lane before the ball?), receiver pressure, execution
   accuracy (passing, pressure, length), and aerial duels for lofted balls; value gained uses a distance-to-goal surface;
-- shot: xG from distance, angle and blockers in the shot cone, adjusted for finishing/composure/goalkeeper;
+- shot: xG from distance, angle and blockers in the shot cone (a maximum-likelihood fit to real shots, `scripts/fit_xg.py`), adjusted for
+  finishing/composure/goalkeeper; the decision to shoot uses the shooter's own flatter reckoning of the position (`_xg(decide=True)`), the
+  behavioural gate fitted to real shot shares by distance;
 - carry: including an explicit take-on duel when a defender stands in the way;
 - clearance under pressure in the own third.
 Options are chosen by softmax over utility (temperature depends on composure). All coefficients live in `engine.TUNE`.

@@ -820,6 +820,71 @@ play, and is not a counting problem. `tackle_rate` 1.2 -> 0.95 took tackles from
 shots or goals (the earlier entry that rejected it judged by the composite loss); the pressure count did not move with the stricter logging rule,
 because each spell on the ball still has a defender within 1.7 m. xG per match sits at 2.07 (real 2.3) after the tackle change, worth watching.
 
+## Root causes behind the structural gaps (2026-10-10, second pass)
+
+Rule for this pass (from the user): fix the logic that causes a number, never the number. Each item below names the mechanism found, how it was
+established, and what moved. All on the same 12 fixed seeds as the audit entry above (goals move by +-0.35 at this size, event rates far less).
+
+**xG scale and big chances.** `scripts/fit_xg.py` had already shown the xG formula in use was too flat against real shots (its own docstring:
+0.06-0.20 band predicted 0.078 / 0.136, actual 0.099 / 0.180) and had a maximum-likelihood refit that was never switched on. Shots inside 12 m
+were rated 0.115 on average, so "big chances" (xG over 0.25) were a quarter of real whatever the play. The refit is now the xG model for the
+outcome of every shot and for every event (`xg_*`). The shooting gates (`shoot_ref`, `shoot_slope`, `clear_xg`, `head_ref`, `ft_xg`,
+`chance_xg0`) are a behavioural rule fitted to real shot shares by distance under the earlier formula, so the shooter's own reckoning of a
+position keeps that scale (`_xg(..., decide=True)`, coefficients `xgd_*`); converting the gates to the new scale instead (tried: 36 shots, 4
+goals a match, too many from 12-20 m) mixes two fits. Effect: xG per shot 0.07 -> 0.10 (real 0.09), big chances 0.17 -> 0.88 per team
+(real 0.86), header share of shots back at 0.12-0.15 (real 0.17), goals 2.5 (real 2.5-2.7), xG per match 3.2 against 2.3 because shots are
+still 31 against 26 (below).
+
+**Crosses were never blocked.** `_flight` resolved interceptions for ground passes only; a lofted ball could not be touched until it came
+down, so the closing full-back never blocked a cross and a pressed clearance was never charged down (real corners come 27% from low balls
+blocked or cleared near the byline). A lofted ball can now be blocked while it is still below `block_z` (1.7 m: the first few metres of its
+flight) by a man on its line, with the same reading odds as a ground pass scaled down as the ball rises, and comes off his body
+(`_body_hit`). Deflected crosses 0 -> 2.3 per match, blocked-shot and save corners up with the shot count; corners 4.2 -> 6.3-7.4
+(real 11.6). Pass blocks are now above real (39 vs 20 per team) because the sim still plays 1.3x the passes with defenders a stride away.
+
+**Clearances went where the kicker wanted, whatever he faced.** A pressed defender with his back to the play now hooks the ball the way he
+faces (behind for a corner, square, out for a throw), blended by pressure and body angle, bounded, never into his own goal mouth (a
+direction inside the posts is swung to the near side), and it travels less far. Corners from clearances 0.25 -> 0.67 per match (real 3.0):
+the rest of the real figure needs defenders facing their own goal when they clear, which the heading model only allows at a sprint.
+A first version applied the kick's scatter after the goal-mouth exclusion and put 0.4 own goals a match back in (four of five from
+clearances); the exclusion now acts on the final direction.
+
+**Pressing proximity (measured, cause found, partly fixed).** Frames at pass release: the nearest opponent is a median 2.9 m from the passer
+and within 4.6 m on 70% of open-play ground passes; the receiver already has a man at 2.5-5 m when the ball arrives and he closes during
+the hold. Two causes in the code: the nearest defender was sent to a 2-4 m jockeying point on every carrier (now he engages only on a
+trigger: shooting range, the counter-press window, a long hold, back to goal, pinned on a line, running at the defence, a pressing plan;
+otherwise he stands off 5-6 m and screens: `standoff`, `press_after`), and `defend_assign` gave every attacker within 25 m of the ball a
+marker at 1.1-2.5 m wherever he stood (now the marking gap grows with the man's distance from goal, `mark_loose`: a stride in and around
+the box, 5-7 m of zonal cover in the middle third and beyond). The carrier also releases before contact when a man is arriving within
+`ttc_release` seconds instead of waiting out his dwell. The standoff and the early release moved the proximity little (2.5 -> 2.9 m
+median): the marker, not the presser, is the man at the passer's shoulder; the marking change is the one that matters (numbers below).
+Note that StatsBomb's `under_pressure` (an active press within about 5 yards) is not the engine's distance flag, so the x1.7 gap in
+`press_pass_share` is partly definitional; the frames measure is the one to track.
+
+**Own-third circulation decomposed with the decision audit** (`engine.audit`, 2 matches, 479 own-third decisions a match): passes go
+forward 45%, sideways 35%, back 20% (real 66 / 20 / 14). In 21% of all own-third decisions the passer played sideways or back although a
+safe forward option (p >= 0.7, 5 m or more of gain) existed, and in 64% of those the forward pass had the higher utility: the learned
+receiver policy passed it up because the forward men were not free (1.3 safe forward options per decision against about 2.5 free men
+ahead of the ball in real build-up). Own-third possessions start 64 times a match from loose-ball recoveries (14 goal kicks, 14 throw-ins,
+10 interceptions): the turnover volume feeds the circulation. The tight marking above is the positional cause; the policy is not.
+
+Effect of the loose marking (12 matches): own-third passes 199 -> 189 per team, forward share unchanged at 0.44, tackles per team 27 -> 23, nearest opponent at pass release 2.9 -> 3.0 m
+median. So the marking gap is not what puts the man at the passer's shoulder either; the block's own density around the ball (ten men in a
+30 x 40 m rectangle that slides to the ball) is the remaining candidate, and the own-third forward share has to be read together with it.
+The rule stays because it is right football (zonal cover in the middle third) and it took tackles down without touching shots.
+
+Final state of this pass (12 matches, three runs on the same seeds): goals 2.5 / 4.0 / 3.4 (the spread is finishing at this sample size), xG 2.8-3.2,
+shots 31-32, shots on target 13, big chances 0.5-0.9 per team, corners 5.5-6.3, tackles 23-24 per team, own goals 0.25.
+
+Still open after this pass, with the mechanism named where it is known:
+- shots 31 against 26 per match and shots on target 12.7 against 7.7: defenders are close to the shooter but not in the lane (0.34 blockers
+  per shot against 0.87, 37% of defenders goal-side against 58%), and through balls run at twice the real rate (4.4 against 2.1 per team), so
+  many shots are taken running at goal with the defence chasing back; the keeper then saves 9 a match (real 5). The box defence that puts
+  bodies on the line of the shot (DEVLOG 2026-10-09, "defenders trail their targets by 3-8 m") is the next mechanism to work on.
+- passes 1.3x and carries 1.45x real, own-third passes 1.9x: see the marking result above; the remaining surplus is the turnover count.
+- corners 6-7 against 11.6: clearances and tackles at the byline (real 4.4 corners a match between them) need defenders who face their own goal.
+- pressures 2x by the engine's count: a defender within 1.7 m once per spell; with the marking change this is the number to re-read.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

@@ -5,54 +5,57 @@ most have `team (0 home, 1 away)`, `player` (id), and `x, y` (pitch metres, 105 
 
 | type | per match | extra fields | notes |
 |---|---|---|---|
-| `pass` | 1235.5 | assist, body_part, difficulty, exec_pressure, gain, height, hold, key_pass, length, lofted, offside_margin, outcome, p_success, progressive, receiver, source, speed, technique, under_pressure, why | Pass attempt. outcome complete|intercepted|deflected|incomplete|out|offside; technique, height, key_pass, assist, p_success/difficulty, why. (body_part=foot/hands/head; height=ground/high; lofted=False/True; outcome=complete/deflected/incomplete/intercepted/offside/out; progressive=False/True; source=goal_kick/short_corner/throw_in; under_pressure=False/True) |
-| `ball_receipt` | 966.0 | outcome, passer |  |
-| `pressure` | 563.8 | counterpress, target | Defender closes within 3 m of the carrier. (counterpress=False/True) |
-| `carry` | 467.7 | distance, duration, under_pressure | Ball carried 4 m or more: start, end, distance, duration. (under_pressure=False/True) |
-| `possession_change` | 268.9 |  | Team gains control from the opposition. |
-| `ball_recovery` | 126.8 |  | Team wins a loose ball from the opposition. |
-| `duel` | 115.2 | duel, outcome, target | Aerial duel won (target = the beaten opponent). (outcome=lost/won) |
-| `block` | 68.4 | deflected, kind, shooter | Defender blocks a shot. (kind=pass/shot) |
-| `ball_out` | 65.4 | last_touch, over | Ball leaves the pitch (over the touchline or goal line) with the last toucher. (over=goal_line/touchline) |
-| `tackle` | 57.2 | outcome, target | Tackle attempt, outcome won|lost. (outcome=lost/won) |
-| `clearance` | 51.5 | aerial_won, body_part, difficulty, exec_pressure, gain, height, hold, length, lofted, offside_margin, outcome, p_success, progressive, receiver, source, speed, technique, under_pressure, why | Defensive clearance (same fields as pass, no intended receiver). (body_part=foot/head; outcome=complete/intercepted/out; progressive=False/True; technique=forward/long_ball) |
-| `throw_in` | 48.8 |  | Throw-in awarded. |
-| `take_on` | 45.2 | outcome, p_success, target, under_pressure, why | Dribble against a defender, outcome won|lost. (outcome=lost/won) |
-| `miscontrol` | 44.0 | under_pressure | Receiver fails to control a pass. (under_pressure=False/True) |
-| `fifty_fifty` | 34.8 | outcome, target | Contested loose ball between two sides: winner and the beaten rival. |
-| `cross` | 30.7 | assist, body_part, delivery, difficulty, exec_pressure, gain, height, hold, key_pass, length, lofted, offside_margin, outcome, p_success, progressive, receiver, source, speed, technique, under_pressure, why | Corner delivery or cross into the box (same fields as pass). (delivery=edge_of_box/far_post/near_post/penalty_spot; outcome=complete/incomplete/intercepted/offside; progressive=False/True; source=corner/free_kick/open_play; technique=backward/forward/long_ball/sideways/switch; under_pressure=False/True) |
-| `shot` | 28.6 | assist, big_chance, body_part, deflected, first_time, freeze_frame, hold, keeper_dive, kind, outcome, placement, speed, under_pressure, why, xg | Shot with xG, outcome goal|saved|off_target|blocked, body_part, first_time, under_pressure, big_chance, freeze_frame of all 22 players, why. (big_chance=False/True; body_part=foot/head; first_time=False/True; keeper_dive=left/right; kind=free_kick_shot/header/penalty/shot; outcome=blocked/disallowed/goal/off_target/saved; placement=centre/right; under_pressure=False/True) |
-| `dribbled_past` | 26.1 | by |  |
-| `foul` | 25.8 | dogso, reason, severity, target | Foul (reason tackle|trip|shirt_pull|handball); player = offender, target = victim; severity 0-1 of the challenge (from behind, at speed, a lunge, a fast man stopped) and whether it denied an obvious goal-scoring opportunity (dogso). (dogso=False/True; reason=handball/shirt_pull/tackle/trip) |
-| `foul_won` | 25.8 | by |  |
-| `interception` | 25.8 |  | Pass cut out in flight. |
-| `free_kick` | 22.3 | direct, distance_to_goal | Direct free kick awarded. (direct=False/True) |
-| `dispossessed` | 19.0 | under_pressure | Carrier loses the ball to a tackle. |
+| `pass` | 1242.8 | assist, body_part, difficulty, exec_pressure, gain, height, hold, key_pass, length, lofted, offside_margin, outcome, p_success, progressive, receiver, source, speed, technique, under_pressure, why | Pass attempt. outcome complete|intercepted|deflected|incomplete|out|offside; technique, height, key_pass, assist, p_success/difficulty, why. (body_part=foot/hands/head; height=ground/high; lofted=False/True; outcome=complete/deflected/incomplete/intercepted/offside/out; progressive=False/True; source=goal_kick/short_corner/throw_in; under_pressure=False/True) |
+| `ball_receipt` | 986.6 | outcome, passer |  |
+| `pressure` | 498.5 | counterpress, target | Defender closes within 3 m of the carrier. (counterpress=False/True) |
+| `carry` | 458.2 | distance, duration, under_pressure | Ball carried 4 m or more: start, end, distance, duration. (under_pressure=False/True) |
+| `possession_change` | 267.8 |  | Team gains control from the opposition. |
+| `ball_recovery` | 129.7 |  | Team wins a loose ball from the opposition. |
+| `block` | 81.3 | deflected, kind, shooter | Defender blocks a shot. (kind=pass/shot) |
+| `ball_out` | 67.8 | last_touch, over | Ball leaves the pitch (over the touchline or goal line) with the last toucher. (over=goal_line/touchline) |
+| `duel` | 65.7 | duel, outcome, target | Aerial duel won (target = the beaten opponent). (outcome=lost/won) |
+| `throw_in` | 50.2 |  | Throw-in awarded. |
+| `tackle` | 46.4 | outcome, target | Tackle attempt, outcome won|lost. (outcome=lost/won) |
+| `take_on` | 42.2 | outcome, p_success, target, under_pressure, why | Dribble against a defender, outcome won|lost. (outcome=lost/won) |
+| `clearance` | 42.1 | aerial_won, body_part, difficulty, exec_pressure, gain, height, hold, length, lofted, offside_margin, outcome, p_success, progressive, receiver, source, speed, technique, under_pressure, why | Defensive clearance (same fields as pass, no intended receiver). (body_part=foot/head; outcome=complete/deflected/incomplete/intercepted/out; progressive=False/True; technique=backward/forward/long_ball/sideways) |
+| `miscontrol` | 40.8 | under_pressure | Receiver fails to control a pass. (under_pressure=False/True) |
+| `cross` | 35.9 | assist, body_part, delivery, difficulty, exec_pressure, gain, height, hold, key_pass, length, lofted, offside_margin, outcome, p_success, progressive, receiver, source, speed, technique, under_pressure, why | Corner delivery or cross into the box (same fields as pass). (delivery=edge_of_box/far_post/near_post/penalty_spot; outcome=complete/deflected/incomplete/intercepted/offside; progressive=False/True; source=corner/free_kick/open_play; technique=backward/forward/long_ball/sideways/switch; under_pressure=False/True) |
+| `shot` | 32.2 | assist, big_chance, body_part, deflected, first_time, freeze_frame, hold, keeper_dive, kind, outcome, placement, speed, under_pressure, why, xg | Shot with xG, outcome goal|saved|off_target|blocked, body_part, first_time, under_pressure, big_chance, freeze_frame of all 22 players, why. (big_chance=False/True; body_part=foot/head; first_time=False/True; keeper_dive=left/right; kind=free_kick_shot/header/penalty/shot; outcome=blocked/disallowed/goal/off_target/saved; placement=centre/left/right; under_pressure=False/True) |
+| `fifty_fifty` | 29.0 | outcome, target | Contested loose ball between two sides: winner and the beaten rival. |
+| `interception` | 27.1 |  | Pass cut out in flight. |
+| `dribbled_past` | 25.1 | by |  |
+| `foul` | 19.9 | dogso, reason, severity, target | Foul (reason tackle|trip|shirt_pull|handball); player = offender, target = victim; severity 0-1 of the challenge (from behind, at speed, a lunge, a fast man stopped) and whether it denied an obvious goal-scoring opportunity (dogso). (dogso=False/True; reason=handball/shirt_pull/tackle/trip) |
+| `foul_won` | 19.9 | by |  |
+| `free_kick` | 17.3 | direct, distance_to_goal | Direct free kick awarded. (direct=False/True) |
+| `dispossessed` | 14.7 | under_pressure | Carrier loses the ball to a tackle. |
 | `goal_kick` | 14.6 |  | Goal kick awarded. |
-| `save` | 9.0 | outcome, penalty, save_type, technique | Goalkeeper save. (outcome=corner/held/rebound; save_type=catch/parry/tip_over; technique=dive/stand) |
-| `substitution` | 8.7 | off, off_name, off_stamina, on, on_name, on_role, reason, slot | Substitution: off, on, reason (fresh legs|chasing the game|protecting the lead|injury|keeper sent off), stamina of the departing player. (on_role=CB/CM/DM/FB/ST/WG; reason=chasing the game/fresh legs/injury/protecting the lead) |
+| `save` | 9.9 | outcome, penalty, save_type, technique | Goalkeeper save. (outcome=corner/held/rebound; penalty=False/True; save_type=catch/parry/tip_over; technique=dive/stand) |
+| `keeper_claim` | 9.1 | technique | Keeper claims a cross or collects a ball played into his box. |
+| `tactic_change` | 8.9 | changes, reason | Manager adjusts tactics: reason and the changed dials [old, new]. (reason=chasing the game/man advantage/man down/protecting the lead/reset) |
+| `substitution` | 8.6 | off, off_name, off_stamina, on, on_name, on_role, reason, slot | Substitution: off, on, reason (fresh legs|chasing the game|protecting the lead|injury|keeper sent off), stamina of the departing player. (on_role=CB/CM/DM/FB/ST/WG; reason=chasing the game/fresh legs/injury/protecting the lead) |
 | `error` | 8.2 | delay, leads_to, shooter | Unforced mistake in the own half that leads to a shot or goal (leads_to, delay in seconds). (leads_to=goal/shot) |
-| `keeper_claim` | 7.8 | technique | Keeper claims a cross or collects a ball played into his box. |
-| `tactic_change` | 6.0 | changes, reason | Manager adjusts tactics: reason and the changed dials [old, new]. (reason=chasing the game/man advantage/man down/protecting the lead/reset) |
-| `offside` | 5.1 | line_x, passer | Offside flag: receiver, passer, offside line x. |
-| `corner` | 4.2 |  | Corner awarded. |
-| `card` | 3.8 | card, reason | yellow|second_yellow|red with the reason (the foul, dissent after a decision against the side, time wasting over a late restart). (card=red/yellow; reason=dissent/handball/shirt_pull/tackle/time_wasting/trip) |
-| `advantage` | 3.3 |  | Referee plays advantage after a foul; the fouled side keeps the ball. |
+| `corner` | 5.6 |  | Corner awarded. |
+| `offside` | 4.1 | line_x, passer | Offside flag: receiver, passer, offside line x. |
+| `goal` | 3.6 | assist, away, body_part, deflected, home, xg | Goal with scorer, assist, xG, running score (every goal follows a shot event, a deflected one carries deflected=True). (body_part=foot/head) |
+| `card` | 3.1 | card, reason | yellow|second_yellow|red with the reason (the foul, dissent after a decision against the side, time wasting over a late restart). (card=red/second_yellow/yellow; reason=dissent/shirt_pull/tackle/time_wasting/trip) |
+| `advantage` | 2.3 |  | Referee plays advantage after a foul; the fouled side keeps the ball. |
+| `formation_change` | 2.2 | formation, moves, previous, reason | Manager switches shape: formation, previous, reason (chasing the game|protecting the lead|man down|man advantage) and the role moves. (previous=3-4-3/3-5-2/4-2-3-1/4-3-3/4-4-2; reason=chasing the game/man advantage/man down/protecting the lead) |
 | `lineup` | 2.0 | bench, formation, players, tactics | Starting XI with roles, traits and stars, formation, base tactics, bench. (formation=3-5-2/4-2-3-1/4-3-3/4-4-2) |
 | `half_start` | 2.0 |  | Kick-off of a half. |
 | `kickoff` | 2.0 |  | Start of a half or restart after a goal. |
 | `added_time` | 2.0 | minutes | Announced stoppage time for the half (minutes). |
-| `formation_change` | 2.0 | formation, moves, previous, reason | Manager switches shape: formation, previous, reason (chasing the game|protecting the lead|man down|man advantage) and the role moves. (previous=3-4-3/3-5-2/4-2-3-1/4-3-3/4-4-2; reason=chasing the game/man advantage/man down/protecting the lead) |
-| `goal` | 1.6 | assist, away, body_part, deflected, home, xg | Goal with scorer, assist, xG, running score (every goal follows a shot event, a deflected one carries deflected=True). (body_part=foot/head) |
 | `match_info` | 1.0 | kickoff, referee, venue, weather | Referee (with strictness), venue, attendance, weather, kick-off time. (kickoff=12:30/15:00/17:30/20:00) |
+| `keeper_punch` | 1.0 |  | Keeper punches a cross clear. |
 | `half_end` | 1.0 |  | Half-time whistle. |
 | `full_time` | 1.0 | away, home | Final whistle with the score. |
-| `keeper_punch` | 0.5 |  | Keeper punches a cross clear. |
-| `var_check` | 0.3 | duration, reason | VAR review of a goal (reason, duration). |
-| `keeper_sweep` | 0.2 |  | Keeper comes off his line to clear a ball played in behind. |
-| `goal_disallowed` | 0.2 | reason, xg | Goal ruled out after review. |
+| `injury` | 0.5 | cause, play_on, severity | Injury with severity knock (plays on)|substitution|serious, cause. (cause=foul/tackle; play_on=False/True; severity=knock/substitution) |
+| `own_goal` | 0.4 | away, home, scorer | Deflection into the own net (team = credited side). |
+| `keeper_sweep` | 0.3 |  | Keeper comes off his line to clear a ball played in behind. |
 | `sent_off` | 0.2 | men_left | Player leaves the pitch (men_left). |
 | `penalty` | 0.2 |  | Penalty awarded. |
-| `own_goal` | 0.2 | away, home, scorer | Deflection into the own net (team = credited side). |
+| `play_stopped` | 0.2 | duration, reason | Referee stops play (injury treatment, duration). |
+| `var_check` | 0.2 | duration, reason | VAR review of a goal (reason, duration). |
+| `player_off` | 0.1 | permanent, reason | Player leaves the pitch temporarily for treatment. |
+| `player_on` | 0.1 | reason | Player returns after treatment. |
+| `goal_disallowed` | 0.1 | reason, xg | Goal ruled out after review. |
 | `var_confirmed` | 0.1 |  | Goal stands after review. |
-| `injury` | 0.1 | cause, play_on, severity | Injury with severity knock (plays on)|substitution|serious, cause. |

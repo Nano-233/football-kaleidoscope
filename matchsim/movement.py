@@ -270,7 +270,8 @@ def defend_assign(m, t, zone, urgent, role, P, O, Ov, C, Cv, ci, tc, tgt1, cover
             continue
         v += TP.get("mark_base", 4.)  # somebody is responsible for every dangerous man: the assignment is made whatever the price, if a defender is within reach
         wb = TP.get("ball_side", BALL_SIDE) * float(clip(dl / 20., 0, 1)) * float(clip(dg / TP.get("lean_r", 24.), TP.get("lean_min", .35), 1.))
-        spot = o + Ov[j] * .5 + _unit(_unit(GOAL - o) + wb * _unit(C - o)) * (TP.get("mark_gap", MARK_GAP) + 1.4 * (1 - tc.marking))
+        loose = TP.get("mark_loose", 0.) * float(clip((dg - 25.) / 30., 0, 1))  # tight in and around the box, zonal out in the field: a receiver 55 m from goal is covered from 5-7 m, not marked at a stride (real build-up passers see about 2.5 free men ahead of the ball)
+        spot = o + Ov[j] * .5 + _unit(_unit(GOAL - o) + wb * _unit(C - o)) * (TP.get("mark_gap", MARK_GAP) + 1.4 * (1 - tc.marking) + loose)
         add(spot, v, j, "mark", can_mark & (nrm(P - spot, axis=1) <= TP.get("mark_reach", 19.)))
     # dangerous space nobody covers (pitch-control thinking: a cell is the attackers' if they can get there before any defender; its worth is the expected threat of
     # holding the ball there times the chance the ball gets there). The most valuable uncovered cells become jobs, so the block drops in front of goal and
@@ -662,7 +663,8 @@ def team_targets(m, t):
         op = o + ov * .5  # stand goal-side of where he is going, not where he is
         wb = TP.get("ball_side", BALL_SIDE) * clip(nrm(B - op) / 20., 0, 1)  # marking is goal-side AND ball-side: the further the ball, the more the marker stands on the pass lane
         wb = wb * clip(nrm(op - GOAL, axis=1) / TP.get("lean_r", 24.), TP.get("lean_min", .35), 1.)  # in the box he is between his man and the goal first: that is the shot lane
-        man = op + _unit(_unit(GOAL - op) + wb[:, None] * _unit(B - op)) * (TP.get("mark_gap", MARK_GAP) + 1.4 * (1 - tc.marking))
+        loose = TP.get("mark_loose", 0.) * clip((nrm(op - GOAL, axis=1) - 25.) / 30., 0, 1)  # zonal cover out in the field (see defend_assign)
+        man = op + _unit(_unit(GOAL - op) + wb[:, None] * _unit(B - op)) * (TP.get("mark_gap", MARK_GAP) + 1.4 * (1 - tc.marking) + loose)[:, None]
         gate = clip(1.4 - nrm(zone - o, axis=1) / 22, 0, 1) * tc.marking * ok
         gate = np.where(ok & (o[:, 0] < 20) & (np.abs(o[:, 1] - W / 2) < 22) & (role > GK), np.maximum(gate, TP.get("box_gate", .85)), gate)  # attackers in the box are marked, not watched
         thr = np.exp(-nrm(o - GOAL) / 22)
@@ -692,9 +694,16 @@ def team_targets(m, t):
             d = nrm(P - C, axis=1)
             d[role == GK] = 1e9
             n = 1 + (tc.press > .8)
-            gap = (2.4 + 1.4 * (1 - tc.press) + .15 * cs) * TP.get("jock_k", 1.)
-            tgt1 = C + _unit(gv + FORCE_WIDE * inside) * (gap * (TP.get("shot_gap", .7) if float(nrm(C - GOAL)) < TP.get("shoot_close", 28.) else 1.)) + Cv * .2
             in_range = float(nrm(C - GOAL)) < TP.get("shoot_close", 28.)  # the carrier can shoot: the nearest man, whatever his role, gets tight and stands in the shot lane
+            # Press on a trigger, otherwise show: the nearest man engages (closes to a jockeying gap of 2-4 m) when the carrier can shoot, in the seconds after
+            # a turnover (counter-press), when the carrier has had the ball a while, has his back to goal, is pinned by a touchline, is running at the defence, or
+            # the side presses as a plan; without a trigger he stands off on the line to goal (about 5-6 m, nearer for a pressing side) and screens. Real passers
+            # have an opponent within 5 m on about a fifth of their passes; with a presser sent to every carrier it was three quarters.
+            held_for = m.t - m.ctrl_t
+            engaged = (in_range or m.t < m.trans_until[t] or held_for > TP.get("press_after", 1.2) or m._face_goal(carrier) < .35
+                       or min(C[1], W - C[1]) < 8. or cs > 4. or tc.press > .75)
+            gap = (2.4 + 1.4 * (1 - tc.press) + .15 * cs) * TP.get("jock_k", 1.) if engaged else TP.get("standoff", 5.5) * (1.3 - .6 * tc.press)
+            tgt1 = C + _unit(gv + FORCE_WIDE * inside) * (gap * (TP.get("shot_gap", .7) if in_range else 1.)) + Cv * .2
             if in_range:
                 R = max(R, 12.)
             cover_pt = tgt1 + gv * COVER_GAP + inside * 2.0
@@ -715,7 +724,7 @@ def team_targets(m, t):
             for i in press_ids:
                 g = 11 * t + i  # jockey goal-side; occasionally commit to the tackle
                 danger = clip((.4 * L - C[0]) / (.3 * L), 0, 1)  # defenders commit more as the ball nears their goal
-                if m.t >= m.commit_until[g] and m.rng.random() < (TUNE_COMMIT + .12 * tc.press) * m.mod["commit"][g] * (1 + COMMIT_DANGER * danger) * m.dt:
+                if engaged and m.t >= m.commit_until[g] and m.rng.random() < (TUNE_COMMIT + .12 * tc.press) * m.mod["commit"][g] * (1 + COMMIT_DANGER * danger) * m.dt:
                     m.commit_until[g] = m.t + m.rng.uniform(1., 2.)
                 zone[i] = C + Cv * .2 if m.t < m.commit_until[g] else (m._press_pts[i] if TP.get("assign_on", 1.) else tgt1)
                 urgent[i] = True

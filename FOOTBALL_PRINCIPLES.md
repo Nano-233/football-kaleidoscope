@@ -16,11 +16,11 @@ checking come from real event/freeze-frame data (`scripts/norms.py`, `scripts/no
 | D1 | Stay goal-side of the attacker and the ball; do not be beaten in behind | marker target = attacker position + lead, offset towards own goal; recovery sprint when behind the target | done |
 | D2 | Jockey: approach to 2-3 m, then slow, side-on, back-pedal; do not dive in | presser target on the ball-goal line a fixed gap in front of the carrier; commit only when the touch is heavy | done |
 | D3 | Force the attacker to the side where help is (usually outside, away from goal centre) | presser stands on the inside shoulder, bearing set by lateral position and where cover is | done |
-| D4 | Press on triggers (back pass, poor touch, receiver facing own goal, ball in the air); otherwise hold | trigger terms in the press decision, not constant pressing | done (fresh touch, turn away) |
+| D4 | Press on triggers (back pass, poor touch, receiver facing own goal, ball in the air); otherwise hold | the nearest man engages to a jockeying gap only on a trigger (shooting range, counter-press window, a long hold, back to goal, pinned on a line, running at the defence, a pressing plan); otherwise he stands off 5-6 m on the line to goal and screens | done |
 | D5 | Close the receiver down while the ball travels, so you arrive with it | marker of the intended receiver moves during flight to a point goal-side of the arrival spot | done |
-| D6 | Tackle when the ball is away from the attacker's body or his back is turned, not when he faces you at speed | duel probability from ball distance, attacker heading and defender's closing speed | partial (contact geometry, no heavy-touch model) |
+| D6 | Tackle when the ball is away from the attacker's body or his back is turned, not when he faces you at speed | duel probability from ball distance, attacker heading and defender's closing speed; a booked man goes in less | partial (contact geometry, no heavy-touch model) |
 | D7 | Cover and balance: second defender behind the presser on the inside, third on the far side | slots derived from presser position, ball-goal line and lateral position | done |
-| D8 | Mark tight in the box: goal-side and ball-side so you see ball and man; man-orientated inside, zonal outside | marking gate by distance to goal; ball-side bias | partial |
+| D8 | Mark tight in the box: goal-side and ball-side so you see ball and man; man-orientated inside, zonal outside | marking gate by distance to goal; ball-side bias; the marking gap itself grows with the man's distance from goal (a stride in and around the box, 5-7 m of zonal cover in the middle third and beyond) | done |
 | D9 | Track runners, hand them over when they cross into another defender's zone | marking reassignment on zone crossing (Hungarian refresh) with hysteresis | partial |
 
 ## Defending, the team
@@ -36,7 +36,7 @@ checking come from real event/freeze-frame data (`scripts/norms.py`, `scripts/no
 | D16 | Press as a unit: when one presses, the rest compress and take the nearest receivers | support targets derived from presser position | partial |
 | D17 | Transition: counter-press for a few seconds, the rest recover goal-side | after turnover, nearest players press, others recover at speed | partial |
 | D18 | Rest defence: while attacking keep a screen and 2-3 defenders behind the ball | attacking template keeps minimum cover behind the ball line | partial |
-| D19 | Defend crosses: near post, penalty spot, edge of box for cut-backs, clear wide | box slots from ball and goal geometry | partial |
+| D19 | Defend crosses: near post, penalty spot, edge of box for cut-backs, clear wide | box slots from ball and goal geometry; a cross or clearance still low off the foot is blocked by a man on its line; a hurried clearance goes the way the body faces | partial |
 | D20 | Goalkeeper: on the ball-goal line, narrow the angle one-on-one, sweep behind the line | GK target from ball and goal geometry; comes out to the carrier's shooting point when no defender is there first (time race); smothers the ball at the carrier's feet (gk skill vs dribbling); sweeper trait | done |
 | D21 | Drop and get bodies behind the ball when the box is threatened | box_defence slots | done |
 

@@ -21,10 +21,10 @@ from .movement import _tf, _unit, nrm, clip, XT
 
 DT = 0.2
 # Single tuning table (calibrated by scripts/calibrate.py against real-football norms).
-TUNE = dict(xg_z0=-2.08, xg_d=-.07, xg_a=1.89, xg_h=-.2, xg_b=.72, xg_c=.25, clear_xg=.1, sprint_need=0., dp_on=1., cs0=3.5, cs_k=.9, dp0=120., dp_k=100., dp_tau=450., dp_floor=.15, ft_free=1., wait_on=0., wait_gate=.88, wait_max=8., clear_ev=1., policy_on=1., cal_on=0., cal_ga=.07, cal_gb=.77, cal_la=.18, cal_lb=.38, air_exact=0., carry_prog_xt=1., clear_keep=.4, lazy_thr=.04, tgt_every=2, catch_slack=2.0, catch_t=3.4, blk_a=.60, blk_sig=1.0, blk_lam=10.6, blk_b0=.035, shot_lane_k=1.0, xt_k=0., xt_opp=.6, risk_pow_xt=1.0, fk_cross=.5, head_shot_set=.4, head_set_z=1., head_ref=.08, free_dwell=.5, ball_v0=8.5, ball_v1=.25, read_press=.8, tackle_sel=8., exposed_k=1.2, surv_k=1.0, gk_shoot=1.4, contact_r=1.6, press_len=3.2, close_t=.5, hurry_k=.3, exec_k=2.0, exec_floor=.15, dec_noise=.15, windup_k=.35, hold_sigma=.7, fade_up=2.2, fade_dn=1.4, lazy_k=.6, xg_run=8., own_goal_cone=.0, head_run=4.2, head_rate=2.5, mom_k=.75, carry_v0=.9, carry_v1=.9, cruise_k=0.42, burst_hold=0.4, run_frac=-1., press_dist=1.75, air_base=0.5, head_on=0.28, head_clear=0.5, air_k=0.5, gk_air=0.6, block_base=0.12, block_nb=0.12, ft_shot=0.315, turn_cost=0.55, turn_rate=3.2, face_k=1.05, pot=2.2, relief=1.0, ft_slow=.0, drive=0.1,  cong_k=0.5, risk_pow=2.2, first_touch=3.0, wide_v=0.35, ctrl_marked=0.5, shoot_hold=0.98, shoot_slope=2.05, shoot_ref=0.168, shoot_press=0.56, adv_lin=.6, pack=.04, shoot_min=.12, react=1.84, patience=0.02, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.76, fk_bonus=0.05, long_bonus=0.163, prog_base=0.5, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=0.8, gk_long=.5, box_foul=1., home_edge=.7, shot_cost=1.3, shot_k=3.15, shot_k_dir=5.0,
+TUNE = dict(xg_z0=-.20, xg_d=-.138, xg_a=.779, xg_h=-.946, xg_b=.756, xg_c=.405, clear_xg=.1, sprint_need=0., dp_on=1., cs0=3.5, cs_k=.9, dp0=120., dp_k=100., dp_tau=450., dp_floor=.15, ft_free=1., wait_on=0., wait_gate=.88, wait_max=8., clear_ev=1., policy_on=1., cal_on=0., cal_ga=.07, cal_gb=.77, cal_la=.18, cal_lb=.38, air_exact=0., carry_prog_xt=1., clear_keep=.4, lazy_thr=.04, tgt_every=2, catch_slack=2.0, catch_t=3.4, blk_a=.60, blk_sig=1.0, blk_lam=10.6, blk_b0=.035, shot_lane_k=1.0, xt_k=0., xt_opp=.6, risk_pow_xt=1.0, fk_cross=.5, head_shot_set=.4, head_set_z=1., head_ref=.08, free_dwell=.5, ball_v0=8.5, ball_v1=.25, read_press=.8, tackle_sel=8., exposed_k=1.2, surv_k=1.0, gk_shoot=1.4, contact_r=1.6, press_len=3.2, close_t=.5, hurry_k=.3, exec_k=2.0, exec_floor=.15, dec_noise=.15, windup_k=.35, hold_sigma=.7, fade_up=2.2, fade_dn=1.4, lazy_k=.6, xg_run=8., own_goal_cone=.0, head_run=4.2, head_rate=2.5, mom_k=.75, carry_v0=.9, carry_v1=.9, cruise_k=0.42, burst_hold=0.4, run_frac=-1., press_dist=1.75, air_base=0.5, head_on=0.28, head_clear=0.5, air_k=0.5, gk_air=0.6, block_base=0.12, block_nb=0.12, ft_shot=0.315, turn_cost=0.55, turn_rate=3.2, face_k=1.05, pot=2.2, relief=1.0, ft_slow=.0, drive=0.1,  cong_k=0.5, risk_pow=2.2, first_touch=3.0, wide_v=0.35, ctrl_marked=0.5, shoot_hold=0.98, shoot_slope=2.05, shoot_ref=0.168, shoot_press=0.56, adv_lin=.6, pack=.04, shoot_min=.12, react=1.84, patience=0.02, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.76, fk_bonus=0.05, long_bonus=0.163, prog_base=0.5, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=0.8, gk_long=.5, box_foul=1., home_edge=.7, shot_cost=1.3, shot_k=3.15, shot_k_dir=5.0,
             carry_base=0.22, carry_prog=.2, carry_streak=.3, dwell_base=0.9, dwell_shape=2.4, dwell_scale=1.61,
             tackle_rate=.95, wide_error=3.2, off_miss=.2, off_mult=.02, off_lag=.25, head_keep=.7, safe_out_x=.16, card_thr=.56, adv_sev=.14, clear_dir_sd=1.2, rec_sprint=3., fk_xg=1., fk_shot_k=.5, fk_shot_d=27.2, foul_risk=10., box_avoid=.2, tackle_risk=2.2, tackle_danger=.4,
-            dissent_p=.008, waste_s=9., waste_book=11., head_dir_sd=.5, duel_r=1.2, duel_w=.7, foul_base=.21, second_thr=.25, booked_care=.25, gk_hold0=2.5, gk_hold1=6.)
+            dissent_p=.008, waste_s=9., waste_book=11., head_dir_sd=.5, duel_r=1.2, duel_w=.7, foul_base=.21, second_thr=.25, booked_care=.25, block_z=1.7, ttc_release=.9, press_after=1.2, standoff=5.5, ft_xg=.08, chance_xg0=.09, xgd_z0=-2.08, xgd_d=-.07, xgd_a=1.89, xgd_h=-.2, xgd_b=.72, xgd_c=.25, mark_loose=4.5, gk_hold0=2.5, gk_hold1=6.)
 TUNE.update(burst_gain=-1e9, block_v=.8, push_k=1., pol_space=0., follow_poss=.2, pin_from=.35, recover_on=1., cover_margin=3., threat_depth=.34, threat_ball=25., mark_base=4., mark_reach=19., layer_bias=.9, space_cover=0., space_k=100., n_space=3, assign_on=1., press_v=7., cover_v=3.5, mark_k=100., lane_job_k=35., post_v=5., space_v=3., job_hyst=1.5, press_hyst=2.0, templ_w=.9, busy_gate=.6, flat_gate=.6, run_gate=.95, mark_sprint_d=3.0, box_start=38., wn_end=42., lag_k=1., drop_k=1., mark_gap=1.1, box_gate=.85, dang_far=38., dang_gate=.85, react_def=.35, close_gap=1.5, jock_k=1., press_k=1., open_w=1., lane_w=1., slot_gate=.5, lean_r=24., lean_min=.35, shoot_close=28., shot_gap=.7, jobs_on=1., jobs_d=38., jobs_att=40., jobs_w=.9, job_mark=3., job_lane=12., job_post=1.4, job_wv=4., way_pen=0., way_r=2.2, run_k=1., ball_side=.9, hover=.3)  # block shape (read by movement.py through TP)
 TUNE.update(stop_a=15., touch_sd=.9, pin_d=4., pin_p=.6, pin_r=1.5, slide_c=1., lat_def_c=1., fb_up=6., far_tuck=1., tackle_dir_sd=.5, tackle_v0=2.5, tackle_v1=6., body_r=.5, contact_mu=.35, contact_e=.3, loose_k=.07, loose_v0=5., touch_r=.9, take_tau=.35, take_k=.04, take_v0=10.)  # a player's body as the ball meets it: radius with a leg out (m), friction that takes pace off a glancing ball, how much a head-on ball comes back
 movement.TP = TUNE
@@ -265,11 +265,15 @@ class Match:
         bj[m] = TUNE["blk_a"] * np.exp(-(np.abs(off[m]) / TUNE["blk_sig"]) ** 2) * np.exp(-al[m] / TUNE["blk_lam"])
         return bj, al, off
 
-    def _xg(s, C, defenders, header=False):
+    def _xg(s, C, defenders, header=False, decide=False):
+        """Chance of a goal from C against these defenders. decide=False: the xG model (maximum-likelihood fit to real open-play shots with freeze frames,
+        scripts/fit_xg.py), used for the outcome of a shot and in every event. decide=True: the shooter's own reckoning of the position, the earlier
+        flatter formula the shooting gates (shoot_ref, clear_xg, head_ref, ...) were fitted to real shot shares with; the two scales are not mixed."""
+        k = "xgd_" if decide else "xg_"
         dx, dy = L - C[0], C[1] - W / 2
         d = np.hypot(dx, dy)
         ang = abs(np.arctan2(W / 2 + GOAL_HALF - C[1], dx) - np.arctan2(W / 2 - GOAL_HALF - C[1], dx))
-        z = TUNE["xg_z0"] + TUNE["xg_d"] * d + TUNE["xg_a"] * ang + (TUNE["xg_h"] if header else 0)  # fitted to real open-play shots with freeze frames (scripts/fit_xg.py)
+        z = TUNE[k + "z0"] + TUNE[k + "d"] * d + TUNE[k + "a"] * ang + (TUNE[k + "h"] if header else 0)
         a, b = np.array([L, W / 2 - GOAL_HALF]), np.array([L, W / 2 + GOAL_HALF])
         cr = lambda p, q, r: (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
         nb = 0
@@ -280,9 +284,9 @@ class Match:
             s1, s2, s3 = cr(C, a, o), cr(a, b, o), cr(b, C, o)
             if (s1 >= 0 and s2 >= 0 and s3 >= 0) or (s1 <= 0 and s2 <= 0 and s3 <= 0):
                 nb += 1
-        odds = np.exp(z) * TUNE["xg_b"] ** nb
+        odds = np.exp(z) * TUNE[k + "b"] ** nb
         if len(defenders):  # a defender breathing down his neck: closing-down matters as well as bodies in the way
-            odds *= (1. - TUNE["xg_c"]) + TUNE["xg_c"] * float(min(1., np.min(np.hypot(*(np.asarray(defenders) - C).T)) / 3.))
+            odds *= (1. - TUNE[k + "c"]) + TUNE[k + "c"] * float(min(1., np.min(np.hypot(*(np.asarray(defenders) - C).T)) / 3.))
         return float(odds / (1 + odds)), nb
 
     # ------------------------------------------------------------------ set pieces / restarts
@@ -562,10 +566,10 @@ class Match:
         xa = f(s.pos[i])[0]
         ft = float(clip((xa - .62 * L) / (.2 * L), 0, 1))  # the final third is played more carefully: more look-ups, fewer first-time balls
         react = TUNE["react"] * (1.4 - .015 * (s.attr["composure"][i] + s.attr["vision"][i])) * (1 - .2 * pr) * (1 + TUNE["free_dwell"] * (1 - pr)) * (1 + TUNE["ft_slow"] * ft)  # with nobody near he takes his time (looks up, shows for it, passes it back and forth); pressure does not make a real player hold it any shorter
-        xg_here, _ = s._xg(f(s.pos[i]), [])
-        if TUNE["clear_xg"] > 0 and s.role[i] > 0 and s._face_goal(i) > .4 and s._xg(f(s.pos[i]), f(s.pos[s._opp(t)])[1:])[0] >= TUNE["clear_xg"]:
+        xg_here, _ = s._xg(f(s.pos[i]), [], decide=True)
+        if TUNE["clear_xg"] > 0 and s.role[i] > 0 and s._face_goal(i) > .4 and s._xg(f(s.pos[i]), f(s.pos[s._opp(t)])[1:], decide=True)[0] >= TUNE["clear_xg"]:
             return float(s.rng.uniform(.05, .3))  # in front of goal with the defenders still out of the lane: he does not wait
-        if xg_here > .08 and s.role[i] > 0 and s._face_goal(i) > .55 and s.rng.random() < TUNE["ft_shot"] * (TUNE["ft_free"] + (1. - TUNE["ft_free"]) * pr):  # in front of goal, facing it and the ball sits right: hit it first time (otherwise he takes a touch first)
+        if xg_here > TUNE["ft_xg"] and s.role[i] > 0 and s._face_goal(i) > .55 and s.rng.random() < TUNE["ft_shot"] * (TUNE["ft_free"] + (1. - TUNE["ft_free"]) * pr):  # in front of goal, facing it and the ball sits right: hit it first time (otherwise he takes a touch first)
             return float(s.rng.uniform(.05, .2))
         if s.rng.random() < clip(.2 + .15 * pr + .02 * (s.attr["passing"][i] - 10), 0, .8) * s.first_time_ok * (1 - TUNE["ft_slow"] * .5 * ft):
             return float(s.rng.uniform(.05, .22))  # one touch
@@ -655,7 +659,7 @@ class Match:
         s.last_touch = i
         s.recent[i] += 1.
         s.ctrl_t = s.t
-        s.chance_xg, s.chance_t = .09, s.t  # only a real chance (about .12 and better) restarts the clock below
+        s.chance_xg, s.chance_t = TUNE["chance_xg0"], s.t  # only a real chance (about 1.3x this and better) restarts the clock below
         if s.gk_hands:  # ball in the keeper's hands: he holds it a few seconds, looks up and distributes; nobody can take it off him
             s.next_dec = s.t + float(s.rng.uniform(TUNE["gk_hold0"], TUNE["gk_hold1"]))
             s.protect_until = s.next_dec + 1.
@@ -797,8 +801,11 @@ class Match:
                     s.block_until[o] = s.t + 1.2
                 else:
                     s.emit("tackle", player=o, pos=s.pos[c], target=s.ids[c], outcome="lost")
-        if s.t >= s.protect_until and s.next_dec > s.t + .3 and s._exec_pressure(c) > TUNE["read_press"]:  # he sees the man coming and does not wait for the dwell to run out
-            s.next_dec = s.t + .3
+        if s.t >= s.protect_until and s.next_dec > s.t + .3 and not s.gk_hands:
+            clos_ = -((s.vel[opp] - s.vel[c]) * rel).sum(1) / np.maximum(d, 1e-6)  # how fast each opponent is closing on him
+            ttc_ = np.where((clos_ > .5) & (s.role[opp] > 0), (d - 1.2) / np.maximum(clos_, .5), 9.)  # seconds until the nearest closing man is on the ball
+            if ttc_.min() < TUNE["ttc_release"] or s._exec_pressure(c) > TUNE["read_press"]:  # he sees the man coming and plays it before contact instead of waiting out his dwell
+                s.next_dec = s.t + min(.3, max(.15, float(ttc_.min()) - .4))
         if s.t >= s.next_dec:
             s._decide()
 
@@ -1094,7 +1101,9 @@ class Match:
         dg = np.hypot(L - C[0], W / 2 - C[1])
         if dg < 35 + s.mod["range"][c] and rk in (None, "free_kick"):
             xg, nb = s._xg(C, O[s.role[s._opp(t)] > 0])
+            xg_d, _ = s._xg(C, O[s.role[s._opp(t)] > 0], decide=True)  # the same position as the shooter reckons it (the gate's scale)
             xg = xg * (.4 + .6 * fg) if rk is None else xg  # a shot with his back to goal is a turn-and-hit: poor
+            xg_d = xg_d * (.4 + .6 * fg) if rk is None else xg_d
             if rk == "free_kick":  # a set ball over the wall: no open-play blockers, specialists bend it round
                 xg, _ = s._xg(C, [])
                 xg = float(clip(xg * TUNE["fk_xg"] * (1 + .25 * s.mod["fk"][c] + .02 * (a["finishing"][c] - 10)), 0, .5))
@@ -1103,7 +1112,7 @@ class Match:
             if rk is None and s.role[c] > 0:
                 # willingness to shoot follows where he is (a clean-look xG from distance and angle), not whether a defender happens to be in the way:
                 # real shooters take it through traffic (about two defenders in the shot triangle) and the defence blocks a third of them
-                xg0, _ = s._xg(C, [])
+                xg0, _ = s._xg(C, [], decide=True)
                 gk_d = float(nrm(O[0] - C))
                 gk_close = bool(O[0][0] > C[0] and gk_d < 13.)  # the keeper is coming out at him: this is the moment, whatever the clock says
                 gk_prox = float(clip((13. - gk_d) / 7., 0, 1)) * gk_close
@@ -1111,7 +1120,7 @@ class Match:
                     s.chance_xg, s.chance_t = xg0, s.t
                 p_lane = s._lane_block(C, O[s.role[s._opp(t)] > 0])  # a man in the way of the shot is a reason not to shoot, however good the position
                 z = TUNE["shoot_slope"] * np.log(xg0 * (1. - p_lane) ** TUNE["shot_lane_k"] / TUNE["shoot_ref"]) + 1.5 * np.log(SHOT_PROP[s.role[c]]) + 1.2 * (tc.shoot - .5) + np.log(s.mod["shot"][c]) + TUNE["shoot_press"] * pr - TUNE["shoot_hold"] * (min(s.t - s.chance_t, .6) if gk_close else s.t - s.chance_t) + TUNE["gk_shoot"] * gk_prox + TUNE["face_k"] * 2. * (fg - .5)  # the chance is taken early: a player who keeps carrying has passed it up
-                if TUNE["clear_xg"] > 0 and xg >= TUNE["clear_xg"]:  # a clear chance is taken: the only reason not to shoot is a team-mate with a better one (the pass has to get there and he has to score)
+                if TUNE["clear_xg"] > 0 and xg_d >= TUNE["clear_xg"]:  # a clear chance is taken: the only reason not to shoot is a team-mate with a better one (the pass has to get there and he has to score)
                     take = best_mate <= xg
                 else:
                     take = bool(s.rng.random() < sig(z)) and best_mate < 1.5 * xg
@@ -1291,10 +1300,26 @@ class Match:
         if hands or source == "throw_in":
             spd, lofted = min(spd, 15. if hands else 13.), False
         pe = s._exec_pressure(c)
-        if kind == "clearance":  # a hurried clearance is hit anywhere: the angle of the kick wanders with the pressure, so some go behind or wide (never a full turn: a sliced ball goes 50-60 degrees off at most)
+        if kind == "clearance":
+            # A hurried clearance goes the way the body faces: a defender pressed with his back to the play cannot turn and hit it up the pitch, he
+            # hooks it the way he is facing (behind for a corner, square, out for a throw); with time he turns and clears where he wants. The angle
+            # of the kick also wanders with the pressure (never a full turn: a sliced ball goes 50-60 degrees off at most). Nobody hits it at his own
+            # net: a direction into the goal mouth is swung to the near side of the posts.
+            want = _unit(aim - start)
+            al_c = float(clip((s.head[c] @ want + 1.) / 2., 0, 1))  # 1 = facing where he wants it
+            w_c = pe * (1. - al_c)
+            dir_c = _unit(want * (1. - w_c) + s.head[c] * w_c)
             ang_c = float(clip(s.rng.normal(0, TUNE["clear_dir_sd"] * pe * .6), -1.0, 1.0))
-            v_c = aim - start
-            aim = start + np.array([v_c[0] * np.cos(ang_c) - v_c[1] * np.sin(ang_c), v_c[0] * np.sin(ang_c) + v_c[1] * np.cos(ang_c)])
+            dir_c = np.array([dir_c[0] * np.cos(ang_c) - dir_c[1] * np.sin(ang_c), dir_c[0] * np.sin(ang_c) + dir_c[1] * np.cos(ang_c)])  # the slice, then the one thing he never does
+            own_g = np.array([0. if t == 0 else L, W / 2])
+            to_post = [np.array([own_g[0], W / 2 - GOAL_HALF]) - start, np.array([own_g[0], W / 2 + GOAL_HALF]) - start]
+            a_lo, a_hi = sorted(float(np.arctan2(v[1], v[0])) for v in to_post)
+            a_c = float(np.arctan2(dir_c[1], dir_c[0]))
+            if float(nrm(own_g - start)) < 30. and a_hi - a_lo < np.pi and a_lo - .35 < a_c < a_hi + .35:  # the final direction points into his own goal mouth: swung to the near side of the posts
+                a_c = a_lo - .35 if a_c - a_lo < a_hi - a_c else a_hi + .35
+                dir_c = np.array([np.cos(a_c), np.sin(a_c)])
+            dist_c = float(nrm(aim - start)) * (1. - .5 * w_c)  # a hooked ball does not travel as far
+            aim = start + dir_c * dist_c
         al_p = float((1 + s.head[c] @ _unit(aim - start)) / 2)  # 1 = passing the way he faces
         sg = (.5 + .05 * d) * (TUNE["pass_sigma"] * (1 - .0353 * s.attr["passing"][c])) * s._exec_scale(pe) * (1.8 if lofted else 1) * sigma_scale * (1 + .5 * (1 - al_p) * (.4 + .6 * pe))  # with time he turns his body and sets the pass
         sg *= s.rain
@@ -1713,6 +1738,26 @@ class Match:
                     d_m = _unit(ab)
                     return s._loose_ball(np.array([d_m[0] * np.cos(a_m) - d_m[1] * np.sin(a_m), d_m[0] * np.sin(a_m) + d_m[1] * np.cos(a_m)]) * s.rng.uniform(2, 6))
                 s.block_until[i] = s.t + .4
+        elif f["kind"] == "lofted":
+            z = s._ball_z()
+            if z < TUNE["block_z"]:  # still low enough for a leg or a body: a defender on the line of the kick, a stride from the kicker, blocks it (a cross into the full-back, a charged-down clearance)
+                ab = b - a0
+                sp = clip(((s.pos - a0) @ ab) / max(ab @ ab, 1e-9), 0, 1)
+                q = a0 + sp[:, None] * ab
+                d = nrm(s.pos - q, axis=1)
+                ok = (np.arange(22) // 11 != f["team"]) & (d < 1.0) & (s.block_until <= s.t) & (s.role > 0)
+                for i in np.nonzero(ok)[0][np.argsort(sp[ok])]:
+                    seen = float((1 + s.head[i] @ _unit(f["start"] - s.pos[i])) / 2)  # facing the kicker
+                    p = float(clip(TUNE["intercept"] + .02 * (s.attr["positioning"][i] - 10), .15, .9)) * (.75 + .25 * seen) * (1. - z / TUNE["block_z"])  # a rising ball is harder to get in front of
+                    s.block_until[i] = s.t + .4
+                    if s.rng.random() < p:
+                        s.ball = q[i]
+                        pp = s.pending_pass
+                        if pp is not None:
+                            pp["outcome"], s.pending_pass = "deflected", None
+                            s.emit("block", player=i, pos=q[i], shooter=pp["player"], kind="pass", deflected=True)
+                        s.last_touch = i
+                        return s._loose_ball(s._body_hit(i, q[i], s.ball_v.copy()))
         if not (0 <= b[0] <= L and 0 <= b[1] <= W) and f["kind"] != "shot":
             return s._out(b)
         if u >= 1:
@@ -1799,7 +1844,8 @@ class Match:
                 C = pt_t
                 O = _tf(s.pos[s._opp(t)]) if t else s.pos[s._opp(t)]
                 xg, nb = s._xg(C, O[s.role[s._opp(t)] > 0], header=True)
-                if s.rng.random() < float(sig(TUNE["shoot_slope"] * np.log(max(xg, 1e-3) / TUNE["head_ref"]) + (TUNE["head_set_z"] if f.get("src") in ("corner", "free_kick") else 0.))):  # he heads at goal when the chance is worth it, by the same reckoning as a shot with the feet
+                xg_d, _ = s._xg(C, O[s.role[s._opp(t)] > 0], header=True, decide=True)
+                if s.rng.random() < float(sig(TUNE["shoot_slope"] * np.log(max(xg_d, 1e-3) / TUNE["head_ref"]) + (TUNE["head_set_z"] if f.get("src") in ("corner", "free_kick") else 0.))):  # he heads at goal when the chance is worth it, by the same reckoning as a shot with the feet
                     s._gain_control(i, pt)
                     s.ball = pt.copy()
                     return s._shoot(i, C, xg * .9, nb, kind="header")
