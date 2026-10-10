@@ -25,7 +25,7 @@ TUNE = dict(xg_z0=-2.08, xg_d=-.07, xg_a=1.89, xg_h=-.2, xg_b=.72, xg_c=.25, cle
             carry_base=0.22, carry_prog=.2, carry_streak=.3, dwell_base=0.9, dwell_shape=2.4, dwell_scale=1.61,
             tackle_rate=1.2, wide_error=3.2, off_miss=.2, off_mult=.02, off_lag=.25, head_keep=.7, safe_out_x=.12, card_thr=.85, adv_sev=.14, clear_dir_sd=1.2, rec_sprint=3., fk_xg=1., fk_shot_k=.5, fk_shot_d=27.2, foul_risk=6., box_avoid=.2, tackle_risk=2.2, tackle_danger=.7)
 TUNE.update(burst_gain=-1e9, block_v=.8, push_k=1., pol_space=0., follow_poss=.2, pin_from=.35, recover_on=1., cover_margin=3., threat_depth=.34, threat_ball=25., mark_base=4., mark_reach=19., layer_bias=.9, space_cover=0., space_k=100., n_space=3, assign_on=1., press_v=7., cover_v=3.5, mark_k=100., lane_job_k=35., post_v=5., space_v=3., job_hyst=1.5, press_hyst=2.0, templ_w=.9, busy_gate=.6, flat_gate=.6, run_gate=.95, mark_sprint_d=3.0, box_start=38., wn_end=42., lag_k=1., drop_k=1., mark_gap=1.1, box_gate=.85, dang_far=38., dang_gate=.85, react_def=.35, close_gap=1.5, jock_k=1., press_k=1., open_w=1., lane_w=1., slot_gate=.5, lean_r=24., lean_min=.35, shoot_close=28., shot_gap=.7, jobs_on=1., jobs_d=38., jobs_att=40., jobs_w=.9, job_mark=3., job_lane=12., job_post=1.4, job_wv=4., way_pen=0., way_r=2.2, run_k=1., ball_side=.9, hover=.3)  # block shape (read by movement.py through TP)
-TUNE.update(body_r=.5, contact_mu=.35, contact_e=.3, loose_k=.07, loose_v0=5., touch_r=.9, take_tau=.35, take_k=.04, take_v0=10.)  # a player's body as the ball meets it: radius with a leg out (m), friction that takes pace off a glancing ball, how much a head-on ball comes back
+TUNE.update(tackle_dir_sd=.5, tackle_v0=2.5, tackle_v1=6., body_r=.5, contact_mu=.35, contact_e=.3, loose_k=.07, loose_v0=5., touch_r=.9, take_tau=.35, take_k=.04, take_v0=10.)  # a player's body as the ball meets it: radius with a leg out (m), friction that takes pace off a glancing ball, how much a head-on ball comes back
 movement.TP = TUNE
 sig = lambda x: 1 / (1 + np.exp(-x))
 
@@ -657,6 +657,13 @@ class Match:
         vy = -sp * sn * cs * ((1. - mu) + e)
         return d * vx + left * vy
 
+    def _tackle_ball(s, o):
+        """The ball after a tackle won by o: he gets his foot through it, so it goes off him, from his body through the ball's spot, a few metres and not quite straight.
+        A winger tackled from the inside is sent towards the touchline."""
+        d = _unit(s.ball - s.pos[o])
+        a = float(s.rng.normal(0, TUNE["tackle_dir_sd"]))
+        return np.array([d[0] * np.cos(a) - d[1] * np.sin(a), d[0] * np.sin(a) + d[1] * np.cos(a)]) * float(s.rng.uniform(TUNE["tackle_v0"], TUNE["tackle_v1"]))
+
     def _loose_ball(s, v):
         s._end_spell()
         s.state, s.poss, s.carrier, s.flight = "loose", -1, -1, None
@@ -739,7 +746,7 @@ class Match:
                             s._injury(c, "tackle")
                         s.block_until[c] = s.t + .8
                         s.last_touch = o
-                        s._loose_ball(_unit(s.vel[o] + s.rng.normal(0, 1, 2)) * 2.5)
+                        s._loose_ball(s._tackle_ball(o))
                     return
                 if front[ia] > .7 and driving:  # he was running at a man and got past him: a take-on
                     s.emit("take_on", player=c, pos=s.pos[c], target=s.ids[o], outcome="won", p_success=1 - float(p_win))
@@ -797,7 +804,7 @@ class Match:
                 return s._set_dead("penalty", t, s._penalty_spot(t), 45 + dur)
             s.block_until[c] = s.t + .8
             s.last_touch = o
-            return s._loose_ball(_unit(s.vel[o] + s.rng.normal(0, 1, 2)) * 2.5)
+            return s._loose_ball(s._tackle_ball(o))
         reason = str(s.rng.choice(["tackle", "trip", "shirt_pull", "handball"], p=[.55, .2, .2, .05]))
         s.emit("foul", player=o, pos=s.pos[c], target=s.ids[c], reason=reason)
         s.emit("foul_won", player=c, pos=s.pos[c], by=s.ids[o])
@@ -1175,7 +1182,7 @@ class Match:
                     s.emit("tackle", player=o, pos=s.pos[c], target=s.ids[c], outcome="won")
                     s.block_until[c] = s.t + .8
                     s.last_touch = o
-                    return s._loose_ball(_unit(s.vel[o] + s.rng.normal(0, 1, 2)) * 2.5)
+                    return s._loose_ball(s._tackle_ball(o))
                 s.block_until[o] = s.t + 1.2
             s.carry_tgt = f(cpos)
             s.carry_dir = _unit(f(cpos) - s.pos[c])
