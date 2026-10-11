@@ -1081,6 +1081,33 @@ defenders' last-second dash and the deeper line opened the space in front of it,
 and run it. Open: the midfield's protection of the space in front of the line in the seconds after a pass beats it, and the shot volume that
 follows from it; distance 12.3 km (sprinting 570 m, high-speed 1,400 m against 250-350 and 700).
 
+**The midfield in front of the line.** Traced the same way (the central midfielders' raw target against their position, by ball depth, in a
+full match): the midfield stood a steady 4-5 m short of its own block at every ball depth, level with a ball 25-30 m out, and 5-7 m short
+of its spot in front of the line at the shot. Two causes, each measured alone:
+- its marks: a midfielder assigned to a man standing around the ball was placed 1.1-2.5 m goal-side of him in depth, so the men standing level
+  with the midfield pulled it out of its block by 4-8 m. The zonal-depth rule of the back line is the block's: outside the penalty area a
+  mark fixes where a defender stands across his line, his depth stays the line's, unless the man is running at goal, already goal-side of
+  that line (between the lines, or in behind) or inside the area. Midfield position 28.4 -> 27.2 m with the ball 25-30 m out.
+- its pace: a man flagged urgent ran at need, everyone else at the jog, which is a walk (1.2 m/s); the flag switched on 4-5 m from the spot
+  (a job 4 m away, a recovery 5 m away), so a defender hovered at the threshold, walking below it and running above it, 4-5 m short for
+  good; matching a retreating target (the last line's rule) made no difference to it. A defender has no clock of his own, the ball sets it:
+  the whole side without the ball is paced by need, flagged or not (`def_paced`), far from the ball a long horizon and a walk, near it a run;
+  a forward screening ahead of the ball has no spot the ball is racing him to and keeps the jog. The line now trails its target by 1.5-2 m
+  (from 2-3) and the midfield by 3-4 m (from 4-5), and the midfield is 2.5 m deeper.
+On 12 matches: defenders in the cone of a 10-22 m shot 0.59 -> 0.79 (real 0.87), a man in front of the shooter within 6 m 0.24 -> 0.35, free
+looks 0.51 -> 0.41 (0.46), goal-side of the shooter at 12-20 m 0.31 -> 0.41 (centre-backs 0.41 -> 0.48, full-backs 0.51 -> 0.66, central
+midfielders 0.15 -> 0.32), shots 36 -> 32, on target 15 -> 12.8, pressures 494 -> 450 (in band), xG 2.9, goals 3.5 (finishing noise at this
+size), big chances 0.62 of real; distance 12.3 -> 13.1 km. Pacing only the men whose spot lies between the ball and their goal (a forward
+screening ahead of it keeps the jog, `def_paced` 2) was tried as the stricter reading: no distance saved on 12 matches (13.2 km), and with
+the forwards no longer hustling, attacks reached the box against a set defence every time (cone 0.95, big chances a quarter of real, xG
+per shot 0.07): the whole side is paced.
+A longer clock for the defender (the ball's travel plus the carrier's release and the receiver's first touch, `horizon_min` 1.3 s) was tried
+on top: the cone went to 0.92 (over the real 0.87), big chances halved and the distance did not fall, so the touch stays at 0.8 s. The running
+left over is the defending side's constant motion (3.1 m/s on average out of possession against about 2.5 for the side with the ball): the
+shape's reference point follows the ball at up to 0.8 of a man's top speed (`block_v`), so every pass moves every defender's spot 4-8 m. Held
+to 0.3 of top speed the distance is 12.0 km but the block never reaches the box behind a quick ball (the midfield's target 19 m with the ball
+at 10); 0.5 gives 12.7 km. That is a trade on one number, not a cause, and is left open: what real blocks do per pass needs tracking data.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

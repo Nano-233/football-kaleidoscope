@@ -279,8 +279,8 @@ def defend_assign(m, t, zone, urgent, role, P, O, Ov, C, Cv, ci, tc, tgt1, cover
         loose = TP.get("mark_loose", 0.) * float(clip((dg - 25.) / 30., 0, 1))  # tight in and around the box, zonal out in the field: a receiver 55 m from goal is covered from 5-7 m, not marked at a stride (real build-up passers see about 2.5 free men ahead of the ball)
         lead_j = .5 + TP.get("run_lead_t", .7) * run  # a man running at goal is covered where he will be in a second, not half a second: the marker goes with the run instead of trailing it
         spot = o + Ov[j] * lead_j + _unit(_unit(GOAL - o) + wb * _unit(C - o)) * (TP.get("mark_gap", MARK_GAP) + 1.4 * (1 - tc.marking) + loose)
-        # outside the penalty area the back line is zonal in depth (see the marking blend): a mark there sets the defender's place across the line, his depth
-        # stays the line's, unless the man is running at goal or already goal-side of the line
+        # outside the penalty area the block is zonal in depth (see the marking blend): a mark there sets the defender's place across his line, his depth
+        # stays the line's, unless the man is running at goal or already goal-side of that line
         dfree = not (o[0] < 16.5 + 1.5 and abs(o[1] - W / 2) < 20.16 + 1.5) and run < .3
         add(spot, v, j, "mark", can_mark & ((nrm(P - spot, axis=1) <= TP.get("mark_reach", 19.)) | (m.job_prev[t] == j)), dfree)  # his marker of last time is never out of reach of him
     # dangerous space nobody covers (pitch-control thinking: a cell is the attackers' if they can get there before any defender; its worth is the expected threat of
@@ -342,7 +342,7 @@ def defend_assign(m, t, zone, urgent, role, P, O, Ov, C, Cv, ci, tc, tgt1, cover
             zone[i] = jobs[k_]; urgent[i] = True
         else:
             w = TP.get("jobs_w", .9)
-            if depth_free[k_] and role[i] in (CB, FB) and jobs[k_][0] > zone[i, 0] - 1.:  # a back-line man on a mark outside the area: across only, the line keeps his depth
+            if depth_free[k_] and jobs[k_][0] > zone[i, 0] - 1.:  # a mark outside the area on a man not goal-side of the defender's line: across only, the block keeps his depth
                 zone[i, 1] = zone[i, 1] * (1 - w) + jobs[k_][1] * w
             else:
                 zone[i] = zone[i] * (1 - w) + jobs[k_] * w
@@ -703,14 +703,15 @@ def team_targets(m, t):
         ovg = (ov * _unit(GOAL - o)).sum(1)  # a man running at goal is tracked goal-side first, the zone second
         g_run = np.where(ok & (role > GK) & (nrm(o - GOAL, axis=1) < 45.), TP.get("run_gate", .95) * clip((ovg - 2.5) / 2.5, 0, 1), 0.)
         gate = np.maximum(gate, g_run)
-        # outside the penalty area the back line is zonal in depth: it holds its line and man-orients across it; a man standing on its shoulder is covered
-        # level, not from two metres behind. With depth following the man, the striker stood on the last defender's shoulder and the defender stood behind
-        # the striker, and the pair drifted out together: the line stood 3-4 m higher than its own target with the ball 20-30 m out. A runner at goal and a
-        # man inside the area are still tracked in depth
-        back_ = (role == CB) | (role == FB)
+        # outside the penalty area a block is zonal in depth and man-oriented across it: a defender holds his line's depth and shifts across to his man; a
+        # man standing on the back line's shoulder is covered level, not from two metres behind, and a midfielder screens a man standing level with him
+        # rather than stepping out to his back. With depth following the man, the striker stood on the last defender's shoulder and the defender stood
+        # behind the striker, and the pair drifted out together (the line 3-4 m higher than its own target with the ball 20-30 m out); the midfield was
+        # pulled 4-8 m out of its block onto men standing around the ball and arrived late in front of the line. A runner at goal, a man already
+        # goal-side of the defender's line (between the lines, or in behind) and a man inside the area are still tracked in depth
         in_area = ok & (o[:, 0] < 16.5 + 1.5) & (np.abs(o[:, 1] - W / 2) < 20.16 + 1.5)
-        beyond = ok & (op[:, 0] < zone[:, 0] - 1.)  # a man already goal-side of the line is gone with (never beaten in behind)
-        gate_x = np.where(back_ & ~in_area & ~beyond, np.maximum(gate * TP.get("line_zonal", 0.), g_run), gate)
+        beyond = ok & (op[:, 0] < zone[:, 0] - 1.)  # a man already goal-side of his line is gone with (never beaten in behind)
+        gate_x = np.where((role > GK) & ~in_area & ~beyond, np.maximum(gate * TP.get("line_zonal", 0.), g_run), gate)
         zone = np.stack([zone[:, 0] * (1 - gate_x) + man[:, 0] * gate_x, zone[:, 1] * (1 - gate) + man[:, 1] * gate], 1)
         free = out_f & (gate < .5)  # defenders holding a zone keep their distance from each other: no bunching, no gaps
         dz = zone[:, None] - zone[None]

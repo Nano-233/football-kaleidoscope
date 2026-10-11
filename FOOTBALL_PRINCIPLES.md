@@ -32,7 +32,7 @@ checking come from real event/freeze-frame data (`scripts/norms.py`, `scripts/no
 | D12 | Offside trap / step-up together | line steps up as a unit on a trigger; attackers' offside check reads the line | partial |
 | D13 | Compact: short vertically, narrow horizontally, shift to the ball side, weak-side tuck | block width and depth pulled towards the block centroid; ball-side shift | partial |
 | D14 | Cut passing lanes (cover shadow): protect the centre first and show play wide | free defenders stand on the lanes to the most dangerous central receivers | done (effect on shots small) |
-| D15 | Midfield screen protects the space between the lines and the half-spaces | DM/CM positions between ball and back line, spaced laterally | partial |
+| D15 | Midfield screen protects the space between the lines and the half-spaces | DM/CM positions between ball and back line, spaced laterally; zonal in depth outside the area (a man standing level with the midfield is screened, not followed to his back; a man between the lines is), paced by the ball's clock like every defender | partial |
 | D16 | Press as a unit: when one presses, the rest compress and take the nearest receivers | support targets derived from presser position | partial |
 | D17 | Transition: counter-press for a few seconds, the rest recover goal-side | after turnover, nearest players press, others recover at the speed the ball's time to their spot demands; a responsibility once taken is kept until the man is clearly out of the picture | partial |
 | D18 | Rest defence: while attacking keep a screen and 2-3 defenders behind the ball | attacking template keeps minimum cover behind the ball line | partial |
@@ -87,7 +87,8 @@ of direction for all players. Status: done. Measured effect: carries into the bo
 
 ## Running (added after the distance-by-speed-band audit)
 
-A player's speed follows need: the time he has to be at his spot, which is the ball's time to get there for the side without the ball,
+A player's speed follows need: the time he has to be at his spot, which is the ball's time to get there for the side without the ball
+(every man of that side, flagged urgent or not),
 the restart for a dead ball, and a fixed horizon for the side with it (its targets are shape, not threats). Nobody is sent flat out by a
 rule; sprinting is what need plus physics produce. The physics is the sprint motor model used on tracking data: the push left falls as
 speed rises, a = a0 (1 - v / vmax), with a time constant of 1.2-1.4 s, so 5.5 m/s comes about 1.5 s into a run and 7 m/s at 2.5 s, and a
