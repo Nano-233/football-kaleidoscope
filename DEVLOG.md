@@ -1023,6 +1023,64 @@ man on the line of the shot (`in_range` switches the shading off, in both the pr
 seeds: blocked shots 2.3 -> 3.4 per team (real 3.9), free looks on 10-22 m shots 0.41-0.48 (0.46), nearest defender at the shot 2.8 m
 (2.5), shots 33, xG 3.1, goals 3.2. Open: goal-side of the shooter 0.37 against 0.58 (the balls played beyond the line), big chances 0.5 (0.9).
 
+### Running: who sprints, and why the jog was a walk (2026-10-11)
+
+Distance covered had sat at 12.8-12.9 km a man against 10.8 since the audit, and the shot context would not move: a third of the defence
+goal-side of a shooter, the blockers sliding into the cone in the last second. The two turned out to be one problem. Distance by speed band
+from the frames (per outfield player, metres; real Premier League tracking in brackets): walking under 2 m/s 2,970 (3,900), jogging 2-4 4,900
+(4,200), running 4-5.5 2,400 (1,700), high-speed 5.5-7 1,460 (700), sprinting over 7 m/s 1,115 (250-350), 58 sprints a man (20-30). The sim
+sprinted four times too much and walked a kilometre too little: the running budget (`cruise_k`) had been turned down to hold the total, which
+made the non-urgent jog 1.2 m/s, a walk, so a defender adjusting his position without an urgent flag arrived late, and the men with a flag made
+it up at a flat sprint. Tagging every sprint flag with the line that set it, in one match:
+- **The flat-out recovery override** (`rec_sprint`: a man 3 m upfield of his place with the ball in his half runs at top speed) was half the sprint
+  distance (540 m of 1,115) and a third of the high-speed running. It was added when the jog was the only other speed; since then a defender's
+  effort follows the ball's time to reach his spot (the horizon rule), which is the same need without the override. Off.
+- **Dead balls**: 107 m of sprinting and 120 of high-speed running a man came from players flagged urgent between phases, running to set-piece spots
+  against a fixed 3.4 s horizon, and a jog floor of 3.6 m/s had every other man trotting through the third of the match the ball is dead. The
+  clock between phases is the restart: everyone is given the time until the ball is back in play (`dead["ready"]`) and moves at the pace that
+  asks, a walk for a goal kick 20 s off, a run for a quick corner.
+- **Job churn**: each defender changed job ten times a minute (a mark picked up or dropped 2.2 times each way, 8-19 m to the new spot) because
+  the job set was rebuilt from scratch every 0.4 s on sharp thresholds (a man within 25 m of the carrier, within 36 m of goal). A responsibility
+  once taken is kept until the man is clearly out of the picture (`job_keep`, the thresholds widened by 30% for the incumbent, who is never
+  "out of reach" of his own man). Churn 10 -> 8.5 a minute; the sprint distance did not move, so this was not the cause, but it stays as right.
+Effect of the three (12 matches): distance 12.85 -> 12.11 km, walking 2,970 -> 3,820 m, sprinting 1,115 -> 895 m, shots 32.6, goals 3.6, blocked
+shots 6.9 -> 8.2 a match, defenders in the cone of a 10-22 m shot 0.72 -> 0.79.
+
+**The push off the mark.** What remained (900 m of sprinting, 48 sprints a man) was physics: a constant acceleration of 3.8-4.6 m/s^2 up to top
+speed had a man at 7 m/s five metres into a ten-metre dash, so every dash counted as a sprint, and every defender's last-second slide into the
+shot cone succeeded. Sprinting follows a motor model on tracking data (Morin and Samozino's force-velocity profiles): the push left falls as
+speed rises, a = a0 (1 - v / vmax), with a time constant vmax / a0 of about 1.2-1.4 s in footballers, which puts 5.5 m/s about 1.5 s into a
+sprint and 7 m/s at 2.5 s. With the old a0 kept (12 matches): the bands landed on the real ones (walk 3,920, jog 4,320, run 2,050, high-speed
+1,080, sprint 275 m) but the top speed reached in a match fell to 8.3 m/s (real 8.5-10.5) and shots went to 37 with 14 on target: defenders
+who had closed shooters with a dash could no longer, and the shot gates were tuned to defenders who could. With a0 set from the time constant
+(`acc_tau0`, `acc_tau_k`: 6-7.5 m/s^2 off the mark, quicker men higher), top speed 8.8, 27 sprints a man (20-30), sprint distance 540 m,
+high-speed 1,300 m, distance 12.05 km, shots 33, goals 2.5, xG 2.8. The defenders in the cone at the shot fell from 0.79 to 0.62, and the share
+with a man in front within 6 m from 0.25 to 0.16: the honest physics exposed what the sprint had hidden, that the defence was not in place
+before the shot and had been getting there by a dash that is not possible.
+
+**Where the back line stands.** Freeze frames at 10-22 m shots, by role: the centre-backs were goal-side of the shooter 31% of the time, standing
+16 m from their goal with the shooter at 15, and 21 m three seconds earlier; the full-backs 43%; the midfield 17-24%. Three causes in the
+depth target, traced one at a time in a full match against the line's own formula:
+- the lag behind the ball was a fixed 10 m at every distance, which stood the line 4 m too high with the ball 30 m out (20 m against the real
+  edge of the area) and sent it to the six-yard line when the ball reached the edge of the box, the shooter level with it on the way. A defender
+  covers the goal from a fixed fraction of the way along the ball-goal line (the proportional cover of the RoboCup defences), so the gap now
+  shrinks with the ball's distance (`lag_ref`): 13.6 m behind a ball 30 m out, 6.8 m behind one 15 m out.
+- the target then sat 2.5-4 m above that formula whatever it said, because a defender assigned to a man stood 1.1-2.5 m goal-side of him in depth
+  as well as across (the marking blend and the assignment's mark jobs, both at 85-90% weight), and the striker stood on the last defender's
+  shoulder: the pair drifted out together. Outside the penalty area a back line is zonal in depth and man-oriented across it (`line_zonal`): a
+  mark there fixes where the defender stands across the line, his depth stays the line's, unless the man is running at goal, already goal-side
+  of the line, or inside the area.
+- the step-up rule fired on pressure alone, and with a presser on the carrier most of the time it added 1.5-3 m; a line steps up on a man who
+  is pressed and cannot play forward (his back to goal), a pressed man facing goal can still clip it in behind (`step_face`).
+After the three the centre-backs' target follows the formula (16.2 m against 15.4 with the ball 25-30 m out, from 19.0) and their position
+trails it by 2-3 m (the retreat's own lag: the 2 m slack, the turn, the speed build). On 12 matches: the line's depth by ball position now matches the real picture (15.2 m with the ball 25-30 m out, from 17.7; 18.6 with it 30-35 m out,
+from 21.4), the centre-backs goal-side of a 10-22 m shooter 0.30 -> 0.41 and the full-backs 0.42 -> 0.51, blocked shots 4.9 -> 6.1 a match, big
+chances 0.54 -> 0.67 of real (from 0.63). Shots rose to 36 with 15 on target (xG 3.3, goals 2.8): the honest acceleration took away the
+defenders' last-second dash and the deeper line opened the space in front of it, where the midfield arrives 4-7 m short of its own targets
+(traced at the shot: DM 6.9 m short, CM 4.8, moving at 4-4.6 m/s, urgent) because the ball crosses the final 15 m faster than a man can turn
+and run it. Open: the midfield's protection of the space in front of the line in the seconds after a pass beats it, and the shot volume that
+follows from it; distance 12.3 km (sprinting 570 m, high-speed 1,400 m against 250-350 and 700).
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

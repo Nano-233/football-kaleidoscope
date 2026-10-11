@@ -13,28 +13,28 @@ checking come from real event/freeze-frame data (`scripts/norms.py`, `scripts/no
 
 | # | Convention | Intrinsic expression | Status |
 |---|---|---|---|
-| D1 | Stay goal-side of the attacker and the ball; do not be beaten in behind | marker target = attacker position + lead, offset towards own goal; recovery sprint when behind the target | done |
+| D1 | Stay goal-side of the attacker and the ball; do not be beaten in behind | marker target = attacker position + lead, offset towards own goal; a man behind his target runs as hard as the ball's time to get there demands (no flat-out override) | done |
 | D2 | Jockey: approach to 2-3 m, then slow, side-on, back-pedal; do not dive in | presser target on the ball-goal line a fixed gap in front of the carrier; commit only when the touch is heavy | done |
 | D3 | Force the attacker to the side where help is (usually outside, away from goal centre) | presser stands on the inside shoulder, bearing set by lateral position and where cover is; inside shooting range he faces the man on the line of the shot instead | done |
 | D4 | Press on triggers (back pass, poor touch, receiver facing own goal, ball in the air); otherwise hold | the nearest man engages to a jockeying gap only on a trigger (shooting range, counter-press window, a long hold, back to goal, pinned on a line, running at the defence, a pressing plan); otherwise he stands off 5-6 m on the line to goal and screens | done |
 | D5 | Close the receiver down while the ball travels, so you arrive with it | marker of the intended receiver moves during flight to a point goal-side of the arrival spot | done |
 | D6 | Tackle when the ball is away from the attacker's body or his back is turned, not when he faces you at speed | duel probability from ball distance, attacker heading and defender's closing speed; a booked man goes in less | partial (contact geometry, no heavy-touch model) |
 | D7 | Cover and balance: second defender behind the presser on the inside, third on the far side | slots derived from presser position, ball-goal line and lateral position | done |
-| D8 | Mark tight in the box: goal-side and ball-side so you see ball and man; man-orientated inside, zonal outside | marking gate by distance to goal; ball-side bias; the marking gap itself grows with the man's distance from goal (a stride in and around the box, 5-7 m of zonal cover in the middle third and beyond) | done |
+| D8 | Mark tight in the box: goal-side and ball-side so you see ball and man; man-orientated inside, zonal outside | marking gate by distance to goal; ball-side bias; the marking gap itself grows with the man's distance from goal (a stride in and around the box, 5-7 m of zonal cover in the middle third and beyond); outside the penalty area the back line is zonal in depth and man-oriented across it (a man on its shoulder is covered level, a runner at goal or a man already goal-side is gone with) | done |
 | D9 | Track runners, hand them over when they cross into another defender's zone | marking reassignment on zone crossing (Hungarian refresh) with hysteresis; a marker meets a man sprinting at goal where he will be in about a second, not half a second | partial |
 
 ## Defending, the team
 
 | # | Convention | Intrinsic expression | Status |
 |---|---|---|---|
-| D10 | The back line stays a line: same depth, moves together | back-line depth = common value, individual targets pulled to it | done |
-| D11 | Line height follows the ball: step up when the ball is pressured or played back, drop when it is free to be played in behind | line depth from ball depth, pressure on the carrier and tactic; a line never steps up into a man driving at it, it drops in front of him and runs at his speed to hold the gap; the midfield compacts onto the line, not the line onto the midfield | done |
+| D10 | The back line stays a line: same depth, moves together | back-line depth = common value, individual targets pulled to it; the gap to the ball shrinks with the ball's distance to goal (proportional cover: on the edge of the area with the ball 30 m out, 6-7 m in front of the keeper with it 15 m out) | done |
+| D11 | Line height follows the ball: step up when the ball is pressured or played back, drop when it is free to be played in behind | line depth from ball depth, pressure on the carrier and tactic; it steps up only on a carrier who is pressed and cannot play forward (back to goal), a pressed man facing goal can still clip it in behind; a line never steps up into a man driving at it, it drops in front of him and runs at his speed to hold the gap; the midfield compacts onto the line, not the line onto the midfield | done |
 | D12 | Offside trap / step-up together | line steps up as a unit on a trigger; attackers' offside check reads the line | partial |
 | D13 | Compact: short vertically, narrow horizontally, shift to the ball side, weak-side tuck | block width and depth pulled towards the block centroid; ball-side shift | partial |
 | D14 | Cut passing lanes (cover shadow): protect the centre first and show play wide | free defenders stand on the lanes to the most dangerous central receivers | done (effect on shots small) |
 | D15 | Midfield screen protects the space between the lines and the half-spaces | DM/CM positions between ball and back line, spaced laterally | partial |
 | D16 | Press as a unit: when one presses, the rest compress and take the nearest receivers | support targets derived from presser position | partial |
-| D17 | Transition: counter-press for a few seconds, the rest recover goal-side | after turnover, nearest players press, others recover at speed | partial |
+| D17 | Transition: counter-press for a few seconds, the rest recover goal-side | after turnover, nearest players press, others recover at the speed the ball's time to their spot demands; a responsibility once taken is kept until the man is clearly out of the picture | partial |
 | D18 | Rest defence: while attacking keep a screen and 2-3 defenders behind the ball | attacking template keeps minimum cover behind the ball line | partial |
 | D19 | Defend crosses: near post, penalty spot, edge of box for cut-backs, clear wide | box slots from ball and goal geometry; a cross or clearance still low off the foot is blocked by a man on its line; a hurried clearance goes the way the body faces | partial |
 | D20 | Goalkeeper: on the ball-goal line, narrow the angle one-on-one, sweep behind the line | GK target from ball and goal geometry; comes out to the carrier's shooting point when no defender is there first (time race); smothers the ball at the carrier's feet (gk skill vs dribbling); sweeper trait | done |
@@ -84,3 +84,12 @@ part-way towards goal with a good first touch (less if a marker is on him). A st
 defender on his back slows the turn. The heading is used by: passing view (what he can see), pass accuracy, shot quality and
 willingness, take-on and carry success, first-touch control, defenders' tackles and interceptions, and turning cost on sharp changes
 of direction for all players. Status: done. Measured effect: carries into the box fell to about real; shot volume unchanged.
+
+## Running (added after the distance-by-speed-band audit)
+
+A player's speed follows need: the time he has to be at his spot, which is the ball's time to get there for the side without the ball,
+the restart for a dead ball, and a fixed horizon for the side with it (its targets are shape, not threats). Nobody is sent flat out by a
+rule; sprinting is what need plus physics produce. The physics is the sprint motor model used on tracking data: the push left falls as
+speed rises, a = a0 (1 - v / vmax), with a time constant of 1.2-1.4 s, so 5.5 m/s comes about 1.5 s into a run and 7 m/s at 2.5 s, and a
+ten-metre dash is not a sprint. Status: done. Measured: walking, jogging, top speed and sprint count per man within the tracking norms;
+running and high-speed distance still above them (see the DEVLOG entry of 2026-10-11).

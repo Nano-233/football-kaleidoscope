@@ -213,12 +213,12 @@ def defend_assign(m, t, zone, urgent, role, P, O, Ov, C, Cv, ci, tc, tgt1, cover
         return zone, urgent, [], []
     dgc = float(nrm(C - GOAL))
     side = 1. if C[1] >= W / 2 else -1.
-    jobs, vals, codes, kinds, allowed = [], [], [], [], []
+    jobs, vals, codes, kinds, allowed, depth_free = [], [], [], [], [], []  # depth_free: the job fixes the man's place across the pitch only, his depth stays the line's
     n_def = len(P)
     can_mark = (role >= CB) & (role <= AM)  # the back line and the midfield are given men; the forwards are in the unit for the press (and the lanes) only
 
-    def add(pos, val, code, kind, ok=None):
-        jobs.append(np.asarray(pos, float)); vals.append(val); codes.append(code); kinds.append(kind); allowed.append(np.ones(n_def, bool) if ok is None else ok)
+    def add(pos, val, code, kind, ok=None, dfree=False):
+        jobs.append(np.asarray(pos, float)); vals.append(val); codes.append(code); kinds.append(kind); allowed.append(np.ones(n_def, bool) if ok is None else ok); depth_free.append(dfree)
 
     # press (one or two) and cover. The presser does not run to where the carrier is but to the first point on the carrier's predicted line that he can reach
     # no later than the carrier does (the open-source RoboCup defences predict the dribble line and send the first man who can get there in time); he stands
@@ -246,10 +246,12 @@ def defend_assign(m, t, zone, urgent, role, P, O, Ov, C, Cv, ci, tc, tgt1, cover
         add(cover_pt, TP.get("cover_v", 3.5), 210, "cover", ok_cov)
     # marks
     xt_c = float(XT(np.array([L - C[0], W - C[1]])))
+    held_marks = set(int(c) for c in m.job_prev[t] if 0 < c < 100)  # the men somebody was responsible for last time
     for j in range(1, 11):
         if j == ci:
             continue
         o = O[j]
+        held = j in held_marks
         dg = float(nrm(o - GOAL))
         xt_a = float(XT(np.array([L - o[0], W - o[1]])))  # the spot he stands on, valued from his own team's point of view
         ab = o - C
@@ -264,8 +266,12 @@ def defend_assign(m, t, zone, urgent, role, P, O, Ov, C, Cv, ci, tc, tgt1, cover
             lane_open = 1.
         gain = max(xt_a - xt_c, 0.) + TP.get("back_w", .2) * xt_a  # what a pass to him could add to the threat: a man behind the ball only offers a ball back, so he is not worth leaving the goal side of the ball for
         v = TP.get("mark_k", 100.) * gain * (.3 + .7 * lane_open) * (1. + .7 * run) * float(np.exp(-dl / 45.))
-        near_goal = o[0] <= TP.get("threat_depth", .34) * L and abs(o[1] - W / 2) <= TP.get("threat_wide", 22.)  # he is dangerous to our goal (about 36 m out, and not on the far touchline: the zone has him until the ball comes across) ...
-        near_ball = dl <= TP.get("threat_ball", 25.)  # ... or the carrier can find him with his next pass
+        # a responsibility, once taken, is kept until the man is clearly out of the picture: the job set was rebuilt from scratch every 0.4 s on sharp
+        # thresholds, so a mark appeared and vanished as the ball moved a few metres (each defender changed job ten times a minute, half of them a
+        # mark picked up or dropped, and every change sent him 9-19 m at a sprint to a new spot: half the sprint distance in a match)
+        keep = TP.get("job_keep", 1.3) if held else 1.
+        near_goal = o[0] <= TP.get("threat_depth", .34) * L * keep and abs(o[1] - W / 2) <= TP.get("threat_wide", 22.) * keep  # he is dangerous to our goal (about 36 m out, and not on the far touchline: the zone has him until the ball comes across) ...
+        near_ball = dl <= TP.get("threat_ball", 25.) * keep  # ... or the carrier can find him with his next pass
         if not (near_goal or near_ball):
             continue
         v += TP.get("mark_base", 4.)  # somebody is responsible for every dangerous man: the assignment is made whatever the price, if a defender is within reach
@@ -273,7 +279,10 @@ def defend_assign(m, t, zone, urgent, role, P, O, Ov, C, Cv, ci, tc, tgt1, cover
         loose = TP.get("mark_loose", 0.) * float(clip((dg - 25.) / 30., 0, 1))  # tight in and around the box, zonal out in the field: a receiver 55 m from goal is covered from 5-7 m, not marked at a stride (real build-up passers see about 2.5 free men ahead of the ball)
         lead_j = .5 + TP.get("run_lead_t", .7) * run  # a man running at goal is covered where he will be in a second, not half a second: the marker goes with the run instead of trailing it
         spot = o + Ov[j] * lead_j + _unit(_unit(GOAL - o) + wb * _unit(C - o)) * (TP.get("mark_gap", MARK_GAP) + 1.4 * (1 - tc.marking) + loose)
-        add(spot, v, j, "mark", can_mark & (nrm(P - spot, axis=1) <= TP.get("mark_reach", 19.)))
+        # outside the penalty area the back line is zonal in depth (see the marking blend): a mark there sets the defender's place across the line, his depth
+        # stays the line's, unless the man is running at goal or already goal-side of the line
+        dfree = not (o[0] < 16.5 + 1.5 and abs(o[1] - W / 2) < 20.16 + 1.5) and run < .3
+        add(spot, v, j, "mark", can_mark & ((nrm(P - spot, axis=1) <= TP.get("mark_reach", 19.)) | (m.job_prev[t] == j)), dfree)  # his marker of last time is never out of reach of him
     # dangerous space nobody covers (pitch-control thinking: a cell is the attackers' if they can get there before any defender; its worth is the expected threat of
     # holding the ball there times the chance the ball gets there). The most valuable uncovered cells become jobs, so the block drops in front of goal and
     # does not stay on far-out men while the middle is open.
@@ -333,8 +342,11 @@ def defend_assign(m, t, zone, urgent, role, P, O, Ov, C, Cv, ci, tc, tgt1, cover
             zone[i] = jobs[k_]; urgent[i] = True
         else:
             w = TP.get("jobs_w", .9)
-            zone[i] = zone[i] * (1 - w) + jobs[k_] * w
-            if float(nrm(P[i] - jobs[k_])) > 4.:
+            if depth_free[k_] and role[i] in (CB, FB) and jobs[k_][0] > zone[i, 0] - 1.:  # a back-line man on a mark outside the area: across only, the line keeps his depth
+                zone[i, 1] = zone[i, 1] * (1 - w) + jobs[k_][1] * w
+            else:
+                zone[i] = zone[i] * (1 - w) + jobs[k_] * w
+            if float(nrm(P[i] - zone[i])) > 4.:
                 urgent[i] = True
     return zone, urgent, press_ids, cover_ids
 
@@ -544,7 +556,12 @@ def team_targets(m, t):
     tx = np.maximum(tx, MIN_X[role])
     if not has:  # defending: near our goal the block follows the ball, each line a fixed distance behind it
         wn = float(clip((TP.get("wn_end", WN_END) - Bs[0]) / 12., 0, 1)) * COMPRESS[role]  # how far this role is pulled onto the ball: the back line fully, forwards hardly (they are the outlet)
-        tx = np.where(out_f, tx * (1 - wn) + np.maximum(Bs[0] - LAG[role] * TP.get("lag_k", 1.) * (1.25 - .5 * tc.press), MIN_X[role]) * wn, tx)
+        # the gap between a line and the ball shrinks with the ball's distance to goal: a defender covers the goal from a fixed fraction of the way
+        # along the ball-goal line (the proportional cover of the RoboCup defences), so a ball 30 m out has the back line on the edge of the area
+        # and a ball 15 m out has it 6 m in front of the keeper, not on the six-yard line. A fixed 10 m lag stood the line 4 m too high with the
+        # ball 30 m out and sent it to the six-yard line when the ball reached the edge of the box, with the shooter left level with it on the way
+        prop = clip(Bs[0] / TP.get("lag_ref", 22.), .3, 1.8)
+        tx = np.where(out_f, tx * (1 - wn) + np.maximum(Bs[0] - LAG[role] * TP.get("lag_k", 1.) * (1.25 - .5 * tc.press) * prop, MIN_X[role]) * wn, tx)
         tx = np.where(out_f, np.minimum(tx, np.maximum(Bs[0] + GS_CAP[role] * (.6 + .8 * tc.press), MIN_X[role]) + ALLOW[role]), tx)
     if not has:
         bl = (role == CB) | (role == FB)
@@ -554,7 +571,11 @@ def team_targets(m, t):
             if cur >= 0:  # pressure on the ball: step up together; free to look up, or running at us: drop together
                 dn = float(nrm(P[out_f] - O[cur - 11 * (1 - t)], axis=1).min())
                 drive = float(clip(-fv(m.vel[cur])[0] / 5., 0, 1))  # the carrier driving towards our goal (his speed along -x in our frame)
-                step = LINE_STEP * ((float(clip(1 - dn / 6., 0, 1)) - .4) * (1. - drive) - TP.get("drop_drive", 1.) * drive)  # a line never steps up into a man running at it: it back-pedals in front of him
+                # the line steps up on a carrier who is pressed AND cannot play forward (his back to goal, the ball played back to him); a pressed man
+                # facing goal can still clip it in behind, so the line holds or drops. Stepping up on pressure alone, with a presser on the carrier
+                # most of the time, stood the line 2-3 m higher than its depth target whenever the ball was 20-35 m out
+                away = float(clip((TP.get("step_face", .7) - m._face_goal(cur)) / TP.get("step_face", .7), 0, 1))
+                step = LINE_STEP * ((float(clip(1 - dn / 6., 0, 1)) * away - .4) * (1. - drive) - TP.get("drop_drive", 1.) * drive)  # a line never steps up into a man running at it: it back-pedals in front of him
             lx = tx[bl].mean()
             tx = np.where(bl, lx + step + LINE_FLAT * (tx - lx), tx)  # one depth for the line, a little individual variation
     blk = out_f & (COMPRESS[role] > .5)  # compaction acts on the block (back line and midfield), not on the outlets up front
@@ -680,8 +701,17 @@ def team_targets(m, t):
         dang = clip((TP.get("dang_far", 38.) - nrm(o - GOAL, axis=1)) / 18., 0, 1)  # the closer an attacker is to goal the more he is marked (man first, zone second)
         gate = np.where(ok & (role > GK), np.maximum(gate, TP.get("dang_gate", .85) * dang), gate)
         ovg = (ov * _unit(GOAL - o)).sum(1)  # a man running at goal is tracked goal-side first, the zone second
-        gate = np.where(ok & (role > GK) & (nrm(o - GOAL, axis=1) < 45.), np.maximum(gate, TP.get("run_gate", .95) * clip((ovg - 2.5) / 2.5, 0, 1)), gate)
-        zone = zone * (1 - gate[:, None]) + man * gate[:, None]
+        g_run = np.where(ok & (role > GK) & (nrm(o - GOAL, axis=1) < 45.), TP.get("run_gate", .95) * clip((ovg - 2.5) / 2.5, 0, 1), 0.)
+        gate = np.maximum(gate, g_run)
+        # outside the penalty area the back line is zonal in depth: it holds its line and man-orients across it; a man standing on its shoulder is covered
+        # level, not from two metres behind. With depth following the man, the striker stood on the last defender's shoulder and the defender stood behind
+        # the striker, and the pair drifted out together: the line stood 3-4 m higher than its own target with the ball 20-30 m out. A runner at goal and a
+        # man inside the area are still tracked in depth
+        back_ = (role == CB) | (role == FB)
+        in_area = ok & (o[:, 0] < 16.5 + 1.5) & (np.abs(o[:, 1] - W / 2) < 20.16 + 1.5)
+        beyond = ok & (op[:, 0] < zone[:, 0] - 1.)  # a man already goal-side of the line is gone with (never beaten in behind)
+        gate_x = np.where(back_ & ~in_area & ~beyond, np.maximum(gate * TP.get("line_zonal", 0.), g_run), gate)
+        zone = np.stack([zone[:, 0] * (1 - gate_x) + man[:, 0] * gate_x, zone[:, 1] * (1 - gate) + man[:, 1] * gate], 1)
         free = out_f & (gate < .5)  # defenders holding a zone keep their distance from each other: no bunching, no gaps
         dz = zone[:, None] - zone[None]
         dd = np.maximum(nrm(dz), 1e-3) + np.eye(11) * 99

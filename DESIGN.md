@@ -33,7 +33,9 @@ Options are chosen by softmax over utility (temperature depends on composure). A
 ball, tactic (line height, width, compactness), phase (role push or drop), offside line, man/zone marking
 (Hungarian assignment of defenders to opponents), pressing and jockeying with occasional commitment to the tackle,
 shot-blocking cover near the own goal, support triangles, forward runs, loose-ball chasing, and interception
-movement. `engine._steer` moves players with pace, acceleration, stamina limits and reaction lag.
+movement. `engine._steer` moves players with pace, stamina limits and reaction lag; acceleration follows the sprint
+motor model (the push left falls as speed rises, time constant 1.2-1.4 s), and effort follows need: the ball's time to reach a
+defender's spot, the restart for a dead ball, a fixed horizon for the side in possession.
 
 **Dynamic resolution.** Passes and loose balls are resolved by whoever physically reaches the ball first rolling for
 control, so completion rates emerge from player positions instead of being dice rolls detached from the geometry.
@@ -100,4 +102,5 @@ action), interceptions and aerial duels, plus home advantage (`--home`) and comp
 - Aerial play and goalkeeping are statistical, not simulated in 3D.
 - Corners and set-piece routines are simple.
 - Some aggregates are still off their real values (see the DEVLOG entry of 2026-10-10 for the measured list): corners about a
-  third of real, passes and tackles too many, big chances too few, aerial duels and pressures over-counted.
+  third of real, passes and tackles too many, big chances too few, aerial duels and pressures over-counted; shots above the band
+  since the acceleration model (the defence is reactive and the midfield arrives late in front of the line, see the DEVLOG entry of 2026-10-11).
