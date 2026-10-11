@@ -103,4 +103,5 @@ action), interceptions and aerial duels, plus home advantage (`--home`) and comp
 - Corners and set-piece routines are simple.
 - Some aggregates are still off their real values (see the DEVLOG entry of 2026-10-10 for the measured list): corners about a
   third of real, passes and tackles too many, big chances too few, aerial duels and pressures over-counted; shots above the band
-  since the acceleration model (the defence is reactive and the midfield arrives late in front of the line, see the DEVLOG entry of 2026-10-11).
+  since the acceleration model (the defence is reactive: a box runner's marker reacts to the run instead of standing where it must go,
+  see the DEVLOG entries of 2026-10-11); crosses complete too often and corners are half of real.

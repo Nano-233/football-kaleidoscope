@@ -24,7 +24,7 @@ DT = 0.2
 TUNE = dict(xg_z0=-.20, xg_d=-.138, xg_a=.779, xg_h=-.946, xg_b=.756, xg_c=.405, clear_xg=.1, sprint_need=0., dp_on=1., cs0=3.5, cs_k=.9, dp0=120., dp_k=100., dp_tau=450., dp_floor=.15, ft_free=1., wait_on=1., wait_gate=.88, wait_max=8., clear_ev=1., policy_on=1., cal_on=0., cal_ga=.07, cal_gb=.77, cal_la=.18, cal_lb=.38, air_exact=1., carry_prog_xt=1., clear_keep=.4, lazy_thr=.04, tgt_every=2, catch_slack=2.0, catch_t=3.4, blk_a=.60, blk_sig=1.0, blk_lam=10.6, blk_b0=.035, shot_lane_k=1.0, xt_k=0., xt_opp=.6, risk_pow_xt=1.0, fk_cross=.5, head_shot_set=.4, head_set_z=1., head_ref=.08, free_dwell=.5, ball_v0=8.5, ball_v1=.25, read_press=.8, tackle_sel=8., exposed_k=1.2, surv_k=1.0, gk_shoot=1.4, contact_r=1.6, press_len=3.2, close_t=.5, hurry_k=.3, exec_k=2.0, exec_floor=.15, dec_noise=.15, windup_k=.35, hold_sigma=.7, fade_up=2.2, fade_dn=1.4, lazy_k=.6, xg_run=8., own_goal_cone=.0, head_run=4.2, head_rate=2.5, mom_k=.75, carry_v0=.9, carry_v1=.9, cruise_k=0.42, burst_hold=0.4, run_frac=-1., press_dist=1.75, air_base=0.5, head_on=0.28, head_clear=0.5, air_k=0.5, gk_air=0.6, block_base=0.12, block_nb=0.12, ft_shot=0.315, turn_cost=0.55, turn_rate=3.2, face_k=1.05, pot=2.2, relief=1.0, ft_slow=.0, drive=0.1,  cong_k=0.5, risk_pow=2.2, first_touch=3.0, wide_v=0.35, ctrl_marked=0.5, shoot_hold=0.98, shoot_slope=2.05, shoot_ref=0.168, shoot_press=0.56, adv_lin=.6, pack=.04, shoot_min=.12, react=1.84, patience=0.02, pass_sigma=1.0, intercept=0.429, shot_mid=1.82, usage=0.76, fk_bonus=0.05, long_bonus=0.163, prog_base=0.5, prog_dir=0.63, keep=0.455, loss=1.0, cross_v=0.8, gk_long=.5, box_foul=1., home_edge=.7, shot_cost=1.3, shot_k=3.15, shot_k_dir=5.0,
             carry_base=0.455, carry_prog=.2, carry_streak=.3, dwell_base=0.9, dwell_shape=2.4, dwell_scale=1.61,
             tackle_rate=.95, wide_error=3.2, off_miss=.2, off_mult=.02, off_lag=.25, head_keep=.7, safe_out_x=.16, card_thr=.56, adv_sev=.14, clear_dir_sd=1.2, rec_sprint=0., fk_xg=1., fk_shot_k=.5, fk_shot_d=27.2, foul_risk=10., box_avoid=.2, tackle_risk=2.2, tackle_danger=.4,
-            dissent_p=.008, waste_s=9., waste_book=11., head_dir_sd=.5, duel_r=1.2, duel_w=.7, foul_base=.21, second_thr=.25, booked_care=.25, block_z=1.7, ttc_release=.9, press_after=1.2, standoff=5.5, run_lead_t=.7, close_x=.5, settled_s=2.5, lane_block_r=1.0, feet_block_r=0., engage_on=1., engage_lo=.38, engage_k=.38, beyond_k=1.6, drop_drive=1., line_holds=1., track_v=2., retreat_v=4.5, ball_v_eff=12., horizon_min=.8, ft_xg=.08, chance_xg0=.09, xgd_z0=-2.08, xgd_d=-.07, xgd_a=1.89, xgd_h=-.2, xgd_b=.72, xgd_c=.25, mark_loose=4.5, gk_hold0=2.5, gk_hold1=6., job_keep=1.3, acc_floor=.08, acc_tau0=1.6, acc_tau_k=.025, def_paced=1.)
+            dissent_p=.008, waste_s=9., waste_book=11., head_dir_sd=.5, duel_r=1.2, duel_w=.7, foul_base=.21, second_thr=.25, booked_care=.25, block_z=1.7, ttc_release=.9, press_after=1.2, standoff=5.5, run_lead_t=.7, close_x=.5, settled_s=2.5, lane_block_r=1.0, feet_block_r=0., engage_on=1., engage_lo=.38, engage_k=.38, beyond_k=1.6, drop_drive=1., line_holds=1., track_v=2., retreat_v=4.5, ball_v_eff=12., horizon_min=.8, ft_xg=.08, chance_xg0=.09, xgd_z0=-2.08, xgd_d=-.07, xgd_a=1.89, xgd_h=-.2, xgd_b=.72, xgd_c=.25, mark_loose=4.5, gk_hold0=2.5, gk_hold1=6., job_keep=1.3, acc_floor=.08, acc_tau0=1.6, acc_tau_k=.025, def_paced=1., contact_e_limb=.6, att_clock_r=25., air_face0=.35, body_block=.8, body_touch=1.0)
 TUNE.update(burst_gain=-1e9, block_v=.8, push_k=1., pol_space=0., follow_poss=.2, pin_from=.35, recover_on=1., cover_margin=3., threat_depth=.34, threat_ball=25., mark_base=4., mark_reach=19., layer_bias=.9, space_cover=0., space_k=100., n_space=3, assign_on=1., press_v=7., cover_v=3.5, mark_k=100., lane_job_k=35., post_v=5., space_v=3., job_hyst=1.5, press_hyst=2.0, templ_w=.9, busy_gate=.6, flat_gate=.6, run_gate=.95, mark_sprint_d=3.0, box_start=38., wn_end=42., lag_k=1., drop_k=1., mark_gap=1.1, box_gate=.85, dang_far=38., dang_gate=.85, react_def=.35, close_gap=1.5, jock_k=1., press_k=1., open_w=1., lane_w=1., slot_gate=.5, lean_r=24., lean_min=.35, shoot_close=28., shot_gap=.7, jobs_on=1., jobs_d=38., jobs_att=40., jobs_w=.9, job_mark=3., job_lane=12., job_post=1.4, job_wv=4., way_pen=0., way_r=2.2, run_k=1., ball_side=.9, hover=.3)  # block shape (read by movement.py through TP)
 TUNE.update(stop_a=15., touch_sd=.9, pin_d=4., pin_p=.6, pin_r=1.5, slide_c=1., lat_def_c=1., fb_up=6., far_tuck=1., tackle_dir_sd=.5, tackle_v0=2.5, tackle_v1=6., body_r=.5, contact_mu=.35, contact_e=.3, loose_k=.07, loose_v0=5., touch_r=.9, take_tau=.35, take_k=.04, take_v0=10.)  # a player's body as the ball meets it: radius with a leg out (m), friction that takes pace off a glancing ball, how much a head-on ball comes back
 movement.TP = TUNE
@@ -529,15 +529,23 @@ class Match:
         # mark, his lane or his cover before the ball can get there, which for a pass is the ball's travel time (about 12 m/s) plus the touch that releases it;
         # a fixed 3.4 s horizon sent a defender to a man 8 m away at under 2 m/s and he arrived a second after the ball (shooters had a free look three
         # times in four). The side with the ball keeps the fixed horizon: its targets are shape, not threats.
-        t_ball = np.clip(nrm(s.tsm - s.ball, axis=1) / TUNE["ball_v_eff"] + TUNE["horizon_min"], TUNE["horizon_min"], TUNE["catch_t"])
-        horizon = np.full(22, max(s.dead["ready"] - s.t, TUNE["horizon_min"])) if at_dead else np.where(defending, t_ball, TUNE["catch_t"])
+        # the attack's clock is the delivery: a man whose place is in or at the box (the back post, the spot, the edge) must be there before the ball can be
+        # played there, so he too is paced by the ball's time to his spot. On the jog the far-side winger stood 5 m short of his back-post place as the
+        # cross came (18.5 m out and 20 m wide, his place 13 m out) and received the ball in the box three times a match; the rest of the attacking
+        # shape keeps the fixed horizon (its places are shape, not timing)
+        opp_goal = np.where((np.arange(22) // 11) == 0, L, 0.)
+        att_box = ~defending & (np.hypot(s.tsm[:, 0] - opp_goal, s.tsm[:, 1] - W / 2) < TUNE["att_clock_r"]) & (s.state != "dead")
+        d_bt = nrm(s.tsm - s.ball, axis=1)
+        v_bt = np.clip(TUNE["ball_v0"] + TUNE["ball_v1"] * d_bt, TUNE["ball_v0"], 22.) if TUNE["ball_v_eff"] <= 0 else TUNE["ball_v_eff"]  # the ball's own flight model: a long ball is struck harder (a flat 12 m/s gave a man 28 m from the ball a 3.1 s clock; the ball gets there in 1.8)
+        t_ball = np.clip(d_bt / v_bt + TUNE["horizon_min"], TUNE["horizon_min"], TUNE["catch_t"])
+        horizon = np.full(22, max(s.dead["ready"] - s.t, TUNE["horizon_min"])) if at_dead else np.where(defending | att_box, t_ball, TUNE["catch_t"])
         need = np.maximum(dist - TUNE["catch_slack"], 0.) / horizon + tv_along  # and he matches a target that is moving away
         run = np.clip(need, vmax * TUNE["run_frac"] if TUNE["run_frac"] >= 0 else jog, vmax)  # an urgent man runs as hard as the ground to cover demands, never slower than his jog (run_frac < 0)
         # a defender has no clock of his own: the ball sets it, so the whole side without the ball is paced by need, flagged urgent or not (far from the
         # ball the horizon is long and need is a walk; near it, a run). Paced by the jog unless flagged, a man hovered at the 4-5 m from his spot where the
         # flag switches on, walking at 1.2 m/s below it and running above it: the midfield stood a steady 5 m short of its block
         goal_side = ((s.tsm[:, 0] - s.ball[0]) * own_dir) > 0.  # his spot lies between the ball and his goal: the ball can hurt it, so its clock is his
-        paced = urg | (defending & (s.state != "dead") & (TUNE["def_paced"] > 0) & (goal_side | (TUNE["def_paced"] < 2)))  # a forward screening ahead of the ball has no spot the ball is racing him to: he jogs
+        paced = urg | att_box | (defending & (s.state != "dead") & (TUNE["def_paced"] > 0) & (goal_side | (TUNE["def_paced"] < 2)))  # a forward screening ahead of the ball has no spot the ball is racing him to: he jogs
         cap = np.where(sprint, run if TUNE["sprint_need"] > 0 else vmax, np.where(paced, run, jog))  # all-out only when the time to cover the ground demands it
         if s.state == "held":
             cap[s.carrier] = min(cap[s.carrier], s.carry_speed * s.carry_scale, .85 * vmax[s.carrier])
@@ -567,6 +575,16 @@ class Match:
         r = s.pos[:, None] - s.pos[None]
         dd = np.maximum(nrm(r, axis=2), 1e-3) + np.eye(22) * 99
         s.pos += (r / dd[..., None] * ((1.6 - dd).clip(0))[..., None]).sum(1) * .35
+        if TUNE["body_block"] > 0:  # bodies do not pass through each other: a man running into another loses the part of his speed that goes into him (an inelastic
+            # contact), so a runner has to go round the man standing goal-side of him and the marker stays goal-side. With the nudge alone a box runner went
+            # straight through his marker and arrived first by right. The man on the ball and the men on him are left to the duel rules
+            touch = (dd < TUNE["body_touch"])
+            if s.state == "held":
+                touch[s.carrier, :] = touch[:, s.carrier] = False
+            if touch.any():
+                n_ = -r / dd[..., None]  # from i towards j
+                closing = np.maximum((s.vel[:, None] * n_).sum(2), 0.) * touch  # the part of i's speed that goes into j
+                s.vel -= TUNE["body_block"] * (closing[..., None] * n_).sum(1)
         raw = s.pos.copy()
         s.pos = clip(s.pos, [0, 0], [L, W])  # nobody plays outside the lines: a wide player who overshoots his spot stops on the line
         s.vel = np.where(s.pos != raw, 0., s.vel)
@@ -733,10 +751,13 @@ class Match:
         d = v_in / sp
         left = np.array([-d[1], d[0]])
         b = float((s.pos[i] - at) @ left)  # his centre to the left of the ball's line (+) or right (-)
-        sn = b / TUNE["body_r"] if abs(b) < TUNE["body_r"] else float(s.rng.uniform(-1., 1.))  # a ball that hits the trunk strikes it where the line crosses it; one that was reached by a leg stretched across hits the limb at no fixed point
+        limb = abs(b) >= TUNE["body_r"]
+        sn = b / TUNE["body_r"] if not limb else float(s.rng.uniform(-1., 1.))  # a ball that hits the trunk strikes it where the line crosses it; one that was reached by a leg stretched across hits the limb at no fixed point
         sn = float(clip(sn, -.98, .98))
         cs = float(np.sqrt(1. - sn * sn))
-        mu, e = TUNE["contact_mu"], float(clip(s.rng.normal(TUNE["contact_e"], .1), .05, .6))
+        # the trunk gives and takes most of the pace out of the ball; a shin or a boot stretched across is hard and the ball rings off it (a blocked cross
+        # left at a median 4 m/s and died at the blocker's feet; real blocked crosses ricochet behind for corners, the largest single source of them)
+        mu, e = TUNE["contact_mu"], float(clip(s.rng.normal(TUNE["contact_e_limb"] if limb else TUNE["contact_e"], .1), .05, .9))
         vx = sp * ((1. - mu) * sn * sn - e * cs * cs)
         vy = -sp * sn * cs * ((1. - mu) + e)
         return d * vx + left * vy
@@ -995,6 +1016,10 @@ class Match:
         t_fl = np.minimum(np.atleast_1d(flight), 1.5)
         dd_a = nrm(Pall[None] + Vall[None] * (.7 * t_fl)[:, None, None] - np.atleast_2d(pts)[:, None], axis=2)  # (n, 22): where each player will be when it comes down
         w_a = (a["aerial"][ids22] + .5 * a["strength"][ids22] + .5 * a["positioning"][ids22])[None] * np.exp(-dd_a / 3.5) * (dd_a < 6.5)
+        B_ = s.ball if t == 0 else np.array([L, W]) - s.ball  # where the ball comes from, in this side's frame
+        inc = -_unit(np.atleast_2d(pts) - B_[None])  # (n, 2) from each landing point back towards the ball
+        al_e = (1. + (fv(s.head[ids22])[None] * inc[:, None]).sum(2)) / 2.  # facing the ball, as the settlement weighs it
+        w_a = w_a * (TUNE["air_face0"] + (1. - TUNE["air_face0"]) * al_e)
         for gi in (0, 11):
             w_a[:, gi] = (.6 * a["gk"][ids22[gi]] + .4 * a["aerial"][ids22[gi]] + 4) * np.exp(-dd_a[:, gi] / 4.5) * (dd_a[:, gi] < 10)
         if rcv is not None:
@@ -1869,6 +1894,11 @@ class Match:
         for g in (0, 11):  # a keeper coming for the ball outweighs outfield players near him
             if ok[g]:
                 w[g] = (.6 * a["gk"][g] + .4 * a["aerial"][g] + 4) * np.exp(-d[g] / 4.5)
+        # the body decides the rest: a man facing the ball attacks it, a man it arrives behind or across can only guide it. The defender in the box watches
+        # the cross come, the runner arriving across it is half turned away: that is why defenders win most balls in their own box (the sim's crosses
+        # found their man 44% of the time against about 25-30%, with attacker and defender equally close to the landing point)
+        al_a = (1. + s.head @ -_unit(f["end"] - f["start"])) / 2.
+        w = w * (TUNE["air_face0"] + (1. - TUNE["air_face0"]) * al_a)
         w[f["rcv"]] *= 1.2 if f["rcv"] >= 0 else 1
         i = int(s.rng.choice(22, p=w / w.sum()))
         t = i // 11

@@ -1108,6 +1108,53 @@ shape's reference point follows the ball at up to 0.8 of a man's top speed (`blo
 to 0.3 of top speed the distance is 12.0 km but the block never reaches the box behind a quick ball (the midfield's target 19 m with the ball
 at 10); 0.5 gives 12.7 km. That is a trade on one number, not a cause, and is left open: what real blocks do per pass needs tracking data.
 
+### The attack: who gets into the box, and who wins the ball there (2026-10-11, later)
+
+With the defence paced and placed, shots sat at 30-36 a match against 26 and big chances at 0.3-0.7 of real. By role: the strikers took
+71% of a side's shots (real about 38%) and received the ball in the box 17-20 times a match against the wingers' 3 and the number tens'
+1-2; per team, passes into the box were right in number (24.6 against 24.9) but completed 48% of the time against 36%, and crosses found
+their man 44% of the time against 25-30%. Shots per successful box entry were real (0.89 both); the entries were too easy, and the men
+arriving in the box were the wrong ones. Traced one at a time:
+- **The box places were the strikers'.** Open Football's four box places (near post, spot, back post, edge) were scored on nearness,
+  aerial quality and positioning with the same appetite for every forward, so the striker took the back post too (he is nearest and
+  strongest in the air). Each place is now for a role first: the near post and the spot the striker's, the back post the far-side wide
+  man's (the blind-side run that the place's waiting point, 13 m wide of the ball, describes), the edge the arriving midfielder's
+  (`APPETITE` in teamplay). Filling all four places (`of_mask` 15) was tried again and rejected again: 40 shots a match, the strikers
+  taking every place.
+- **The far-side winger was pulled back to the touchline while holding the back post.** The width plan says a holder given a box place
+  has left the line for it, but the weight that said so (`wt`) was only set in the template branch, so with the plan on the far winger's
+  place said 13 m wide and his target said 29.7 m (the line) every tick. A holder with a box place now skips the width pull. Far-side
+  winger inside the box 0.15 -> 0.28 of the time the ball is held wide in the final third, box receipts of wingers 2.5 -> 5.4 a match,
+  the strikers' shot share 0.71 -> 0.60, wingers' 0.09 -> 0.13.
+- **The attack's clock is the delivery.** A man whose place is in or at the box must be there before the ball can be played there; on
+  the attacking side's fixed horizon he jogged the last 6 m and stood 5 m short of his place as the cross came. His pace now follows the
+  ball's time to his spot like a defender's (`att_clock_r`: places within 25 m of the goal), the rest of the attacking shape keeps the
+  fixed horizon. (A sharper clock from the ball's own flight model, a long ball struck harder, was tried for everyone and reverted:
+  0.3 km more running, nothing gained.)
+- **A blocked cross died at the blocker's feet.** The body-contact model used one restitution for trunk and limb, so a cross blocked by a
+  leg stretched across left at a median 4 m/s and was picked up; real blocked crosses ring off a shin and go behind, the largest single
+  source of corners. A limb is hard (`contact_e_limb`): 6.7 m/s after the block. Corners did not follow (5 a match): the deflection's
+  direction is random off a limb and the loose ball is chased; recorded as open with the sources measured (keeper tips 2.5 a match,
+  clearances 1.1, blocked shots 0.4, deflected crosses 0.2 against roughly 2.5, 3, 2 and 3-4 real).
+- **The body in the air.** Logged every aerial settlement of a cross in a match: attacker and defender equally close to the landing point
+  (1.2 and 1.4 m), a coin flip plus the receiver's bonus, won by the attack 54%. A man facing the ball attacks it; a man it arrives
+  behind or across can only guide it, which is why defenders win most balls in their own box. The settlement, and the passer's estimate
+  of it, now weigh each man by how squarely he faces the incoming ball (`air_face0`, the same body-orientation rule the first touch
+  uses). It moved little: in the sim both men face the ball (the defender watches it come, the runner runs at the landing point,
+  which is towards it), so the asymmetry is small (attackers won 54% -> 44% of the settlements in one match, crosses complete 45% on 12).
+  The rule stays as the body-orientation design applied consistently; the completion is open.
+- **Bodies passed through each other.** The only contact between players was a nudge apart over 1.6 m with no effect on speed, so a box
+  runner went straight through the marker standing goal-side of him and arrived first by right. A man running into another now loses the
+  part of his speed that goes into him (an inelastic contact, `body_block`, `body_touch`); the man on the ball and the men on him are left
+  to the duel rules. Defenders in the cone of a 10-22 m shot 0.60 -> 0.69, blocked shots 5.6 -> 7.0 a match, take-ons 36 -> 40, fouls 17 -> 20.
+
+State after the round (12 matches, against the committed state before it): strikers' shot share 0.71 -> 0.64 (real 0.38), wingers' box
+receipts 2.5 -> 6.2 a match, wingers' shot share 0.09 -> 0.12; shots 32 -> 35 and on target 12.8 -> 14.2 (real 26 and 9-10), xG 3.2,
+goals 3.25, corners 5.6 -> 6.6, crosses complete 0.45 (0.25-0.30), passes into the box completed 13 a team (8.9), cone 0.79 -> 0.69. The
+attack now sends the right men into the box and the defence does not deal with them: a box runner's marker reacts to the run instead of
+standing where the run must go, and the honest acceleration no longer lets him make it up. That, the box defence against runners, is the
+next cause; shot volume follows from it (shots per successful box entry are real, 0.89, the successful entries are 1.5x).
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

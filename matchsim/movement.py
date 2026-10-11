@@ -917,7 +917,7 @@ def team_targets(m, t):
             # The far-side holder is the one who attacks the back post once the ball is in the final third, so the box slot outranks his width anchor.
             hug = float(clip(2. * tc.width, 0, 1)) * fd  # how committed the side is to playing wide
             for k, h in enumerate(hold):
-                if h < 0 or h == holder or (m.t < m.run_until[11 * t + h]):
+                if h < 0 or h == holder or (m.t < m.run_until[11 * t + h]) or plan_skip[h]:  # a holder given a box place has left the line for it: the place outranks the width anchor (it was meant to, but the weight that said so was only set in the template branch, so with the plan on the far-side winger was pulled back to the touchline while holding the back-post place)
                     continue
                 far = (k == 0) != (Bs[1] < W / 2)  # the flank the ball is not on
                 zone[h, 1] += ((INSET if k == 0 else W - INSET) - zone[h, 1]) * hug * (((1. - wt) * (1. - TP.get("far_tuck", 0.) * float(clip((abs(Bs[1] - W / 2) - 10.) / 17., 0, 1)))) if far else 1.)

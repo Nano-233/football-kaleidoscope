@@ -51,7 +51,7 @@ checking come from real event/freeze-frame data (`scripts/norms.py`, `scripts/no
 | A5 | Receive between the lines (half-spaces) | seek-space reward for gaps between defensive lines | missing |
 | A6 | Full-back overlaps/underlaps to create 2v1 | trigger when winger is on the ball wide and full-back is behind him | done (overlap run) |
 | A7 | Striker pins the centre-backs, peels off the blind side, attacks the near post on crosses | seek-space terms and cross runs | partial |
-| A8 | Cross shapes: near post, far post, penalty spot, edge for the cut-back | box runs on a wide ball | done |
+| A8 | Cross shapes: near post, far post, penalty spot, edge for the cut-back | box places by role (near post and spot the striker's, back post the far-side wide man's, edge the arriving midfielder's); a place outranks the width anchor; a man with a place is paced by the ball's time to it | done |
 | A9 | Stay onside: level with the last defender and time runs | offside hover at the last defender's shoulder | done |
 | A10 | Patience: recycle when nothing progresses, switch when the near side is congested | utility of free space on the far side | done (relief + onward potential) |
 | A11 | Build-up: goalkeeper as outlet, centre-backs split, full-backs high, pivot drops | goal-kick and build-up shapes | partial |
@@ -93,4 +93,6 @@ the restart for a dead ball, and a fixed horizon for the side with it (its targe
 rule; sprinting is what need plus physics produce. The physics is the sprint motor model used on tracking data: the push left falls as
 speed rises, a = a0 (1 - v / vmax), with a time constant of 1.2-1.4 s, so 5.5 m/s comes about 1.5 s into a run and 7 m/s at 2.5 s, and a
 ten-metre dash is not a sprint. Status: done. Measured: walking, jogging, top speed and sprint count per man within the tracking norms;
-running and high-speed distance still above them (see the DEVLOG entry of 2026-10-11).
+running and high-speed distance still above them (see the DEVLOG entry of 2026-10-11). Bodies do not pass through each other: a
+man running into another loses the part of his speed that goes into him, so a runner goes round the man goal-side of him. In the air a
+man facing the ball attacks it, a man it arrives behind or across can only guide it; off the body the trunk gives, a limb is hard.

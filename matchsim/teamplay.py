@@ -76,7 +76,14 @@ def in_flight_to_goal(m, t):
     return bool(np.hypot(L - end[0], W / 2 - end[1]) < FLIGHT_RANGE and end[0] > (m.ball[0] if t == 0 else L - m.ball[0]))
 
 
-def _fit(m, t, i, slot, target, P, role):
+# who a box place is for, by role: the near post is the striker's, the spot the striker's or the number ten's, the back post the far-side wide man's
+# (the blind-side run that the slot's waiting point, 13 m wide of the ball side, describes), the edge the arriving midfielder's. Scored on fit alone
+# the strikers took every place (they are nearest and strongest in the air) and the wingers received the ball in the box three times a match
+# against the strikers' eighteen; real wide forwards take about a quarter of a side's shots
+APPETITE = {ST: (1., 1., .55, .3), WG: (.5, .6, 1., .4), AM: (.5, .9, .5, 1.), CM: (.3, .6, .35, 1.), DM: (.15, .4, .2, .8), FB: (.12, .12, .5, .4), CB: (.12, .12, .12, .12)}
+
+
+def _fit(m, t, i, slot, target, P, role, far_side=False):
     a = lambda k: m.attr[k][11 * t + i] / 20.
     reach = float(np.clip(1. - np.hypot(*(P[i] - target)) / 25., 0, 1))
     aerial = .8 * a("aerial") + .2 * a("strength")
@@ -84,7 +91,9 @@ def _fit(m, t, i, slot, target, P, role):
     bias = AERIAL_BIAS[slot]
     quality = aerial * bias + ground * (1. - bias)
     r = role[i]
-    appetite = 1. if r in (ST, WG) else (1. if (r in (AM, CM, DM) and slot == 3) else .6 if r in (AM, CM, DM) else .12)
+    appetite = APPETITE.get(int(r), (.12,) * 4)[slot]
+    if slot == 2 and r == WG and not far_side:
+        appetite = .5  # the ball-side winger is the crosser or the width, not the back-post runner
     return (reach * .42 + quality * .28 + a("positioning") * .30) * appetite
 
 
@@ -97,7 +106,8 @@ def box_slots(m, t, role, out_f, P, ball, side, held, carrier, prev):
         for i in range(11):
             if not out_f[i] or held[i] or i == carrier or i in ids or np.hypot(*(P[i] - ball)) >= ATTACK_RADIUS:
                 continue
-            sc = _fit(m, t, i, s, target, P, role) + (.15 if prev[s] == i else 0.)
+            far = (m.anchor[11 * t + i][1] - W / 2) * side < 0  # his formation place is on the far side of the ball
+            sc = _fit(m, t, i, s, target, P, role, far) + (.15 if prev[s] == i else 0.)
             if sc > score:
                 best, score = i, sc
         ids[s] = best
