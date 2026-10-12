@@ -799,6 +799,14 @@ Fixed (`_held`): the odds a defender needs = a floor from the cover behind him (
 Effect (24 matches): loss 188 -> 179; tackles 20.5 (real 20.5), fouls 11.4 (12.0), fouls 17-35 m 2.1 (1.1), attacking-third fouls 3.1 (4.3), direct free-kick shots 3.3 -> 1.44 per match (about 0.8-1.0).
 Still open: take-ons 11 vs 17.5, midfield fouls 6.2 vs 8.8 (tactical fouls to stop a counter are not modelled), tackles in the attacking third 4.8 vs 2.3, big chances 0.35 vs 0.86, corners 4.3 vs 11.6.
 
+### Penalties, crosses and cut-backs: what holds the chances back (2026-10-12)
+
+Fixed: near his goal a defender's extra caution (`tackle_risk`) now fades when the carrier is in a shooting position (`threat_xg` 0.15 of clean-look xG): a man about to shoot shoots if nobody goes in, so holding off saves nothing. Penalties had fallen to 0.02-0.10 per team (real 0.18) after the tackle threshold work; back to about 0.10-0.12 (24-match counts are only about 5 penalties, so this is noise-limited).
+Measured, not fixed (`probe_all.py`, Euro 2020 360 frames):
+- When the ball is wide within 17 m of the byline, real teams have 2.02 team-mates in the cut-back zone (6-20 m from goal, central 20 m), 0.86 of them with no opponent within 3 m; the sim 0.81 / 0.47. Filling the penalty-spot place of the attack plan (`of_mask` 14) gives 1.65 / 1.06 (real-like), but ground balls into the box stay at 3.5-4 per team (real 9.0 + 2.6 ground crosses) and shots rise in the 0.03-0.10 band: the wide man still chooses the lofted cross.
+- The lofted cross succeeds too often: 0.42-0.51 completed against 0.27 real, 14-17 per team against 7.2. At arrival the intended receiver is 1.4 m from where the ball can be headed and the nearest defender 2.8 m from the landing spot; only the attacker can reach it in 31 % of crosses, only a defender in 13 %; the keeper is 12 m away and almost never comes. Sending the defenders to the ball's path during the flight (instead of the landing spot) did not change who reaches it (tried, reverted): the box positions before the cross are the cause. Pricing the cross with the aerial rule (`_air_share`, consistent with the outcome) made crosses more attractive because that outcome is too generous (tried, reverted until the box defence is right).
+Next for chances: box defence before the cross (defenders between the ball and the goal, the keeper claiming in the six-yard area), then the cut-back option becomes the better choice on its own.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
