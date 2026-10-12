@@ -14,6 +14,7 @@ tracking frames; no model computes a figure. Each tool returns a small JSON-read
 Frames: team 0 attacks towards x = L, team 1 towards x = 0. Tools report positions in the team's own frame (own goal at x = 0,
 attacking left to right), so the two teams read the same way.
 """
+import bisect
 import json
 import pathlib
 
@@ -35,10 +36,6 @@ GROUPS = {
 }
 
 
-def _clock(s):
-    return f"{int(s // 60) + 1}'"
-
-
 class MatchView:
     def __init__(self, match):
         self.meta, self.events = match["meta"], match["events"]
@@ -55,6 +52,13 @@ class MatchView:
         self.slot0 = [p["id"] for p in self.meta["home"]["players"]] + [p["id"] for p in self.meta["away"]["players"]]
         self.slot_changes = sorted((e["t"], e["slot"], e["on"]) for e in self.events if e["type"] in ("substitution", "outfield_keeper") and "slot" in e)
         self.role_now = {pid: p["role"] for pid, p in self.players.items()}
+        self._ct = [e["t"] for e in self.events if e.get("clock")]
+        self._cc = [e["clock"] for e in self.events if e.get("clock")]
+
+    def _clock(self, t):
+        """The match clock (as on the scoreboard, 45+2', and the second half from 46') at time t in seconds."""
+        i = bisect.bisect_right(self._ct, t) - 1
+        return self._cc[max(i, 0)] if self._cc else f"{int(t // 60) + 1}'"
 
     # ---------------------------------------------------------------- helpers
     def _frame_range(self, t0, t1):
@@ -104,7 +108,7 @@ class MatchView:
         reads = self._read_formation(P)
         line = sorted(P[:, 0])
         return dict(
-            team=self.team_names[team], window=[_clock(t0), _clock(t1)], phase=phase,
+            team=self.team_names[team], window=[self._clock(t0), self._clock(t1)], phase=phase,
             formation=reads[0][0], runner_up=reads[1][0] if len(reads) > 1 else None, fit=round(reads[0][1], 3),
             defensive_line_m=round(float(np.mean(line[:4])), 1), block_length_m=round(float(np.ptp(P[:, 0])), 1), block_width_m=round(float(np.ptp(P[:, 1])), 1),
             positions=[dict(player=self.names[pid], id=pid, x=round(float(xy[0]), 1), y=round(float(xy[1]), 1)) for pid, xy in rows],
@@ -161,11 +165,11 @@ class MatchView:
                 ca, cb = ra[k], rb[k]
                 na, nb = best(ca), best(cb)
                 if na and na == nb and na != cur and ca.get(cur, 9) > margin * ca[na] and cb.get(cur, 9) > margin * cb[nb]:
-                    changes.append(dict(phase=phase, at=_clock(ra[0] + window / 2), t=ra[0] + window / 2, formation=na, previous=cur))
+                    changes.append(dict(phase=phase, at=self._clock(ra[0] + window / 2), t=ra[0] + window / 2, formation=na, previous=cur))
                     cur = na
         changes.sort(key=lambda c: c["t"])
         return dict(team=self.team_names[team], starting=start, changes=changes,
-                    by_window=[dict(at=_clock(t), in_possession=best(ci), out_of_possession=best(co)) for t, ci, co in reads[::2]])
+                    by_window=[dict(at=self._clock(t), t=t, in_possession=best(ci), out_of_possession=best(co)) for t, ci, co in reads[::2]])
 
     def same_shape(self, a, b):
         """Two formation names for the same layout: their templates are within 0.01 of each other in the reader's own normalised fit
@@ -195,7 +199,7 @@ class MatchView:
         sched = [(0., tr["starting"])] + [(c["t"], c["formation"]) for c in tr["formation_changes"]]
         ok = n = 0
         for w in timeline["by_window"]:
-            tm = (int(w["at"].rstrip("'")) - 1) * 60 + 210.
+            tm = w["t"] + 210.
             truth_now = [f for t, f in sched if t <= tm][-1]
             if w["in_possession"]:
                 n += 1
@@ -232,7 +236,7 @@ class MatchView:
                     r["def_actions"] += 1
         for w in sorted(rows):
             r = rows[w]
-            out.append(dict(window=[_clock(w * window), _clock((w + 1) * window)], ppda=round(r["opp_passes"] / r["def_actions"], 1) if r["def_actions"] else None,
+            out.append(dict(window=[self._clock(w * window), self._clock((w + 1) * window)], ppda=round(r["opp_passes"] / r["def_actions"], 1) if r["def_actions"] else None,
                             action_height_m=round(float(np.mean(r["heights"])), 1) if r["heights"] else None,
                             balls_won_own_mid_final_third=r["won"], counterpress_wins=r["counter"]))
         return dict(team=self.team_names[team], by_window=out, note="PPDA: lower means a more intense press")
@@ -260,13 +264,13 @@ class MatchView:
                     j = k
                     while j + 1 < n and cond[j + 1]:
                         j += 1
-                    spells.append(dict(team=self.team_names[side], start=_clock(k * window), end=_clock((j + 1) * window),
+                    spells.append(dict(team=self.team_names[side], start=self._clock(k * window), end=self._clock((j + 1) * window), start_t=k * window, end_t=(j + 1) * window,
                                        xg=round(float(xg[side, k:j + 1].sum()), 2), opponent_xg=round(float(xg[1 - side, k:j + 1].sum()), 2)))
                     k = j
                     break
             k += 1
         return dict(teams=self.team_names, window_s=window,
-                    series=[dict(at=_clock(w * window), xg=[round(float(xg[0, w]), 2), round(float(xg[1, w]), 2)], shots=[int(shots[0, w]), int(shots[1, w])],
+                    series=[dict(at=self._clock(w * window), xg=[round(float(xg[0, w]), 2), round(float(xg[1, w]), 2)], shots=[int(shots[0, w]), int(shots[1, w])],
                                  field_tilt_home=round(float(tilt[w]), 2)) for w in range(n)],
                     cumulative_xg=[round(float(xg[0].sum()), 2), round(float(xg[1].sum()), 2)], dominant_spells=spells)
 
@@ -292,7 +296,7 @@ class MatchView:
                 if end is not None and xy[0] < 2 * L / 3 <= end[0]:
                     side[0 if end[1] < W / 3 else 1 if end[1] < 2 * W / 3 else 2] += 1
         top = sorted(deg.items(), key=lambda kv: -kv[1])[:3]
-        return dict(team=self.team_names[team], window=[_clock(t0), _clock(t1)],
+        return dict(team=self.team_names[team], window=[self._clock(t0), self._clock(t1)],
                     links=[dict(**{"from": self.names[a], "to": self.names[b]}, passes=n) for (a, b), n in sorted(links.items(), key=lambda kv: -kv[1]) if n >= min_links],
                     avg_positions={self.names[p]: [round(float(np.mean([v[0] for v in xs])), 1), round(float(np.mean([v[1] for v in xs])), 1)] for p, xs in pos.items()},
                     connectors=[dict(player=self.names[p], completed_links=n) for p, n in top],

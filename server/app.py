@@ -17,6 +17,7 @@ from aiohttp import web
 
 from newsroom.clients import make_client
 from newsroom.desk import Desk
+from newsroom.localize import translate
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DATA, CACHE, WEB = ROOT / "server" / "data", ROOT / "server" / "cache", ROOT / "web"
@@ -57,6 +58,28 @@ async def ask(request):
     return web.json_response(dict(out, cached=False), dumps=lambda o: json.dumps(o, default=str))
 
 
+async def tr(request):
+    """POST {"language": "Español", "texts": [...]} -> {"texts": [...]}; each line cached on its own, so a line is translated once per language."""
+    global _client
+    body = await request.json()
+    lang = str(body.get("language", ""))[:30]
+    texts = [str(t)[:1500] for t in (body.get("texts") or [])][:30]
+    if not lang or lang == "English" or not texts:
+        return web.json_response(dict(texts=texts))
+    keys = [hashlib.sha1(json.dumps([lang, t]).encode()).hexdigest() for t in texts]
+    got = {k: json.loads((CACHE / f"tr-{k}.json").read_text(encoding="utf-8")) for k in keys if (CACHE / f"tr-{k}.json").exists()}
+    todo = [i for i, k in enumerate(keys) if k not in got]
+    if todo:
+        async with _gate:
+            _client = _client or make_client()
+            new = await translate(_client, lang, [texts[i] for i in todo])
+        CACHE.mkdir(parents=True, exist_ok=True)
+        for i, t in zip(todo, new):
+            got[keys[i]] = t
+            (CACHE / f"tr-{keys[i]}.json").write_text(json.dumps(t, ensure_ascii=False), encoding="utf-8")
+    return web.json_response(dict(texts=[got[k] for k in keys]))
+
+
 async def index(request):
     return web.FileResponse(WEB / "index.html")
 
@@ -64,6 +87,7 @@ async def index(request):
 def app():
     a = web.Application(client_max_size=64 * 1024)
     a.router.add_post("/api/ask", ask)
+    a.router.add_post("/api/translate", tr)
     a.router.add_get("/", index)
     a.router.add_static("/", WEB)
     return a

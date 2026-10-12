@@ -48,6 +48,31 @@ function loadProfile() {
   const base = { depth: 'standard', language: 'English', club: '', player: '', playerId: '' };
   try { return Object.assign(base, JSON.parse(localStorage.getItem('mn-profile'))); } catch { return base; }
 }
+// published lines in the reader's language: fetched in small batches from the localizer, the original shown until it arrives
+const TR = {}, trQueue = new Set();
+let trTimer = null;
+function tr(text) {
+  const lang = S.profile.language;
+  if (!text || lang === 'English') return text;
+  const hit = (TR[lang] || {})[text];
+  if (hit) return hit;
+  trQueue.add(text);
+  clearTimeout(trTimer); trTimer = setTimeout(flushTr, 150);
+  return text;
+}
+async function flushTr() {
+  const lang = S.profile.language, texts = [...trQueue].filter(t => !(TR[lang] || {})[t]).slice(0, 20);
+  trQueue.clear();
+  if (!texts.length) return;
+  try {
+    const r = await fetch('api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ language: lang, texts }) });
+    if (!r.ok) return;
+    const out = (await r.json()).texts;
+    TR[lang] = TR[lang] || {};
+    texts.forEach((t, i) => { TR[lang][t] = out[i]; });
+    S.trVer = (S.trVer || 0) + 1; $('lt-line').dataset.id = ''; render(true);
+  } catch { /* no server: the lines stay in English */ }
+}
 function saveProfile() { try { localStorage.setItem('mn-profile', JSON.stringify(S.profile)); } catch { /* storage off: the profile lasts for this visit */ } }
 
 // ---------------------------------------------------------------- data
@@ -201,7 +226,7 @@ function hud(t) {
   const item = feed().filter(it => it.approved && t >= it.overlay.t_in && t < it.overlay.t_out).pop();
   $('overlay').hidden = !item;
   if (item && $('lt-line').dataset.id !== String(item.moment.id)) {
-    $('lt-line').dataset.id = item.moment.id; $('lt-line').textContent = item.line;
+    $('lt-line').dataset.id = item.moment.id; $('lt-line').textContent = tr(item.line);
     $('lt-kind').textContent = `${item.moment.type.replace(/_/g, ' ')} · ${item.moment.clock}`;
   }
   const c = S.clip, tl = $('tl-clip');
@@ -242,7 +267,7 @@ function setPersona(p) {
 function render(force) {
   if (!S.D) return;
   const minute = Math.floor(S.t / 60), shown = feed().filter(it => it.moment.t <= S.t).length + (S.profile.playerId ? playerNotes().length : 0);
-  const key = [S.persona, S.tab, S.tab === 'Clips' || S.tab === 'Ask' ? '' : minute, (S.D.recaps || []).filter(r => r.t <= S.t + .5).length, shown, S.player, S.group, S.clip && S.clip.id, S.custom.length, S.askVer, S.profile.playerId, JSON.stringify(S.board)].join('|');
+  const key = [S.persona, S.tab, S.tab === 'Clips' || S.tab === 'Ask' ? '' : minute, (S.D.recaps || []).filter(r => r.t <= S.t + .5).length, shown, S.player, S.group, S.clip && S.clip.id, S.custom.length, S.askVer, S.profile.playerId, JSON.stringify(S.board), S.trVer, S.profile.language].join('|');
   if (!force && key === S.panelKey) return;
   S.panelKey = key;
   const body = $('panel-body'), keep = body.scrollTop, same = body.dataset.view === S.persona + S.tab + S.player;
@@ -290,14 +315,14 @@ function feedView(mode) {
   if (!items.length) return `<div class="empty">The newsroom files its first story when something happens.</div>`;
   return `<ul class="feed ${mode}">` + items.map(it => {
     if (it.note) return `<li class="note"><div class="meta"><span class="t">${esc(it.moment.clock)}</span><span class="kind">${esc(S.profile.player)}</span>
-      <button class="jump" data-seek="${it.moment.t - 6}">Watch</button></div><p>${esc(it.line)}</p></li>`;
+      <button class="jump" data-seek="${it.moment.t - 6}">Watch</button></div><p>${esc(tr(it.line))}</p></li>`;
     if (!it.approved && mode === 'fan') return '';
     const badge = !it.approved ? `<span class="badge warn">Held by fact-checker</span>`
       : it.fallback ? `<span class="badge warn" title="Every agent draft was held, so a plain line built from the facts went out">Drafts held · plain line</span>`
       : it.rewrites ? `<span class="badge ok">Fact-checked · rewritten ${it.rewrites}×</span>` : `<span class="badge ok">Fact-checked</span>`;
     return `<li><div class="meta"><span class="t">${esc(it.moment.clock)}</span><span class="kind">${esc(it.moment.type.replace(/_/g, ' '))}</span>${mode === 'analyst' ? badge : ''}
       <button class="jump" data-seek="${it.moment.t - 8}">Watch</button></div>
-      <p${it.approved ? '' : ' class="rejected"'}>${esc(it.line)}</p>${mode === 'analyst' ? trail(it) : ''}</li>`;
+      <p${it.approved ? '' : ' class="rejected"'}>${esc(tr(it.line))}</p>${mode === 'analyst' ? trail(it) : ''}</li>`;
   }).join('') + '</ul>';
 }
 
@@ -483,7 +508,7 @@ function boardView() {
       <table class="stats"><thead><tr><th>Window</th><th>PPDA</th><th>Height</th><th>Counter-press</th></tr></thead><tbody>${rows.slice(0, cur).map(r => `<tr><td>${esc(r.window.join('–'))}</td><td>${r.ppda ?? '–'}</td><td>${r.action_height_m ?? '–'} m</td><td>${r.counterpress_wins}</td></tr>`).join('') || '<tr><td colspan="4">First window not over yet.</td></tr>'}</tbody></table>
       <div class="mono" style="margin-top:8px">PPDA: opponent passes per defensive action in their build-up (lower = harder press). Dots on the pitch: where the ball was won in the last fifteen minutes.</div>`;
   } else {
-    const sp = B.momentum.dominant_spells.filter(x => parseInt(x.end) * 60 <= S.t + 60);
+    const sp = B.momentum.dominant_spells.filter(x => x.end_t <= S.t);
     body = `<div class="label">Momentum · xG by five minutes</div>${momentumSvg()}
       <div class="label">Spells of dominance</div>${sp.length ? `<table class="stats"><tbody>${sp.map(x => `<tr><td>${esc(x.team)} ${esc(x.start)}–${esc(x.end)}</td><td>xG ${x.xg} v ${x.opponent_xg}</td></tr>`).join('')}</tbody></table>` : '<div class="mono">None yet.</div>'}`;
   }
@@ -503,7 +528,7 @@ function recapView() {
     const watch = (r.watch || []).map(w => `<button class="link" data-seek="${w.t - 6}">Watch ${esc(w.clock)} ${esc(label(w.type).toLowerCase())}</button>`).join(' ');
     const steps = r.steps.map(st => `<li><b>${esc(st.agent.replace('_', ' '))}</b> → ${esc(st.tool.replace(/_/g, ' '))}</li>`).join('');
     return `<li><div class="q">${title}</div><div class="meta"><span class="badge ok">Fact-checked${r.rewrites ? ` · rewritten ${r.rewrites}×` : ''}</span></div>
-      <p${r.approved ? '' : ' class="rejected"'}>${esc(r.answer || r.held)}</p>${watch ? `<div class="watch">${watch}</div>` : ''}
+      <p${r.approved ? '' : ' class="rejected"'}>${esc(tr(r.answer || r.held))}</p>${watch ? `<div class="watch">${watch}</div>` : ''}
       <details class="trail"><summary>How the newsroom worked it out (${r.steps.length} steps)</summary><div class="trail-body"><ol class="steps">${steps}</ol></div></details></li>`;
   }).join('') + '</ul>';
 }
@@ -527,7 +552,6 @@ function askView() {
   }).join('');
   return `<div class="ask-controls">
       <label>Depth <select id="p-depth">${opt('quick', P.depth, 'Quick')}${opt('standard', P.depth, 'Standard')}${opt('deep', P.depth, 'Deep')}</select></label>
-      <label>Language <select id="p-lang">${LANGS.map(l => opt(l, P.language)).join('')}</select></label>
       ${P.player ? `<span class="badge">Following ${esc(P.player)}</span>` : ''}${P.club ? `<span class="badge">${esc(P.club)} fan</span>` : ''}</div>
     <div class="ask-box"><input type="text" id="ask-q" placeholder="Ask about this match" value="${esc(S.askDraft)}" maxlength="300" aria-label="Your question"><button class="btn primary" data-act="ask">Ask</button></div>
     <div class="chips" style="margin:10px 0 4px">${sug.map(q => `<button class="chip" data-ask="${esc(q)}">${esc(q)}</button>`).join('')}</div>
@@ -656,10 +680,11 @@ $('panel-body').addEventListener('click', e => {
 });
 $('panel-body').addEventListener('change', e => {
   if (e.target.id === 'p-depth') { S.profile.depth = e.target.value; saveProfile(); }
-  if (e.target.id === 'p-lang') { S.profile.language = e.target.value; saveProfile(); }
 });
 $('panel-body').addEventListener('keydown', e => { if (e.target.id === 'ask-q' && e.key === 'Enter') askNewsroom(e.target.value); });
 $('club').onchange = e => { S.profile.club = e.target.value; saveProfile(); };
+$('lang').innerHTML = LANGS.map(l => `<option${l === S.profile.language ? ' selected' : ''}>${l}</option>`).join('');
+$('lang').onchange = e => { S.profile.language = e.target.value; saveProfile(); $('lt-line').dataset.id = ''; render(true); };
 $('panel-body').addEventListener('input', e => {
   if (e.target.id === 'clip-start' || e.target.id === 'clip-end') { setPlaying(false); updateClip(e.target.id.slice(5), +e.target.value); }
   if (e.target.id === 'ask-q') S.askDraft = e.target.value;

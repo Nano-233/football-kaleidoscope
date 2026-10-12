@@ -40,16 +40,62 @@ def template_line(f):
         return f"{m['clock']} Goal for {f['team']}: {f['player']} scores, {f['teams']['home']} {f['score']} {f['teams']['away']}."
     if m["type"] == "full_time":
         return f"Full time: {f['teams']['home']} {f['score']} {f['teams']['away']}."
+    if m["type"] == "shape_change":
+        sh = f["shift"]
+        return f"{m['clock']} {f['team']} change shape {sh['phase']}: {sh['previous']} to {sh['now']}."
+    if m["type"] == "spell":
+        sp = f["spell"]
+        return f"{m['clock']} {f['team']} had the upper hand from {sp['start']} to {sp['end']} (xG {sp['xg']} to {sp['opponent_xg']})."
+    if m["type"] == "substitution":
+        return f"{m['clock']} Substitution, {f['team']}: {f['player']} on for {f['off']}."
+    if m["type"] == "half_time":
+        return f"Half-time: {f['teams']['home']} {f['score']} {f['teams']['away']}."
     who = f" {f['player']} ({f['team']})" if f["player"] else f" {f['team']}" if f["team"] else ""
     return f"{m['clock']} {m['type'].replace('_', ' ').capitalize()}:{who}."
 
 
-def moments(match):
+def _observed(match, names, team):
+    """Moments the newsroom sees from the data rather than from a single event: a change of shape the reader confirmed (with or without
+    the ball), the end of a spell of dominance (published when it is over, so it uses nothing from later), substitutions, half-time.
+    Never the engine's own record of what the manager decided: a broadcaster sees the shape change, not the instruction."""
+    from analytics.tools import MatchView
+    mv, out = MatchView(match), []
+    for tm in (0, 1):
+        for c in mv.formation_timeline(tm)["changes"]:
+            t = c["t"] + 210.  # the change is confirmed when its second window ends (formation_timeline: 7-minute windows, 3.5-minute steps)
+            out.append((t, "shape_change", dict(team=team[tm], shift=dict(phase=c["phase"].replace("_", " "), previous=c["previous"], now=c["formation"], since=c["at"]))))
+    for sp in mv.momentum()["dominant_spells"]:
+        out.append((sp["end_t"], "spell", dict(team=sp["team"], spell=dict(start=sp["start"], end=sp["end"], xg=sp["xg"], opponent_xg=sp["opponent_xg"]))))
+    seen = set()
+    for e in match["events"]:
+        if e["type"] == "substitution" and (e["t"], e["team"]) not in seen:
+            seen.add((e["t"], e["team"]))
+            subs = [x for x in match["events"] if x["type"] == "substitution" and x["t"] == e["t"] and x["team"] == e["team"]]
+            out.append((e["t"], "substitution", dict(team=team[e["team"]], player=", ".join(x["on_name"] for x in subs), off=", ".join(x["off_name"] for x in subs))))
+        if e["type"] == "half_end":
+            out.append((e["t"], "half_time", dict(team="", player="")))
+    return sorted(out, key=lambda x: x[0])
+
+
+def moments(match, observed=True):
     meta, acc = match["meta"], StatsAccumulator(match["meta"])
     team = [meta["home"]["name"], meta["away"]["name"]]
     names = {p["id"]: p["name"] for k in ("home", "away") for p in meta[k]["players"] + meta[k]["bench"]}
-    out, score, last_tactic = [], [0, 0], {}
+    pending = _observed(match, names, team) if observed else []
+    out, score = [], [0, 0]
+
+    def pack(kind, clock, t, eid, **kw):
+        tt = acc.teams()
+        stats = {team[i]: {k: round(tt[i][k], 2) if isinstance(tt[i][k], float) else tt[i][k] for k in STAT_KEYS} for i in (0, 1)}
+        base = dict(moment=dict(type=kind, clock=clock, t=t, id=eid), teams=dict(home=team[0], away=team[1]), team="", player="",
+                    score=f"{score[0]}-{score[1]}", xg=None, assist="", reason="", why="", stats=stats, glossary=GLOSSARY)
+        base.update(kw)
+        out.append(base)
+
     for e in match["events"]:
+        while pending and pending[0][0] <= e["t"]:  # an observed moment is published with the numbers as they stood then
+            t_, kind_, kw_ = pending.pop(0)
+            pack(kind_, e["clock"], t_, None, **kw_)
         acc.update(e)
         ty, tm = e["type"], e.get("team")
         if ty in ("goal", "own_goal"):
@@ -57,16 +103,10 @@ def moments(match):
         kind = {"goal": "goal", "own_goal": "own_goal", "penalty": "penalty", "sent_off": "red_card", "var_overturned": "var_overturned", "full_time": "full_time"}.get(ty)
         if ty == "shot" and e["outcome"] != "goal" and e["xg"] >= BIG_CHANCE_XG:
             kind = "big_chance"
-        if ty == "tactic_change" and e.get("reason") == "man down" and e["t"] - last_tactic.get(tm, -1e9) > 900:  # the manager re-tunes every 30 s: only the first reaction is news
-            kind, last_tactic[tm] = "tactic_change", e["t"]
         if not kind:
             continue
-        t = acc.teams()
-        stats = {team[i]: {k: round(t[i][k], 2) if isinstance(t[i][k], float) else t[i][k] for k in STAT_KEYS} for i in (0, 1)}
-        out.append(dict(
-            moment=dict(type=kind, clock=e["clock"], t=e["t"], id=e["id"]), teams=dict(home=team[0], away=team[1]),
-            team=team[tm] if tm in (0, 1) else "", player=names.get(e.get("player"), ""), score=f"{score[0]}-{score[1]}", xg=e.get("xg"),
-            assist=names.get(e.get("assist"), ""), reason=e.get("reason") or e.get("card") or "", why=_why(e, names), stats=stats, glossary=GLOSSARY))
+        pack(kind, e["clock"], e["t"], e["id"], team=team[tm] if tm in (0, 1) else "", player=names.get(e.get("player"), ""), xg=e.get("xg"),
+             assist=names.get(e.get("assist"), ""), reason=e.get("card") or "", why=_why(e, names))
     return out
 
 

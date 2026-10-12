@@ -10,8 +10,8 @@ from newsroom.clients import ScriptedClient  # noqa: E402
 from newsroom.moments import moments  # noqa: E402
 
 match = json.load(open(pathlib.Path(__file__).resolve().parents[1] / "out" / "match_7.json", encoding="utf-8"))
-packs = moments(match)
-assert packs and packs[0]["moment"]["type"] == "goal"
+packs = [p for p in moments(match) if p["moment"]["type"] == "goal"]
+assert packs
 item = asyncio.run(cover(ScriptedClient(), packs[0]))
 assert item["approved"] and packs[0]["player"] in item["line"], item
 assert unsupported_numbers("He has 999 shots.", packs[0]) == ["999"]
