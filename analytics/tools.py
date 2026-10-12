@@ -167,13 +167,23 @@ class MatchView:
         return dict(team=self.team_names[team], starting=start, changes=changes,
                     by_window=[dict(at=_clock(t), in_possession=best(ci), out_of_possession=best(co)) for t, ci, co in reads[::2]])
 
+    def same_shape(self, a, b):
+        """Two formation names for the same layout: their templates are within 0.01 of each other in the reader's own normalised fit
+        (4-5-1 / 4-1-4-1 and 3-5-2 / 5-3-2 are 0.003 apart; every other pair is at least 0.029)."""
+        if a == b:
+            return True
+        if a not in FORMATIONS or b not in FORMATIONS:
+            return False
+        A = np.array([[sl[2] * L, sl[3] * W] for sl in FORMATIONS[a] if sl[1] != "GK"])
+        return dict(self._read_formation(A)).get(b, 9.) < .01
+
     def score_reading(self, team, read_changes, tolerance=600.):
         """How a reading of the formation changes compares with what the engine did: a true change is found when the reading reports
         the same formation within `tolerance` seconds after it; a reported change that matches none is a false alarm."""
         truth = self.truth(team)["formation_changes"]
         used, hits = set(), []
         for tc in truth:
-            m = next((i for i, rc in enumerate(read_changes) if i not in used and rc["formation"] == tc["formation"] and -60 <= rc["t"] - tc["t"] <= tolerance), None)
+            m = next((i for i, rc in enumerate(read_changes) if i not in used and self.same_shape(rc["formation"], tc["formation"]) and -210 <= rc["t"] - tc["t"] <= tolerance), None)  # a window centred up to half a window before the change already contains it
             if m is not None:
                 used.add(m)
             hits.append(dict(at=tc["at"], formation=tc["formation"], found=m is not None, lag_s=round(read_changes[m]["t"] - tc["t"]) if m is not None else None))
@@ -189,7 +199,7 @@ class MatchView:
             truth_now = [f for t, f in sched if t <= tm][-1]
             if w["in_possession"]:
                 n += 1
-                ok += w["in_possession"] == truth_now
+                ok += self.same_shape(w["in_possession"], truth_now)
         return round(ok / max(n, 1), 3)
 
     # ---------------------------------------------------------------- pressing

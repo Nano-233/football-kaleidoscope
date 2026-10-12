@@ -215,3 +215,8 @@ table.stats td.lead { color: var(--text); font-weight: 600; }
 .steps li { margin: 2px 0; }
 .row-between { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .row-between .back { margin-bottom: 0; }
+.feed li.note p { font-size: 14px; color: var(--text-2); }
+.feed li.note .kind { color: var(--accent); }
+.truth { margin-bottom: 14px; }
+.truth b { display: block; margin-bottom: 4px; }
+.truth td:last-child { text-align: right; }

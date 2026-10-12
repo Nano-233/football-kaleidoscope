@@ -23,7 +23,7 @@ def one(seed):
     for tm in (0, 1):
         tl = mv.formation_timeline(tm, **KW)
         sc = mv.score_reading(tm, [c for c in tl["changes"] if c["phase"] == "in_possession"])
-        out.append((tl["starting"]["in_possession"] == mv.truth(tm)["starting"], sc["true_changes"], sc["found"], sc["false_alarms"], [d["lag_s"] for d in sc["detail"] if d["found"]], mv.window_agreement(tm, tl)))
+        out.append((mv.same_shape(tl["starting"]["in_possession"], mv.truth(tm)["starting"]), sc["true_changes"], sc["found"], sc["false_alarms"], [d["lag_s"] for d in sc["detail"] if d["found"]], mv.window_agreement(tm, tl)))
     return out
 
 

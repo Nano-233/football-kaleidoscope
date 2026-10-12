@@ -1,0 +1,7 @@
+.venv
+out
+server/cache
+**/__pycache__
+reference
+tests
+scripts

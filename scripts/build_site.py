@@ -19,6 +19,8 @@ sys.path.insert(0, str(ROOT))
 from analytics.stats import StatsAccumulator  # noqa: E402
 from newsroom.agents import cover  # noqa: E402
 from newsroom.clients import make_client  # noqa: E402
+from newsroom.desk import Desk  # noqa: E402
+from analytics.tools import MatchView  # noqa: E402
 from newsroom.moments import moments  # noqa: E402
 
 PERSONAS = {"fan": "fan", "analyst": "analyst"}  # site persona -> commentator voice (the scout view works from the player data, not commentary)
@@ -85,6 +87,37 @@ def clips(events, names, duration):
     return out
 
 
+RECAPS = {  # (when, question); each is written for every profile in RECAP_PROFILES, from what had happened by then
+    "half_time": "Write the half-time report: the story of the half, why the score is what it is, and what to watch in the second half.",
+    "full_time": "Write the full-time report: the story of the match, the turning points and why the result happened.",
+}
+RECAP_PROFILES = ({"persona": "fan", "depth": "quick"}, {"persona": "analyst", "depth": "deep"})
+
+
+async def recaps(match):
+    client, out = make_client(), []
+    ht = next((e["t"] for e in match["events"] if e["type"] == "half_end"), match["meta"]["half_time"])
+    for kind, q in RECAPS.items():
+        t = ht if kind == "half_time" else match["meta"]["duration"]
+        for prof in RECAP_PROFILES:
+            r = await Desk(client, match, prof, until=t).ask(q)
+            out.append(dict(kind=kind, t=t, profile=prof, **{k: r[k] for k in ("answer", "held", "approved", "rewrites", "findings", "steps", "watch")}))
+    return out
+
+
+def reading(match):
+    """What the formation reader saw against what the engine did, per team (the "AI accuracy" panel)."""
+    mv, out = MatchView(match), []
+    for tm in (0, 1):
+        tl, tr = mv.formation_timeline(tm), mv.truth(tm)
+        sc = mv.score_reading(tm, [c for c in tl["changes"] if c["phase"] == "in_possession"])
+        out.append(dict(team=mv.team_names[tm], truth=dict(starting=tr["starting"], changes=[{k: c[k] for k in ("at", "formation", "previous", "reason")} for c in tr["formation_changes"]]),
+                        read=dict(starting=tl["starting"], changes=[{k: c[k] for k in ("phase", "at", "formation", "previous")} for c in tl["changes"]]),
+                        score=dict(starting_right=mv.same_shape(tl["starting"]["in_possession"], tr["starting"]), found=sc["found"], true_changes=sc["true_changes"],
+                                   false_alarms=sc["false_alarms"], windows_agreeing=mv.window_agreement(tm, tl))))
+    return out
+
+
 def build(src):
     match = json.loads(src.read_text(encoding="utf-8"))
     meta = {k: v for k, v in match["meta"].items() if k != "frame_cols"}
@@ -103,7 +136,7 @@ def build(src):
     timeline, players = stats_timeline(match)
     events = [{k: v for k, v in e.items() if k not in ("freeze_frame", "why", "players", "bench")} for e in match["events"]]
     doc = dict(meta=meta, n_frames=len(q), events=events, team_stats=timeline, players=players,
-               newsroom=asyncio.run(newsroom(packs)), clips=clips(match["events"], {k: v["name"] for k, v in players.items()}, meta["duration"]))
+               newsroom=asyncio.run(newsroom(packs)), recaps=asyncio.run(recaps(match)), reading=reading(match), clips=clips(match["events"], {k: v["name"] for k, v in players.items()}, meta["duration"]))
     (dest / "match.json").write_text(json.dumps(doc, separators=(",", ":")), encoding="utf-8")
     print(dest, f"{sum(f.stat().st_size for f in dest.iterdir()) / 1e6:.1f} MB,", len(packs), "moments,", len(doc["clips"]), "clips")
     return dict(id=src.stem, home=meta["home"]["name"], away=meta["away"]["name"], home_code=meta["home"]["code"], away_code=meta["away"]["code"], score=meta["score"])

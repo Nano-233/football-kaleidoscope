@@ -12,39 +12,39 @@ Status markers: **[built]**, **[partly]**, nothing = to do. Priority of features
 ### Casual viewer: wants the story, not the numbers
 - **C1** Follow a match live and see at a glance what is happening and who is on top.
 - **C2** Be told when something important happens, and in one sentence why it matters. **[partly]**
-- **C3** Missed the match: a 60-second recap of the story, the turning points and the result.
+- **C3** Missed the match: a 60-second recap of the story, the turning points and the result. **[built]**
 - **C4** Watch the key moments as short clips with a caption. **[partly]**
-- **C5** Read everything in their own language.
-- **C6** Ask a simple question in plain words ("Why was that a penalty?", "Who's been best?").
+- **C5** Read everything in their own language. **[partly: answers]**
+- **C6** Ask a simple question in plain words ("Why was that a penalty?", "Who's been best?"). **[built]**
 
 ### Club fan: one team's side of the story, or one player's
-- **F1** Choose a club and get commentary and the recap told from its side.
+- **F1** Choose a club and get commentary and the recap told from its side. **[partly: answers]**
 - **F2** See how their players are rated, and why.
 - **F3** Understand why the team is winning or losing ("Why can't we get the ball forward?").
 - **F4** Have the manager's changes explained (subs, formation, pressing) and whether they worked.
 - **F5** Share a clip or recap card of a goal or moment.
-- **F6** Follow one player instead of a team: his match told as a story (key moments, rating, how he played), in plain language.
+- **F6** Follow one player instead of a team: his match told as a story (key moments, rating, how he played), in plain language. **[built]**
 - **F7** Get that player's highlights as a clip reel and a short "his match" recap.
-- **F8** Get a notification-style line whenever the followed player does something that matters.
+- **F8** Get a notification-style line whenever the followed player does something that matters. **[built]**
 
 ### Analyst: coach, pundit, data-curious fan
-- **A1** See the shape each team actually played, in and out of possession, and when it changed.
+- **A1** See the shape each team actually played, in and out of possession, and when it changed. **[built: tools + answers]**
 - **A2** See pressing intensity and where the ball was won back, by period.
 - **A3** See the momentum: xG and territory over time, with spells of dominance marked.
 - **A4** See passing networks: who connects, where attacks start, which side they favour.
 - **A5** Have a goal or chance broken down: the sequence and why each decision was made.
 - **A6** Compare halves, or before and after a tactical change, with the evidence.
-- **A7** Ask a tactical question and get an answer backed by numbers and pitch views.
-- **A8** Get a half-time and a full-time tactical report.
+- **A7** Ask a tactical question and get an answer backed by numbers and pitch views. **[built: numbers; pitch views to do]**
+- **A8** Get a half-time and a full-time tactical report. **[built]**
 - **A9** Trust the output: every number traceable and checked, and the AI's tactical reading scored against what the engine actually did. **[partly]**
 
 ### Scout: assesses players
 - **S1** Pick any player and see every action, filterable, each one jumping to the replay. **[built]**
 - **S2** See a player's touch map, heat map and physical output (distance, sprints, top speed). **[partly]**
-- **S3** Get a written player report: strengths, weaknesses and role fit, backed by the events.
+- **S3** Get a written player report: strengths, weaknesses and role fit, backed by the events. **[built: via Ask]**
 - **S4** Get a clip reel built automatically for a trait ("all his progressive passes", "duels lost").
 - **S5** Compare a player with his role's average or with another player.
-- **S6** Ask a question about a player ("How did #9 cope with the press?").
+- **S6** Ask a question about a player ("How did #9 cope with the press?"). **[built]**
 
 ### Broadcast producer or content creator
 - **P1** Timed, machine-readable overlays (lower thirds, stat cards) to put over a feed. **[partly]**
@@ -54,7 +54,7 @@ Status markers: **[built]**, **[partly]**, nothing = to do. Priority of features
 
 ## Features
 
-### 1. Analysis toolkit (fixed calculations, no AI) — Core
+### 1. Analysis toolkit (fixed calculations, no AI) — Core **[built]**
 The functions the agents call. Every number comes from here; the AI never computes a figure.
 
 | Tool | Gives | Use cases |
@@ -69,19 +69,19 @@ The functions the agents call. Every number comes from here; the AI never comput
 
 ### 2. Specialist agents on Foundry and Agent Framework — Core
 - **Live desk** **[partly]**: picks the moments that matter (goals, big chances, momentum swings, tactical changes, standout spells, the followed player's moments). C2, F1, F8
-- **Tactics analyst**: reads shape, press and momentum; explains changes and whether they worked. A1-A6, F3, F4
-- **Scout**: player reports and trait clip reels; for fans, the same at a casual depth ("his match"). S3-S5, F6, F7
-- **Recap editor**: half-time and full-time reports at each depth (60-second casual, full analyst, one player). C3, A8, P3, F7
-- **Writer**: turns any finding into the chosen persona, depth and club or player point of view. F1, F6, P4
+- **Tactics analyst** **[built]**: reads shape, press and momentum; explains changes and whether they worked. A1-A6, F3, F4
+- **Scout** **[built]**: player reports and trait clip reels; for fans, the same at a casual depth ("his match"). S3-S5, F6, F7
+- **Recap editor** **[built: fan quick, analyst deep]**: half-time and full-time reports at each depth (60-second casual, full analyst, one player). C3, A8, P3, F7
+- **Writer** **[built]**: turns any finding into the chosen persona, depth and club or player point of view. F1, F6, P4
 - **Localizer**: translates while keeping names and numbers intact. C5, P4
 - **Fact-checker** **[built]**: checks every published line against the toolkit's numbers, rewrites or holds lines, falls back to a plain line. A9
 
-### 3. Ask the newsroom (orchestrator and chat) — Core
+### 3. Ask the newsroom (orchestrator and chat) — Core **[built]**
 A question goes to an orchestrator that hands it to the right specialists. They call tools, the writer phrases the answer for the
 user's profile, and the fact-checker checks it before it is shown. Answers can carry a pitch view or chart and "watch" links. The
 agent steps are visible in the UI. C6, F3, A7, S6
 
-### 4. Tactics scored against the truth — Core (the hook)
+### 4. Tactics scored against the truth — Core (the hook) **[built: formation reading; agent reading to do]**
 The engine logs every formation change, tactical shift and the manager's reason. The tactics agent's reading is scored against
 that log (changes detected, timing, explanation), shown as an "AI accuracy" panel and reported over many matches. A9
 

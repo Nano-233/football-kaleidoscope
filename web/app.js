@@ -8,7 +8,7 @@ const SX = (cv.width - 2 * PAD) / L, SY = (cv.height - 2 * PAD) / W, px = x => P
 const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const COL = { home: css('--home'), away: css('--away'), accent: css('--accent'), good: css('--good'), bad: css('--bad'), pitch: css('--pitch'), line: css('--pitch-line') };
 
-const TABS = { fan: ['Live', 'Ask', 'Players', 'Stats', 'Clips'], analyst: ['Feed', 'Ask', 'Stats', 'Clips'], scout: ['Players', 'Ask', 'Clips'] };
+const TABS = { fan: ['Live', 'Ask', 'Recap', 'Players', 'Stats', 'Clips'], analyst: ['Feed', 'Ask', 'Recap', 'Stats', 'Clips'], scout: ['Players', 'Ask', 'Clips'] };
 const VOICE = { fan: 'fan', analyst: 'analyst', scout: 'analyst' };  // which newsroom feed each persona reads
 const GROUPS = {
   All: null,
@@ -240,8 +240,8 @@ function setPersona(p) {
 
 function render(force) {
   if (!S.D) return;
-  const minute = Math.floor(S.t / 60), shown = feed().filter(it => it.moment.t <= S.t).length;
-  const key = [S.persona, S.tab, S.tab === 'Clips' || S.tab === 'Ask' ? '' : minute, shown, S.player, S.group, S.clip && S.clip.id, S.custom.length, S.askVer, S.profile.playerId].join('|');
+  const minute = Math.floor(S.t / 60), shown = feed().filter(it => it.moment.t <= S.t).length + (S.profile.playerId ? playerNotes().length : 0);
+  const key = [S.persona, S.tab, S.tab === 'Clips' || S.tab === 'Ask' ? '' : minute, (S.D.recaps || []).filter(r => r.t <= S.t + .5).length, shown, S.player, S.group, S.clip && S.clip.id, S.custom.length, S.askVer, S.profile.playerId].join('|');
   if (!force && key === S.panelKey) return;
   S.panelKey = key;
   const body = $('panel-body'), keep = body.scrollTop, same = body.dataset.view === S.persona + S.tab + S.player;
@@ -257,12 +257,38 @@ const VIEWS = {
   Players: () => S.player ? playerView() : squadView(),
   Clips: () => clipsView(),
   Ask: () => askView(),
+  Recap: () => recapView(),
 };
 
+// the followed player's moments as short notes, straight from the events (no model, nothing to check)
+function playerNotes() {
+  const id = S.profile.playerId, nm = S.profile.player;
+  if (!id) return [];
+  const out = [];
+  for (const e of S.D.events) {
+    if (e.t > S.t) break;
+    let line = null;
+    if (e.type === 'goal' && e.player === id) line = `GOAL! ${nm} scores.`;
+    else if (e.type === 'shot' && e.player === id && e.outcome !== 'goal') line = `${nm} shoots: ${e.outcome.replace('_', ' ')} (xG ${e.xg.toFixed(2)}).`;
+    else if ((e.type === 'pass' || e.type === 'cross') && e.player === id && e.assist) line = `${nm} sets up the goal.`;
+    else if ((e.type === 'pass' || e.type === 'cross') && e.player === id && e.key_pass) line = `${nm} creates a chance.`;
+    else if (e.type === 'take_on' && e.player === id && e.outcome === 'won') line = `${nm} beats his man.`;
+    else if (e.type === 'tackle' && e.player === id && e.outcome === 'won') line = `${nm} wins the ball back.`;
+    else if (e.type === 'save' && e.player === id) line = `${nm} makes a save.`;
+    else if (e.type === 'card' && e.player === id) line = `${nm} is booked (${e.card.replace('_', ' ')}).`;
+    else if (e.type === 'substitution' && (e.on === id || e.off === id)) line = e.on === id ? `${nm} comes on.` : `${nm} is substituted.`;
+    if (line) out.push({ t: e.t, clock: e.clock, line });
+  }
+  return out;
+}
+
 function feedView(mode) {
-  const items = feed().filter(it => it.moment.t <= S.t).reverse();
+  const notes = mode === 'fan' ? playerNotes().map(n => ({ note: true, moment: { t: n.t, clock: n.clock, type: 'your player' }, line: n.line, approved: true })) : [];
+  const items = [...feed().filter(it => it.moment.t <= S.t), ...notes].sort((a, b) => a.moment.t - b.moment.t).reverse();
   if (!items.length) return `<div class="empty">The newsroom files its first story when something happens.</div>`;
   return `<ul class="feed ${mode}">` + items.map(it => {
+    if (it.note) return `<li class="note"><div class="meta"><span class="t">${esc(it.moment.clock)}</span><span class="kind">${esc(S.profile.player)}</span>
+      <button class="jump" data-seek="${it.moment.t - 6}">Watch</button></div><p>${esc(it.line)}</p></li>`;
     if (!it.approved && mode === 'fan') return '';
     const badge = !it.approved ? `<span class="badge warn">Held by fact-checker</span>`
       : it.fallback ? `<span class="badge warn" title="Every agent draft was held, so a plain line built from the facts went out">Drafts held · plain line</span>`
@@ -303,7 +329,26 @@ function tableView() {
   }).join('');
   return `<div class="label">Team statistics · after ${esc(clockAt(S.t))}</div>
     <table class="stats"><thead><tr><th>Metric</th><th>${esc(M.home.code)}</th><th>${esc(M.away.code)}</th></tr></thead><tbody>${rows}</tbody></table>
-    <div class="label">Source</div><div class="mono">Computed from the event stream by analytics/stats.py; the newsroom may only quote these numbers.</div>`;
+    <div class="label">Source</div><div class="mono">Computed from the event stream by analytics/stats.py; the newsroom may only quote these numbers.</div>${truthPanel()}`;
+}
+
+// what the reader saw against what the engine actually did: the data is synthetic, so the truth is known
+function truthPanel() {
+  if (!S.D.reading || S.t < S.D.meta.duration - 1) return '<div class="label">Tactics read against the truth</div><div class="mono">Shown at full time: the engine\'s own record of every system change, against what the newsroom read from the tracking data.</div>';
+  return '<div class="label">Tactics read against the truth</div>' + S.D.reading.map(r => {
+    const sc = r.score;
+    const tch = r.truth.changes.map(c => `${esc(c.at)} ${esc(c.previous)} → ${esc(c.formation)} <span class="mono">(${esc(c.reason)})</span>`).join('<br>') || 'none';
+    const rch = r.read.changes.map(c => `${esc(c.at)} ${esc(c.formation)} <span class="mono">${c.phase === 'in_possession' ? 'with the ball' : 'without the ball'}</span>`).join('<br>') || 'none';
+    return `<div class="truth"><b>${esc(r.team)}</b>
+      <table class="stats"><tbody>
+        <tr><td>Set up in (engine)</td><td>${esc(r.truth.starting)}</td></tr>
+        <tr><td>Read, with / without the ball</td><td class="${sc.starting_right ? 'lead' : ''}">${esc(r.read.starting.in_possession)} / ${esc(r.read.starting.out_of_possession)}</td></tr>
+        <tr><td>System changes (engine)</td><td>${tch}</td></tr>
+        <tr><td>Changes read</td><td>${rch}</td></tr>
+        <tr><td>Found · false alarms</td><td>${sc.found}/${sc.true_changes} · ${sc.false_alarms}</td></tr>
+        <tr><td>Minutes agreeing with the set system</td><td>${Math.round(sc.windows_agreeing * 100)}%</td></tr>
+      </tbody></table></div>`;
+  }).join('');
 }
 
 function squadView() {
@@ -351,6 +396,21 @@ function playerView() {
     <div class="label">Actions (${acts.length})</div><div class="chips">${chips}</div>
     <ul class="actions" style="margin-top:10px">${rows || '<li><span></span><span class="empty">No actions in this group.</span></li>'}</ul>
     ${S.group === 'All' ? '<div class="mono" style="margin-top:8px">Pressures are under Defending.</div>' : ''}`;
+}
+
+// ---------------------------------------------------------------- recaps (written in advance by the newsroom, shown once their moment has come)
+function recapView() {
+  const want = S.persona === 'analyst' ? 'analyst' : 'fan';
+  const rs = (S.D.recaps || []).filter(r => r.profile.persona === want && r.t <= S.t + .5).reverse();
+  if (!rs.length) return '<div class="empty">The half-time report arrives at the break.</div>';
+  return '<ul class="feed asks">' + rs.map(r => {
+    const title = r.kind === 'half_time' ? 'Half-time report' : 'Full-time report';
+    const watch = (r.watch || []).map(w => `<button class="link" data-seek="${w.t - 6}">Watch ${esc(w.clock)} ${esc(label(w.type).toLowerCase())}</button>`).join(' ');
+    const steps = r.steps.map(st => `<li><b>${esc(st.agent.replace('_', ' '))}</b> → ${esc(st.tool.replace(/_/g, ' '))}</li>`).join('');
+    return `<li><div class="q">${title}</div><div class="meta"><span class="badge ok">Fact-checked${r.rewrites ? ` · rewritten ${r.rewrites}×` : ''}</span></div>
+      <p${r.approved ? '' : ' class="rejected"'}>${esc(r.answer || r.held)}</p>${watch ? `<div class="watch">${watch}</div>` : ''}
+      <details class="trail"><summary>How the newsroom worked it out (${r.steps.length} steps)</summary><div class="trail-body"><ol class="steps">${steps}</ol></div></details></li>`;
+  }).join('') + '</ul>';
 }
 
 // ---------------------------------------------------------------- ask the newsroom
