@@ -8,7 +8,7 @@ const SX = (cv.width - 2 * PAD) / L, SY = (cv.height - 2 * PAD) / W, px = x => P
 const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const COL = { home: css('--home'), away: css('--away'), accent: css('--accent'), good: css('--good'), bad: css('--bad'), pitch: css('--pitch'), line: css('--pitch-line') };
 
-const TABS = { fan: ['Live', 'Ask', 'Recap', 'Players', 'Stats', 'Clips'], analyst: ['Feed', 'Ask', 'Recap', 'Stats', 'Clips'], scout: ['Players', 'Ask', 'Clips'] };
+const TABS = { fan: ['Live', 'Ask', 'Recap', 'Players', 'Stats', 'Clips'], analyst: ['Feed', 'Board', 'Ask', 'Recap', 'Stats', 'Clips'], scout: ['Players', 'Ask', 'Clips'] };
 const VOICE = { fan: 'fan', analyst: 'analyst', scout: 'analyst' };  // which newsroom feed each persona reads
 const GROUPS = {
   All: null,
@@ -36,7 +36,7 @@ const FAN_ROWS = ['goals', 'xg', 'shots', 'shots_on_target', 'corners', 'yellow_
 const S = {
   D: null, F: null, n: 0, dt: .2, id: null, t: 0, playing: false, last: 0,
   persona: 'fan', tab: 'Live', player: null, group: 'All', clip: null, custom: [], panelKey: '', info: {}, slots: [],
-  profile: loadProfile(), asks: [], askVer: 0, askDraft: '',
+  profile: loadProfile(), asks: [], askVer: 0, askDraft: '', board: { mode: 'Shape', team: 0, phase: 'in_possession' },
 };
 const SUGGEST = {
   fan: ["Who's been the best player so far?", 'Why is the game going this way?', 'Explain the last goal', 'How is my player doing?'],
@@ -159,7 +159,7 @@ function draw() {
     const x = f[5 + 2 * k], y = f[6 + 2 * k];
     if (y < -5) continue;  // sent off
     const X = px(x), Y = py(y), home = k < 11, p = who(k, t), dim = sel >= 0 && k !== sel;
-    g.globalAlpha = dim ? .45 : 1;
+    g.globalAlpha = boardOn() ? .22 : dim ? .45 : 1;
     g.beginPath(); g.arc(X, Y, 9, 0, 7); g.fillStyle = home ? COL.home : COL.away; g.fill();
     if (p && p.role === 'GK') { g.lineWidth = 2; g.strokeStyle = '#0c0d0e'; g.stroke(); }
     g.fillStyle = '#0c0d0e'; g.font = '600 10px "Segoe UI", system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
@@ -169,6 +169,7 @@ function draw() {
     if (k === fol && k !== sel) { g.setLineDash([3, 3]); g.beginPath(); g.arc(X, Y, 15, 0, 7); g.strokeStyle = COL.accent; g.lineWidth = 2; g.stroke(); g.setLineDash([]); }
   }
   g.globalAlpha = 1;
+  if (boardOn()) drawBoard(t);
   g.beginPath(); g.arc(px(f[1]), py(f[2]), 4.5, 0, 7); g.fillStyle = '#fff'; g.fill(); g.strokeStyle = '#0c0d0e'; g.lineWidth = 1.5; g.stroke();
   hud(t);
 }
@@ -241,7 +242,7 @@ function setPersona(p) {
 function render(force) {
   if (!S.D) return;
   const minute = Math.floor(S.t / 60), shown = feed().filter(it => it.moment.t <= S.t).length + (S.profile.playerId ? playerNotes().length : 0);
-  const key = [S.persona, S.tab, S.tab === 'Clips' || S.tab === 'Ask' ? '' : minute, (S.D.recaps || []).filter(r => r.t <= S.t + .5).length, shown, S.player, S.group, S.clip && S.clip.id, S.custom.length, S.askVer, S.profile.playerId].join('|');
+  const key = [S.persona, S.tab, S.tab === 'Clips' || S.tab === 'Ask' ? '' : minute, (S.D.recaps || []).filter(r => r.t <= S.t + .5).length, shown, S.player, S.group, S.clip && S.clip.id, S.custom.length, S.askVer, S.profile.playerId, JSON.stringify(S.board)].join('|');
   if (!force && key === S.panelKey) return;
   S.panelKey = key;
   const body = $('panel-body'), keep = body.scrollTop, same = body.dataset.view === S.persona + S.tab + S.player;
@@ -258,6 +259,7 @@ const VIEWS = {
   Clips: () => clipsView(),
   Ask: () => askView(),
   Recap: () => recapView(),
+  Board: () => boardView(),
 };
 
 // the followed player's moments as short notes, straight from the events (no model, nothing to check)
@@ -396,6 +398,99 @@ function playerView() {
     <div class="label">Actions (${acts.length})</div><div class="chips">${chips}</div>
     <ul class="actions" style="margin-top:10px">${rows || '<li><span></span><span class="empty">No actions in this group.</span></li>'}</ul>
     ${S.group === 'All' ? '<div class="mono" style="margin-top:8px">Pressures are under Defending.</div>' : ''}`;
+}
+
+// ---------------------------------------------------------------- analyst board (the toolkit's numbers, last completed window only)
+const boardOn = () => S.persona === 'analyst' && S.tab === 'Board' && S.D && S.D.board && S.board.mode !== 'Momentum';
+const toWorld = (team, x, y) => (team ? [L - x, W - y] : [x, y]);
+const lastWin = (rows, w) => { const i = Math.floor(S.t / w) - 1; return i >= 0 ? rows[Math.min(i, rows.length - 1)] : null; };
+const teamCol = tm => (tm ? COL.away : COL.home);
+const num = id => (S.info[id] ? S.info[id].number : '');
+
+function drawBoard(t) {
+  const B = S.D.board, tm = S.board.team;
+  g.save();
+  if (S.board.mode === 'Shape') {
+    const row = lastWin(B.shape[tm], B.shape_window), sh = row && row[S.board.phase];
+    if (sh) {
+      const [lx] = toWorld(tm, sh.line, 0);
+      g.setLineDash([6, 5]); g.strokeStyle = teamCol(tm); g.lineWidth = 1.5; g.beginPath(); g.moveTo(px(lx), py(0)); g.lineTo(px(lx), py(W)); g.stroke(); g.setLineDash([]);
+      for (const [id, x, y] of sh.positions) {
+        const [wx, wy] = toWorld(tm, x, y);
+        g.beginPath(); g.arc(px(wx), py(wy), 12, 0, 7); g.fillStyle = 'rgba(12,13,14,.75)'; g.fill(); g.lineWidth = 2.5; g.strokeStyle = teamCol(tm); g.stroke();
+        g.fillStyle = '#f1f2f4'; g.font = '600 11px "Segoe UI", system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(num(id), px(wx), py(wy) + .5);
+      }
+    }
+  } else if (S.board.mode === 'Network') {
+    const row = lastWin(B.network[tm], B.net_window);
+    if (row) {
+      const max = Math.max(1, ...row.links.map(l => l[2]));
+      for (const [a, b, n] of row.links) {
+        if (!row.nodes[a] || !row.nodes[b]) continue;
+        const [ax, ay] = toWorld(tm, ...row.nodes[a]), [bx, by] = toWorld(tm, ...row.nodes[b]);
+        g.globalAlpha = .25 + .75 * n / max; g.strokeStyle = teamCol(tm); g.lineWidth = 1 + 7 * n / max;
+        g.beginPath(); g.moveTo(px(ax), py(ay)); g.lineTo(px(bx), py(by)); g.stroke();
+      }
+      g.globalAlpha = 1;
+      for (const [id, xy] of Object.entries(row.nodes)) {
+        const [wx, wy] = toWorld(tm, ...xy);
+        g.beginPath(); g.arc(px(wx), py(wy), 11, 0, 7); g.fillStyle = teamCol(tm); g.fill();
+        g.fillStyle = '#0c0d0e'; g.font = '600 10px "Segoe UI", system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(num(id), px(wx), py(wy) + .5);
+      }
+    }
+  } else if (S.board.mode === 'Press') {
+    for (const [rt, team, x, y] of B.regains) {
+      if (rt > t || rt < t - B.net_window || team !== tm) continue;
+      g.globalAlpha = .35 + .65 * (1 - (t - rt) / B.net_window);
+      g.beginPath(); g.arc(px(x), py(y), 6, 0, 7); g.fillStyle = teamCol(tm); g.fill(); g.strokeStyle = '#0c0d0e'; g.lineWidth = 1; g.stroke();
+    }
+  }
+  g.restore();
+}
+
+function momentumSvg() {
+  const M = S.D.board.momentum, n = Math.max(1, Math.floor(S.t / M.window_s)), rows = M.series.slice(0, n), w = 368, h = 150, mid = 70;
+  const mx = Math.max(.3, ...rows.flatMap(r => r.xg)), bw = w / Math.max(rows.length, 18);
+  const bars = rows.map((r, i) => `<rect x="${i * bw + 1}" y="${mid - r.xg[0] / mx * 60}" width="${bw - 2}" height="${r.xg[0] / mx * 60}" fill="var(--home)"/>
+    <rect x="${i * bw + 1}" y="${mid}" width="${bw - 2}" height="${r.xg[1] / mx * 60}" fill="var(--away)"/>`).join('');
+  const tilt = rows.map((r, i) => `${i * bw + bw / 2},${mid - (r.field_tilt_home - .5) * 120}`).join(' ');
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" role="img" aria-label="xG by five minutes for both teams, with field tilt">
+    <line x1="0" x2="${w}" y1="${mid}" y2="${mid}" stroke="var(--line-strong)"/>${bars}
+    <polyline points="${tilt}" fill="none" stroke="var(--accent)" stroke-width="2"/>
+    <text x="0" y="12" fill="var(--text-3)" font-size="10">${esc(S.D.meta.home.code)} xG ↑</text><text x="0" y="${h - 4}" fill="var(--text-3)" font-size="10">${esc(S.D.meta.away.code)} xG ↓ · line: field tilt</text></svg>`;
+}
+
+function boardView() {
+  const B = S.D.board;
+  if (!B) return '<div class="empty">Rebuild the match data (scripts/build_site.py) for the board.</div>';
+  const M = S.D.meta, b = S.board, chip = (attr, v, txt, on) => `<button class="chip" data-${attr}="${esc(v)}" aria-pressed="${on}">${esc(txt)}</button>`;
+  let body = '';
+  if (b.mode === 'Shape') {
+    const row = lastWin(B.shape[b.team], B.shape_window), sh = row && row[b.phase];
+    body = !row ? '<div class="empty">The first five minutes are not over yet.</div>' : !sh ? '<div class="empty">Too little of that phase in this window.</div>' :
+      `<div class="label">${esc(M[b.team ? 'away' : 'home'].name)} · ${clockAt(row.t0)}–${clockAt(row.t1)} · ${b.phase === 'in_possession' ? 'with the ball' : 'without the ball'}</div>
+       <div class="kv"><div><b>${esc(sh.formation)}</b><span>Shape</span></div><div><b>${sh.line} m</b><span>Defensive line</span></div><div><b>${sh.length} × ${sh.width} m</b><span>Block</span></div></div>
+       <div class="mono" style="margin-top:8px">Average positions over the last completed five minutes; the dashed line is the defensive line. The two phases are read separately: a team can line up one way with the ball and another without it.</div>`;
+  } else if (b.mode === 'Network') {
+    const row = lastWin(B.network[b.team], B.net_window);
+    body = !row ? '<div class="empty">The first fifteen minutes are not over yet.</div>' :
+      `<div class="label">${esc(M[b.team ? 'away' : 'home'].name)} · passing network ${clockAt(row.t0)}–${clockAt(row.t1)}</div>
+       <table class="stats"><tbody>${row.links.slice(0, 6).map(([a, c, n]) => `<tr><td>${num(a)} ${esc(S.info[a].name)} → ${num(c)} ${esc(S.info[c].name)}</td><td>${n}</td></tr>`).join('')}</tbody></table>
+       <div class="mono" style="margin-top:8px">Entries into the final third, left / centre / right: ${row.entries.join(' / ')}</div>`;
+  } else if (b.mode === 'Press') {
+    const rows = B.pressing[b.team], cur = Math.floor(S.t / B.net_window);
+    body = `<div class="label">${esc(M[b.team ? 'away' : 'home'].name)} · pressing by 15 minutes</div>
+      <table class="stats"><thead><tr><th>Window</th><th>PPDA</th><th>Height</th><th>Counter-press</th></tr></thead><tbody>${rows.slice(0, cur).map(r => `<tr><td>${esc(r.window.join('–'))}</td><td>${r.ppda ?? '–'}</td><td>${r.action_height_m ?? '–'} m</td><td>${r.counterpress_wins}</td></tr>`).join('') || '<tr><td colspan="4">First window not over yet.</td></tr>'}</tbody></table>
+      <div class="mono" style="margin-top:8px">PPDA: opponent passes per defensive action in their build-up (lower = harder press). Dots on the pitch: where the ball was won in the last fifteen minutes.</div>`;
+  } else {
+    const sp = B.momentum.dominant_spells.filter(x => parseInt(x.end) * 60 <= S.t + 60);
+    body = `<div class="label">Momentum · xG by five minutes</div>${momentumSvg()}
+      <div class="label">Spells of dominance</div>${sp.length ? `<table class="stats"><tbody>${sp.map(x => `<tr><td>${esc(x.team)} ${esc(x.start)}–${esc(x.end)}</td><td>xG ${x.xg} v ${x.opponent_xg}</td></tr>`).join('')}</tbody></table>` : '<div class="mono">None yet.</div>'}`;
+  }
+  return `<div class="chips">${['Shape', 'Network', 'Press', 'Momentum'].map(m => chip('bmode', m, m, b.mode === m)).join('')}</div>
+    ${b.mode !== 'Momentum' ? `<div class="chips" style="margin-top:8px">${[0, 1].map(t => chip('bteam', t, M[t ? 'away' : 'home'].code, b.team === t)).join('')}
+      ${b.mode === 'Shape' ? chip('bphase', 'in_possession', 'With the ball', b.phase === 'in_possession') + chip('bphase', 'out_of_possession', 'Without the ball', b.phase === 'out_of_possession') : ''}</div>` : ''}
+    <div style="margin-top:12px">${body}</div>`;
 }
 
 // ---------------------------------------------------------------- recaps (written in advance by the newsroom, shown once their moment has come)
@@ -547,6 +642,9 @@ $('panel-body').addEventListener('click', e => {
   else if (d.act === 'export') exportClip();
   else if (d.act === 'delete') { S.custom = S.custom.filter(c => c.id !== S.clip.id); saveCustom(); S.clip = null; render(true); }
   else if (d.act === 'close') { S.clip = null; render(true); }
+  else if (d.bmode) { S.board.mode = d.bmode; render(true); }
+  else if (d.bteam !== undefined) { S.board.team = +d.bteam; render(true); }
+  else if (d.bphase) { S.board.phase = d.bphase; render(true); }
   else if (d.act === 'ask') askNewsroom($('ask-q').value);
   else if (d.ask) askNewsroom(d.ask);
   else if (d.follow !== undefined) {

@@ -118,6 +118,38 @@ def reading(match):
     return out
 
 
+SHAPE_W, NET_W = 300., 900.  # analyst board windows: shape every 5 minutes, passing network and pressing every 15
+
+
+def board(match):
+    """Everything the analyst board draws, from the same toolkit the agents use, window by window so the replay only ever shows
+    windows that have finished. Positions are in each team's own frame (own goal at x = 0)."""
+    mv, dur = MatchView(match), match["meta"]["duration"]
+    out = dict(shape_window=SHAPE_W, net_window=NET_W, shape=[[], []], network=[[], []], pressing=[], momentum=mv.momentum(), regains=[])
+    for tm in (0, 1):
+        t = 0.
+        while t < dur:
+            row = dict(t0=t, t1=min(t + SHAPE_W, dur))
+            for ph, key in (("in", "in_possession"), ("out", "out_of_possession")):
+                sh = mv.shape(tm, t, t + SHAPE_W, ph)
+                row[key] = None if "error" in sh else dict(formation=sh["formation"], line=sh["defensive_line_m"], length=sh["block_length_m"], width=sh["block_width_m"],
+                                                          positions=[[q["id"], q["x"], q["y"]] for q in sh["positions"]])
+            out["shape"][tm].append(row)
+            t += SHAPE_W
+        t = 0.
+        while t < dur:
+            net = mv.passing_network(tm, t, t + NET_W, min_links=2)
+            ids = {v["name"]: k for k, v in mv.players.items()}
+            out["network"][tm].append(dict(t0=t, t1=min(t + NET_W, dur), links=[[ids[l["from"]], ids[l["to"]], l["passes"]] for l in net["links"]],
+                                           nodes={ids[n]: xy for n, xy in net["avg_positions"].items()}, entries=net["final_third_entries_left_centre_right"]))
+            t += NET_W
+        out["pressing"].append(mv.pressing(tm, NET_W)["by_window"])
+    for e in match["events"]:
+        if e["type"] == "possession_change" and e.get("team") in (0, 1) and "x" in e:
+            out["regains"].append([round(e["t"], 1), e["team"], e["x"], e["y"]])
+    return out
+
+
 def build(src):
     match = json.loads(src.read_text(encoding="utf-8"))
     meta = {k: v for k, v in match["meta"].items() if k != "frame_cols"}
@@ -136,7 +168,7 @@ def build(src):
     timeline, players = stats_timeline(match)
     events = [{k: v for k, v in e.items() if k not in ("freeze_frame", "why", "players", "bench")} for e in match["events"]]
     doc = dict(meta=meta, n_frames=len(q), events=events, team_stats=timeline, players=players,
-               newsroom=asyncio.run(newsroom(packs)), recaps=asyncio.run(recaps(match)), reading=reading(match), clips=clips(match["events"], {k: v["name"] for k, v in players.items()}, meta["duration"]))
+               newsroom=asyncio.run(newsroom(packs)), recaps=asyncio.run(recaps(match)), reading=reading(match), board=board(match), clips=clips(match["events"], {k: v["name"] for k, v in players.items()}, meta["duration"]))
     (dest / "match.json").write_text(json.dumps(doc, separators=(",", ":")), encoding="utf-8")
     print(dest, f"{sum(f.stat().st_size for f in dest.iterdir()) / 1e6:.1f} MB,", len(packs), "moments,", len(doc["clips"]), "clips")
     return dict(id=src.stem, home=meta["home"]["name"], away=meta["away"]["name"], home_code=meta["home"]["code"], away_code=meta["away"]["code"], score=meta["score"])
