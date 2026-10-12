@@ -791,6 +791,14 @@ Fixed:
 Effect (24 matches): tackles 38 -> 23-27 (by third 12.9 / 8.3 / 3.6 vs 10.5 / 7.7 / 2.3), won 0.65-0.70 (0.58), dispossessed 6.9 -> 13-15 (13.8), fouls 12.6 (12.0), free kicks 21.4 (22.9), take-on success 0.61 (0.57); loss 200 -> 188.
 Still open: take-ons 10.5 vs 17.5 (the chosen dribble is too rare now that the mislabelled ones are gone); fouls sit in the wrong place: 17-35 m from goal 3.15 per team vs 1.1 real, beyond 50 m 5.4 vs 8.8 (real fouls are mostly in midfield, by pressing players and to stop counters), which is why direct free-kick shots stay at 3.3 per match vs about 0.8.
 
+### Where fouls happen: the cost of a missed challenge (2026-10-12)
+
+Saw: fouls in the defending third 4.6-5.1 per team-match vs 2.2 real (Euro 2020), in the attacking third 2.3 vs 4.3; forwards fouled half as often as real; fouls 17-35 m from goal 3.2 vs 1.1, so direct free-kick shots 3.3 per match.
+Measured (fouls by fouler role and zone, by code path; real from Euro 2020 "Foul Committed"): half the defending-third fouls came from won challenges that caught the man, half from missed ones. The near-goal caution in the decision to go in (`tackle_risk` x what the carrier's spot is worth) was taken as max() with the new floor and never exceeded it, so a defender at the edge of his box went in at the same odds as in midfield; and the floor itself was the same for the last man and for a forward pressing with his whole team behind him.
+Fixed (`_held`): the odds a defender needs = a floor from the cover behind him (`tackle_floor` 0.5, `cover_k` 0.04 per team-mate goal-side of the ball, from 4: a forward pressing high goes in at about 0.35, the last man at about 0.6) plus, added on top, the near-goal cost of a miss. The win odds include the angle: from behind, the man shields the ball (`behind_k` 1.5).
+Effect (24 matches): loss 188 -> 179; tackles 20.5 (real 20.5), fouls 11.4 (12.0), fouls 17-35 m 2.1 (1.1), attacking-third fouls 3.1 (4.3), direct free-kick shots 3.3 -> 1.44 per match (about 0.8-1.0).
+Still open: take-ons 11 vs 17.5, midfield fouls 6.2 vs 8.8 (tactical fouls to stop a counter are not modelled), tackles in the attacking third 4.8 vs 2.3, big chances 0.35 vs 0.86, corners 4.3 vs 11.6.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
