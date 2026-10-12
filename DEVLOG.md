@@ -774,6 +774,23 @@ Fixed (`matchsim/engine.py`, `matchsim/movement.py`, `analytics/stats.py`; 24-ma
 - Rating (`rating_terms`): every won contest has its lost one (tackles, take-ons, aerials, dribbled past, failed passes, dispossessed); goals conceded for keepers and defenders, clean sheets, a small result term. 16 matches: mean 7.42 -> 6.79, winners 7.25, draws 6.76, losers 6.33; keepers 8.6 with a clean sheet down to 6.2 conceding 4 (was higher for conceding 2 than 0).
 Still open: direct free-kick shots 3.1 per match vs about 1 real (fouls 17-35 m from goal), tackles 38.8 vs 20.5 per team, pressures 1.8x, take-ons 1.5x, passes 604 vs 484, crosses completed 45 % vs 28 %, corners 4.8 vs 11.6.
 
+### Tackles, take-ons and fouls against the real contact rate (2026-10-12)
+
+Saw: tackles 38-41 per team-match vs 20.5, take-ons 29-33 vs 17.5, pressures 1.9x, passes under pressure 0.29 vs 0.17; strikers tackled 14.8 times a match.
+Measured (`scripts/contact_probe.py`, new; real side from the Euro 2020 360 freeze frames, 23,855 receipts):
+- Space at reception is real (nearest opponent median 7.4 vs 8.1 m in the own third, 6.2 vs 6.5 in midfield); the gap opens during the hold.
+- Given how tight the receiver was marked when the ball arrived, the chance he is tackled or dispossessed within 1.5 s: tight (<1.75 m) 0.21 sim vs 0.05 real, 1.75-4 m 0.07 vs 0.024, free 0.013 vs 0.002. A third of the sim's tackles came within 0.3 s of control.
+- The cause was `first_touch` (3.0): the tackle hazard was multiplied by up to 4 at the moment of control ("the first touch is the moment the ball is most exposed"), which the real data contradicts: a receiver under pressure protects the ball.
+- 18.5 of 29.5 take-ons were not dribbles at all: a carrier running into space was caught by a man who arrived, and the event was labelled a take-on because the carrier was moving and facing the man.
+- Committed tackles were mostly at good odds (56 % at p >= 0.6, won 65 %), so the decision to go in was not the problem, the number of contacts was.
+Fixed:
+- `first_touch` 0. Tight receipts tackled 0.065 (real 0.050).
+- A take-on is a run at a man: only the defender who was in the carrier's path when he set off with the ball (`carry_into`) makes it one, for either outcome; a man who arrives and wins it has dispossessed him, one who arrives and misses has lost a tackle.
+- A defender goes in only when he is more likely than not to win it (`tackle_floor` 0.5, was 0.4): a missed lunge leaves him beaten.
+- Fouls also come from a missed challenge that catches the man (`foul_miss` 0.35, more from behind and for poorer tacklers); before, the sim could only foul when the defender won the challenge. Real fouls: 10.6 of 13.3 per team are on a player on the ball.
+Effect (24 matches): tackles 38 -> 23-27 (by third 12.9 / 8.3 / 3.6 vs 10.5 / 7.7 / 2.3), won 0.65-0.70 (0.58), dispossessed 6.9 -> 13-15 (13.8), fouls 12.6 (12.0), free kicks 21.4 (22.9), take-on success 0.61 (0.57); loss 200 -> 188.
+Still open: take-ons 10.5 vs 17.5 (the chosen dribble is too rare now that the mislabelled ones are gone); fouls sit in the wrong place: 17-35 m from goal 3.15 per team vs 1.1 real, beyond 50 m 5.4 vs 8.8 (real fouls are mostly in midfield, by pressing players and to stop counters), which is why direct free-kick shots stay at 3.3 per match vs about 0.8.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
