@@ -13,8 +13,11 @@ football events into explainable match intelligence, narratives, and personalize
 | `viewer/` 2D playback of a generated match | working |
 | `analytics/` deterministic stats from events (take-on rate, dribbled past, PPDA, ratings, ...), batch and live | working |
 | Director layer (story arcs) | dropped (not needed; real matches produce stories) |
-| Agents (stats, tactics, commentators, localizer, fact-checker, recap) on Microsoft Foundry / Agent Framework | planned |
-| Event streaming + overlay output + web UI + Azure deploy | planned |
+| `newsroom/` agents on Microsoft Foundry + Agent Framework: stats analyst, tactics analyst, commentator (persona voices), fact-checker with rewrite loop, deterministic number/minute checks, template fallback, 429 back-off | working |
+| `web/` match centre: replay with timed lower-third overlays; Fan / Analyst / Scout views; agent audit trail; team stats by minute; scout player view (every action, touch map, jump to replay); clips (suggested + from any action, adjustable range, JSON export) | working |
+| Localizer and recap agents, favourite-club personalisation | planned |
+| Azure deploy (static site + cached newsroom output) | planned |
+| Clip video export (record the pitch canvas in the browser) | later |
 
 ## Quick start
 
@@ -32,6 +35,15 @@ python scripts/tune.py 24 2        # auto-tune TUNE so every metric sits inside 
 python scripts/tune_rs.py 24 3 36  # faster: regression surrogate + gradient descent, writes out/sensitivity.md
 python scripts/export_tracking.py out/match_1.json 25   # 25 Hz tracking feed (npz)
 python tests/test_sim.py           # determinism + invariants
+```
+
+Match centre (needs Azure for live agents; without `FOUNDRY_PROJECT_ENDPOINT` the newsroom uses a scripted offline client):
+
+```bash
+powershell -File infra/setup.ps1                      # one-time Azure setup: Foundry resource, project, gpt-4.1-mini deployment, role
+python scripts/build_site.py out/match_1.json out/match_12.json   # run the newsroom, write web/data/
+python -m http.server 8770 --directory web            # open http://localhost:8770/?m=match_12&p=scout  (p = fan | analyst | scout)
+python tests/test_newsroom.py                         # newsroom plumbing + fact checks, offline
 ```
 
 ## How it was built

@@ -8,7 +8,16 @@ import json
 from analytics.stats import StatsAccumulator
 
 BIG_CHANCE_XG = .25
-STAT_KEYS = ("shots", "shots_on_target", "xg", "passes_completed", "passes", "big_chances", "ppda_actions", "corners", "fouls", "yellow_cards", "red_cards")
+STAT_KEYS = ("shots", "shots_on_target", "xg", "passes_completed", "passes", "big_chances", "ppda", "corners", "fouls", "yellow_cards", "red_cards")
+# What each number means, in the pack so the writers cannot misread a metric (e.g. PPDA is a ratio, not a count of actions).
+GLOSSARY = {
+    "xg": "expected goals: the summed probability that each shot is scored (one shot's xg is that shot's chance)",
+    "shots_on_target": "shots that were saved or scored",
+    "big_chances": "shots with xg of 0.25 or more",
+    "ppda": "passes allowed per defensive action in the opponent's build-up zone; LOWER means a more intense press",
+    "passes_completed": "passes that reached a team-mate (passes is all attempts)",
+    "score": "home-away (teams.home first); a team may say its own score first, e.g. the away side leading 0-1 is '1-0 up'",
+}
 
 
 def _why(e, names):
@@ -22,6 +31,17 @@ def _why(e, names):
     if best and best.get("to"):
         s += f"; the pass to {names.get(best['to'], best['to'])} had {round(best['p_success'] * 100)}% chance"
     return s
+
+
+def template_line(f):
+    """A plain line built only from the pack: what the newsroom publishes when every agent draft was held by the fact-checker."""
+    m = f["moment"]
+    if m["type"] in ("goal", "own_goal"):
+        return f"{m['clock']} Goal for {f['team']}: {f['player']} scores, {f['teams']['home']} {f['score']} {f['teams']['away']}."
+    if m["type"] == "full_time":
+        return f"Full time: {f['teams']['home']} {f['score']} {f['teams']['away']}."
+    who = f" {f['player']} ({f['team']})" if f["player"] else f" {f['team']}" if f["team"] else ""
+    return f"{m['clock']} {m['type'].replace('_', ' ').capitalize()}:{who}."
 
 
 def moments(match):
@@ -44,9 +64,9 @@ def moments(match):
         t = acc.teams()
         stats = {team[i]: {k: round(t[i][k], 2) if isinstance(t[i][k], float) else t[i][k] for k in STAT_KEYS} for i in (0, 1)}
         out.append(dict(
-            moment=dict(type=kind, clock=e["clock"], minute=e["minute"], t=e["t"], id=e["id"]),
+            moment=dict(type=kind, clock=e["clock"], t=e["t"], id=e["id"]), teams=dict(home=team[0], away=team[1]),
             team=team[tm] if tm in (0, 1) else "", player=names.get(e.get("player"), ""), score=f"{score[0]}-{score[1]}", xg=e.get("xg"),
-            assist=names.get(e.get("assist"), ""), reason=e.get("reason") or e.get("card") or "", why=_why(e, names), stats=stats))
+            assist=names.get(e.get("assist"), ""), reason=e.get("reason") or e.get("card") or "", why=_why(e, names), stats=stats, glossary=GLOSSARY))
     return out
 
 

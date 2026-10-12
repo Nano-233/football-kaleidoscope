@@ -12,6 +12,8 @@ import re
 
 from agent_framework import BaseChatClient, ChatResponse, Message
 
+from newsroom.moments import template_line
+
 
 def make_client():
     if os.environ.get("FOUNDRY_PROJECT_ENDPOINT"):
@@ -53,15 +55,8 @@ def _tactics(f):
     return f["why"] or "Nothing in the build-up stands out tactically."
 
 
-def _commentator(f):
-    m = f["moment"]
-    if m["type"] == "goal":
-        return f"{m['clock']} GOAL! {f['player']} scores for {f['team']}, it is {f['score']}. xG {f['xg']}."
-    return f"{m['clock']} {m['type'].replace('_', ' ')}: {f['player']} ({f['team']})."
-
-
 def _checker(f):
     return json.dumps({"approved": True, "issues": []})
 
 
-SCRIPT = {"stats": _stats, "tactics": _tactics, "commentator": _commentator, "fact_checker": _checker}
+SCRIPT = {"stats": _stats, "tactics": _tactics, "commentator": template_line, "fact_checker": _checker}

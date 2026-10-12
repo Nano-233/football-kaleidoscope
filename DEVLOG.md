@@ -742,6 +742,38 @@ Effect (48 matches): loss 198 (noise +-10), shots 14.2, goals 1.32, throw-ins 48
 Tried and not kept: lowering `tackle_rate` to 0.6-0.9 with a larger pin effect (central tackles 29 -> 17, but the band at the line saturates at about 5.5: not enough carriers reach the line, and loss 212); lowering the ground-pass error near the touchline (`wide_error` 1.6-0.5) with these rules on: wide completion 0.63 -> 0.69-0.75 (real 0.84), full-back and winger receptions up 20-30%, but throw-ins 38 -> 27 and shots/passes up (loss 218-246); `dwell_scale` above 2.0 is clipped, no effect.
 Still open: central tackles 29 vs real 12 and central miscontrols 21 vs 11; carriers in the wide/half lanes; centre-start passes 132 vs 64 per team-match and centre-mid/striker receptions at x 70-88 (19 and 25 vs 7 and 12.5); corners 4.3 vs 11.6; throw-ins still depend on `wide_error` for ground passes out (31 vs real 5).
 
+### Newsroom on Foundry: making the fact-checker trustworthy (2026-10-11)
+
+Saw (first live run, gpt-4.1-mini): a 22' goal described as "the 21st minute" and approved; "just 7 PPDA actions" (PPDA is a ratio, the pack carried the raw count `ppda_actions`).
+Measured: the pack held `minute` (0-based, 21 for a 22' clock), and the number check looked for each number as a substring of the whole pack JSON, so "21" matched inside timestamps and ids.
+Fixed (`newsroom/`):
+- The pack carries only the clock, the real PPDA ratio, team names, and a `glossary` that says what each metric means (PPDA: lower = harder press; score: home-away).
+- Number check: a quoted number must be a rounding of a pack number (0.072 supports 0.07; a fraction supports its percentage); ids and timestamps excluded. Minute check: "21st minute" / "21'" must be on the clock.
+- Rewrite loop: a rejected line goes back to the commentator with the checker's issues, up to 2 rewrites. If every draft is held, a template line built only from pack facts is published (`fallback`) and the drafts stay in the audit trail.
+- 429 back-off and at most 3 moments in flight (the deployment allows about 50 requests a minute).
+Effect: 18 published lines over 2 matches, all approved, 5 after a rewrite. Remaining weakness: the mini model as checker sometimes rejects correct lines (contradicting itself between `approved` and `issues`); a stronger checker model is the upgrade if it shows in demos.
+
+### Free-kick walls and inflated ratings: diagnosis (2026-10-11)
+
+User saw: no walls at direct free kicks; every player rated high whatever the result.
+Measured (`scripts/fk_wall.py`, `scripts/ratings_probe.py` on 16 matches, `scripts/norms.py sim 16` against real per-team figures):
+- Walls exist (`movement.py`, dead free kick within 32 m) but hold 3-4 men in a loose clump with attackers mixed in, where the code asks for 5 under 19 m, and one defender usually stands 5-6 m from the ball (inside 9.15 m). The wall has no effect on the outcome: `_shoot` decides "goal" first from a wall-free xG (fitted to real free kicks); the wall only decides how a miss is split between blocked, wide and saved.
+- Ratings: mean 7.42 (sd 0.93; real about 6.7), losers 7.23, winners 7.57; keepers who conceded 2 rate 7.68 against 6.86 for a clean sheet. The formula credits won tackles, aerials, interceptions and saves and never charges the matching losses (aerials lost, tackles lost, dribbled past, goals conceded); passing contributes 0.03.
+- Interaction volume per team-match, sim vs real: aerial duels lost 63 vs 22 (x2.9), tackles 36.6 vs 20.5, pressures 271 vs 150, blocks 32.6 vs 20.1, take-ons 26.4 vs 17.5, miscontrols 19.9 vs 14.3. A one-sided rating turns each surplus contest into extra credit for somebody.
+- Aerials: high-ball volume is right (about 115 per team, real about 120); 53-61 % of them become duels against about 15-18 % in real data. Contest rate is 0.84 when an opponent is within 5 m of the landing spot at release, 0.66 at 5-10 m. As found on Oct 7, `_aerial` logs a duel for any rival within 3.5 m of the landing spot, while in real play most of those balls are brought down or never reach heading height; the passer's lofted odds (`p_air`, `air_exact` off) carry no information, and `air_base` adds a flat bonus for playing it in the air.
+
+### Aerials, free-kick walls and ratings: fixed (2026-10-11)
+
+Fixed (`matchsim/engine.py`, `matchsim/movement.py`, `analytics/stats.py`; 24-match loss 198 -> 200, inside the +-10 noise):
+- Aerial contest (`_aerial`, `_head_zone`): a lofted ball can be headed over the last stretch of its path (a quarter of the flight, at most 6 m). The first man it comes to takes it; it is a duel only when men of both sides meet it within 1.5 m of the same spot and within reach (`duel_reach` 1.4 m, keepers x1.6 with their hands). A pressed receiver (opponent within 3.5 m) heads it on or controls under pressure instead of bringing it down. Aerial duels lost per team 63 -> 24.5 (real 22), headed passes 18.4 -> 20.5 (24), headed clearances 19.8 (16), goals 1.23 (1.24).
+- The passer's odds for a ball in the air (`_air_share`, now on via `air_exact`) use the same rule, so the flat bonus for lofted balls (`air_base`, which compensated for uninformative odds) is 0.
+- Landing-spot-only reach made crosses complete 57 % of the time; meeting the ball along its path brought it back to 45 % (it was 47 % before; real 28 %, still open).
+- Wall: the outside man on the line from the ball to the near post, the rest 0.6 m apart towards the middle, men kept in order across the line (re-ranking them every tick by distance made them swap places and form a clump). Players with a set-piece job no longer take part in the dead-ball wandering, and the defending side is held 9.15 m from the ball after it (the wander used to walk men into the circle). Nearest defender at the kick 5-6 m -> about 8.5 m.
+- Free-kick shot (`_wall_cover`, `_shoot(wall=...)`): the kick first has to clear the wall (share of the goal mouth the wall hides x the chance he gets it up and down: `fk_over0` .45, +.03 per finishing point, +.02 per metre beyond 20 m), then beat the keeper (`fk_xg` 2.2 on the clean-strike xG); a cleared kick misses as often as a hurried shot. Outcomes per direct free-kick shot: blocked 0.43 -> 0.21, conversion about 6 % (real about 6 %).
+- Stats: each aerial duel is logged twice (winner's "won", loser's "lost") and both were counted as a win and a loss for each player, so every aerial win rate was 0.5; counted once now. Goals conceded while on the pitch are counted per player.
+- Rating (`rating_terms`): every won contest has its lost one (tackles, take-ons, aerials, dribbled past, failed passes, dispossessed); goals conceded for keepers and defenders, clean sheets, a small result term. 16 matches: mean 7.42 -> 6.79, winners 7.25, draws 6.76, losers 6.33; keepers 8.6 with a clean sheet down to 6.2 conceding 4 (was higher for conceding 2 than 0).
+Still open: direct free-kick shots 3.1 per match vs about 1 real (fouls 17-35 m from goal), tackles 38.8 vs 20.5 per team, pressures 1.8x, take-ons 1.5x, passes 604 vs 484, crosses completed 45 % vs 28 %, corners 4.8 vs 11.6.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

@@ -2,56 +2,123 @@
 
     stats analyst ─┐
                    ├─> commentator ──> fact-checker ──> published line
-    tactics analyst┘
+    tactics analyst┘        ^                │
+                            └── rejected ────┘  (up to MAX_REWRITES times, with the checker's issues)
 
-The analysts work from the fact pack only. The commentator writes in a persona. The fact-checker has the last word, and a deterministic
-check (`unsupported_numbers`) runs after it whatever the model says: a number in the line that is not in the pack is rejected.
+The analysts work from the fact pack only. The commentator writes in a persona. The fact-checker has the last word, and deterministic
+checks run after it whatever the model says: a number that is not a rounding of a number in the pack, or a minute that is not the clock,
+is rejected. A line still rejected after the rewrites is not published: a template line built only from the pack goes out instead
+(`fallback`), and the held drafts stay in the trail.
 """
+import asyncio
 import json
 import re
 
 from agent_framework import Agent
-from agent_framework_orchestrations import ConcurrentBuilder, SequentialBuilder
+
+from newsroom.moments import template_line
 
 PERSONAS = {
     "veteran": "a calm former centre-back: plain words, one tactical insight, never shouts",
-    "analyst": "a numbers-first analyst: leads with the one statistic that explains the moment",
-    "fan": "an excitable home-end fan: short, loud, emotional, still accurate",
+    "analyst": "a numbers-first analyst: leads with the one statistic that explains the moment, names the metric exactly as FACTS.glossary defines it",
+    "fan": "an excitable fan: short, loud, emotional, still accurate; at most one number",
 }
+MAX_REWRITES = 2
 
-RULES = "Use only facts and numbers from FACTS. Never invent a player, minute, score or statistic."
+RULES = ("Use only facts and numbers from FACTS. Never invent a player, minute, score or statistic. The minute is FACTS.moment.clock exactly. "
+         "Read each metric as FACTS.glossary defines it.")
 
 
 def build(client, persona="veteran"):
     mk = lambda role, text: Agent(client, f"[[ROLE:{role}]] {text} {RULES}", name=role)
-    stats = mk("stats", "You are the stats analyst. From FACTS pick the two or three numbers that best explain this moment. Reply as a JSON list of {metric, value}.")
+    stats = mk("stats", "You are the stats analyst. From FACTS pick the two or three numbers that best explain this moment. Reply as a JSON list of {metric, value, meaning}.")
     tactics = mk("tactics", "You are the tactics analyst. Explain in one sentence, from FACTS.why, how the moment came about.")
     commentator = mk("commentator", f"You are the commentator, {PERSONAS[persona]}. Write one or two sentences of live commentary using the analysts' points.")
-    checker = mk("fact_checker", "You are the fact-checker. Compare the commentary with FACTS. Reply as JSON {approved: bool, issues: [str]}.")
-    desk = ConcurrentBuilder(participants=[stats, tactics]).build()
-    return stats, tactics, commentator, checker, desk
+    checker = mk("fact_checker", "You are the fact-checker. Compare the commentary with FACTS line by line. Reject it if any number is attached to the wrong "
+                                 "metric or team, a metric is described against its FACTS.glossary meaning, the minute differs from FACTS.moment.clock, or a claim "
+                                 "is not supported by FACTS. Wording, style and emphasis are not errors; set approved to true whenever you find no real error. Reply only as JSON {\"approved\": bool, \"issues\": [str]}, "
+                                 "one short sentence per real error, and an empty list when approved.")
+    return stats, tactics, commentator, checker
+
+
+def _pack_numbers(x, out=None):
+    """Every number in the pack (including those inside strings such as the clock, the score or the `why` sentence), skipping internal ids."""
+    out = [] if out is None else out
+    if isinstance(x, dict):
+        for k, v in x.items():
+            if k not in ("t", "id", "glossary"):
+                _pack_numbers(v, out)
+    elif isinstance(x, (list, tuple)):
+        for v in x:
+            _pack_numbers(v, out)
+    elif isinstance(x, (int, float)) and not isinstance(x, bool):
+        out.append(float(x))
+    elif isinstance(x, str):
+        out += [float(n) for n in re.findall(r"\d+(?:\.\d+)?", x)]
+    return out
 
 
 def unsupported_numbers(line, pack):
-    """Numbers quoted in a line that appear nowhere in the fact pack (minutes written as 10' count as supported by the clock)."""
-    blob = json.dumps(pack)
-    return [n for n in re.findall(r"\d+(?:\.\d+)?", line) if n not in blob and not any(n == d for d in re.findall(r"\d+", pack["moment"]["clock"]))]
+    """Numbers quoted in a line that are not a rounding of some number in the pack (0.072 supports 0.07; a fraction supports its percentage)."""
+    nums = _pack_numbers(pack)
+
+    def ok(tok):
+        v, dec = float(tok), len(tok.split(".")[1]) if "." in tok else 0
+        tol = .5 * 10 ** -dec + 1e-9
+        return any(abs(v - p) <= tol or (p <= 1 and abs(v - p * 100) <= tol) for p in nums)
+    return [n for n in re.findall(r"\d+(?:\.\d+)?", line) if not ok(n)]
+
+
+def wrong_minutes(line, pack):
+    """Minutes the line states ("21st minute", "21'") that are not on the moment's clock."""
+    clock = set(re.findall(r"\d+", pack["moment"]["clock"]))
+    said = [a or b for a, b in re.findall(r"(\d+)(?:st|nd|rd|th)?\s+minute|(\d+)'", line)]
+    return [m for m in said if m not in clock]
+
+
+async def _run(agent, prompt, tries=6):
+    """agent.run with back-off when the deployment is rate limited (429); other errors propagate."""
+    for i in range(tries):
+        try:
+            return await agent.run(prompt)
+        except Exception as ex:  # the framework wraps the HTTP error in its own exception type
+            if "429" not in str(ex) or i == tries - 1:
+                raise
+            await asyncio.sleep(3 * 2 ** i)
+
+
+def _verdict(text):
+    m = re.search(r"\{.*\}", text or "", flags=re.S)
+    try:
+        v = json.loads(m.group(0)) if m else None
+    except ValueError:
+        v = None
+    return v if isinstance(v, dict) and "approved" in v else {"approved": False, "issues": ["checker reply was not JSON"]}
 
 
 async def cover(client, pack, persona="veteran"):
     """One moment through the newsroom. Returns the published item with every agent's contribution kept for the audit trail."""
-    stats, tactics, commentator, checker, _ = build(client, persona)
-    prompt = "FACTS: " + json.dumps(pack) + "\n"
-    s = await stats.run(prompt)
-    t = await tactics.run(prompt)
-    c = await commentator.run(prompt + f"STATS: {s.text}\nTACTICS: {t.text}\n")
-    v = await checker.run(prompt + f"COMMENTARY: {c.text}\n")
-    try:
-        verdict = json.loads(v.text)
-    except ValueError:
-        verdict = {"approved": False, "issues": ["checker reply was not JSON"]}
-    bad = unsupported_numbers(c.text, pack)
-    if bad:
-        verdict = {"approved": False, "issues": verdict.get("issues", []) + [f"numbers not in the facts: {bad}"]}
-    return dict(moment=pack["moment"], persona=persona, line=c.text, approved=verdict["approved"], issues=verdict["issues"],
-                trail=dict(stats=s.text, tactics=t.text, checker=v.text))
+    stats, tactics, commentator, checker = build(client, persona)
+    facts = "FACTS: " + json.dumps(pack) + "\n"
+    s, t = await asyncio.gather(_run(stats, facts), _run(tactics, facts))
+    brief = facts + f"STATS: {s.text}\nTACTICS: {t.text}\n"
+    attempts, ask = [], brief
+    for _ in range(1 + MAX_REWRITES):
+        line = (await _run(commentator, ask)).text.strip()
+        v = await _run(checker, facts + f"COMMENTARY: {line}\n")
+        verdict = _verdict(v.text)
+        checks = []
+        if bad := unsupported_numbers(line, pack):
+            checks.append(f"numbers not in the facts: {bad}")
+        if bad := wrong_minutes(line, pack):
+            checks.append(f"minute {bad} is not the clock {pack['moment']['clock']}")
+        approved = bool(verdict["approved"]) and not checks
+        issues = list(verdict.get("issues") or []) + checks
+        attempts.append(dict(line=line, approved=approved, issues=issues, checker=v.text))
+        if approved:
+            break
+        ask = brief + f"Your previous line was rejected by the fact-checker.\nPREVIOUS: {line}\nISSUES: {issues}\nRewrite it, fixing these issues.\n"
+    last = attempts[-1]
+    line, fallback = (last["line"], False) if last["approved"] else (template_line(pack), True)  # never publish a held draft; the template states only pack facts
+    return dict(moment=pack["moment"], persona=persona, line=line, approved=True, fallback=fallback, issues=last["issues"],
+                rewrites=len(attempts) - 1, trail=dict(stats=s.text, tactics=t.text, attempts=attempts))

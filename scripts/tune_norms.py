@@ -99,7 +99,8 @@ def evaluate(over, seeds, pool=None):
 
 def main():
     only = [a.split("=", 1)[1].split(",") for a in sys.argv[1:] if a.startswith("only=")]
-    argv = [a for a in sys.argv[1:] if not a.startswith("only=")]
+    show = sum((a.split("=", 1)[1].split(",") for a in sys.argv[1:] if a.startswith("show=")), [])  # metrics to print with the real value
+    argv = [a for a in sys.argv[1:] if not a.startswith(("only=", "show="))]
     args = [a for a in argv if "=" not in a]
     kv = {k: float(v) for k, v in (a.split("=") for a in argv if "=" in a)}
     if args and args[0] == "eval":
@@ -108,6 +109,8 @@ def main():
         print(f"loss {loss:.1f}")
         for k, e in sorted(parts.items(), key=lambda kv_: -abs(kv_[1]))[:14]:
             print(f"  {k:16s} gap {e:+.2f}")
+        for k in show:
+            print(f"  {k:16s} sim {agg.get(k, cnt.get(k, float('nan'))):8.2f}  real {REAL.get(k, REAL_MATCH.get(k, float('nan'))):8.2f}")
         return
     n = int(args[0]) if args else 16
     rounds = int(args[1]) if len(args) > 1 else 2

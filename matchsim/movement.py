@@ -721,14 +721,19 @@ def team_targets(m, t):
                 urgent[i] = True
                 m.sprint_hint[g] = bool(TP.get("hint_press", 1.))  # the presser goes for the ball
         elif m.state == "dead" and kind == "free_kick" and np.hypot(B[0], B[1] - W / 2) < 32:  # wall on the line to goal, 9.15 m back
+            # the wall covers the near-post side (the keeper takes the far side): its outside man stands on the line from the ball to the near post,
+            # the rest shoulder to shoulder towards the middle. Men keep their order across the line, so nobody runs through the wall to his slot.
             dist = float(np.hypot(B[0], B[1] - W / 2))
             n = 5 if dist < 19 else 4 if dist < 25 else 3
-            u = _unit(GOAL - B)
-            wc = B + u * 9.15
+            near = np.array([0., W / 2 + (3.66 if B[1] > W / 2 else -3.66)]) if abs(B[1] - W / 2) > 1. else GOAL
+            u = _unit(near - B)
             perp = np.array([-u[1], u[0]])
-            order = np.argsort(nrm(P - wc, axis=1) + (role == GK) * 1e9)[:n]
-            for k, i in enumerate(order):
-                zone[i], urgent[i] = wc + perp * (k - (n - 1) / 2) * .85, True
+            inward = perp if float(perp @ (GOAL - near)) >= 0 else -perp
+            slots = B + u * 9.15 + inward[None] * (.6 * np.arange(n) + .3)[:, None]  # 0.6 m a man; the end man just outside the post line
+            pick = np.argsort(nrm(P - slots.mean(0), axis=1) + (role == GK) * 1e9)[:n]
+            pick = pick[np.argsort(P[pick] @ inward)]
+            for k, i in enumerate(pick):
+                zone[i], urgent[i] = slots[k], True
         elif m.state == "loose":
             d = nrm(P - B, axis=1)
             if nrm(B - GOAL) > 24:  # the keeper goes for a loose ball in and around his own box, not out in the field

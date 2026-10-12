@@ -11,6 +11,8 @@ The engine never computes aggregates; anything derivable from events lives here.
 """
 from collections import Counter, defaultdict
 
+import numpy as np
+
 L, W = 105.0, 68.0
 SUCCESS = ("goal", "saved")
 COUNT_KEYS = ["goals", "own_goals", "xg", "shots", "shots_on_target", "shots_blocked", "shots_in_box", "big_chances", "headed_shots", "passes", "passes_completed",
@@ -18,7 +20,7 @@ COUNT_KEYS = ["goals", "own_goals", "xg", "shots", "shots_on_target", "shots_blo
               "throws", "carries", "carry_metres", "progressive_carries", "take_ons", "take_ons_won", "take_ons_stopped", "dribbled_past", "tackles", "tackles_won",
               "dispossessed", "miscontrols", "interceptions", "clearances", "blocks", "recoveries", "aerial_won", "aerial_lost", "fifty_fifty_won", "fifty_fifty_lost",
               "pressures", "fouls", "fouls_won", "yellow_cards", "second_yellow_cards", "red_cards", "offsides", "saves", "keeper_claims", "keeper_punchs", "keeper_sweeps",
-              "errors", "errors_leading_to_shot", "errors_leading_to_goal", "corners", "free_kicks", "penalties", "possession_gains", "ppda_actions", "ppda_opp_passes"]
+              "errors", "errors_leading_to_shot", "errors_leading_to_goal", "corners", "free_kicks", "penalties", "possession_gains", "ppda_actions", "ppda_opp_passes", "goals_conceded"]
 
 
 class StatsAccumulator:
@@ -102,7 +104,7 @@ class StatsAccumulator:
             inc(pid, "blocks"); tinc(tm, "blocks")
         elif ty == "ball_recovery":
             inc(pid, "recoveries"); tinc(tm, "recoveries")
-        elif ty == "duel":
+        elif ty == "duel" and e.get("outcome") == "won":  # each duel is logged twice, the winner's "won" and the loser's "lost": count it once
             inc(pid, "aerial_won"); tinc(tm, "aerial_won"); inc(e.get("target"), "aerial_lost"); tinc(1 - tm, "aerial_lost")
         elif ty == "fifty_fifty":
             inc(pid, "fifty_fifty_won"); inc(e.get("target"), "fifty_fifty_lost")
@@ -127,9 +129,9 @@ class StatsAccumulator:
             if self.xt(e) > L - 16.5 and abs(e["y"] - W / 2) < 20.2:
                 tinc(tm, "shots_in_box")
         elif ty == "goal":
-            inc(pid, "goals"); tinc(tm, "goals")
-        elif ty == "own_goal":
-            inc(pid, "own_goals"); tinc(tm, "goals")
+            inc(pid, "goals"); tinc(tm, "goals"); self._conceded(1 - tm)
+        elif ty == "own_goal":  # the event's team is the side the goal counts for
+            inc(pid, "own_goals"); tinc(tm, "goals"); self._conceded(1 - tm)
         elif ty == "save":
             inc(pid, "saves"); tinc(tm, "saves")
         elif ty in ("keeper_claim", "keeper_punch", "keeper_sweep"):
@@ -150,6 +152,11 @@ class StatsAccumulator:
         if ty == "pass" and tm in (0, 1) and self.xt(e) < .6 * L:
             tinc(1 - tm, "ppda_opp_passes")
 
+    def _conceded(self, team):
+        for pid, info in self.info.items():
+            if info["team"] == team and pid in self.on and pid not in self.off:
+                self.p[pid]["goals_conceded"] += 1
+
     # ------------------------------------------------------------------ results
     def minutes(self, pid):
         end = self.last_t / 60
@@ -166,7 +173,8 @@ class StatsAccumulator:
             d["take_on_rate"] = r(c["take_ons_won"], c["take_ons"])
             d["tackle_win_rate"] = r(c["tackles_won"], c["tackles"])
             d["aerial_win_rate"] = r(c["aerial_won"], c["aerial_won"] + c["aerial_lost"])
-            d["rating"] = self.rating(c, self.info[pid]["role"], self.minutes(pid))
+            tm = self.info[pid]["team"]
+            d["rating"] = self.rating(c, self.info[pid]["role"], self.minutes(pid), int(np.sign(self.t[tm]["goals"] - self.t[1 - tm]["goals"])))
             out[pid] = d
         return out
 
@@ -184,17 +192,33 @@ class StatsAccumulator:
         return res
 
     @staticmethod
-    def rating(c, role, minutes):
-        """Transparent heuristic rating on a 1-10 scale (not a learned model): the weights are listed here so an agent can explain them."""
+    def rating_terms(c, role, minutes, result):
+        """What each part of a player's game adds to or takes from the 6.0 baseline. Every won contest has its lost one: the man who loses
+        the duel, is dribbled past or gives the ball away pays for it, so a busy match is not a high-rated one for everybody. Not a learned
+        model: the weights are listed here so an agent can explain a rating. result: +1 win, 0 draw, -1 defeat for his side."""
+        played = min(minutes / 90., 1.)
+        fail = c["passes"] - c["passes_completed"]
+        back = role in ("GK", "CB", "FB")
+        cs = minutes >= 60 and c["goals_conceded"] == 0
+        return dict(
+            attack=1.0 * c["goals"] + .7 * c["assists"] + .12 * c["key_passes"] + .4 * c["xg"],
+            passing=.008 * c["passes_completed"] - .03 * fail + .03 * c["progressive_passes"],
+            carrying=.08 * c["take_ons_won"] - .04 * (c["take_ons"] - c["take_ons_won"]) - .08 * c["dispossessed"] - .06 * c["miscontrols"] + .02 * c["progressive_carries"],
+            defending=.1 * c["tackles_won"] - .05 * (c["tackles"] - c["tackles_won"]) - .08 * c["dribbled_past"] + .08 * c["interceptions"] + .03 * c["clearances"]
+                      + .06 * c["blocks"] + .04 * (c["aerial_won"] - c["aerial_lost"]) + .015 * c["recoveries"],
+            keeping=.15 * c["saves"] + .05 * (c["keeper_claims"] + c["keeper_punchs"] + c["keeper_sweeps"]),
+            conceded=-{"GK": .3, "CB": .12, "FB": .12, "DM": .06}.get(role, 0.) * c["goals_conceded"] + ({"GK": .4}.get(role, .25 if back else 0.) if cs else 0.),
+            result=.15 * result * played,
+            discipline=-(.05 * c["fouls"] + .4 * c["yellow_cards"] + 1.5 * (c["red_cards"] + c["second_yellow_cards"]) + 1.0 * c["own_goals"]
+                         + .3 * c["errors_leading_to_shot"] + .8 * c["errors_leading_to_goal"]),
+        )
+
+    @classmethod
+    def rating(cls, c, role, minutes, result=0):
+        """1-10 match rating: 6.0 plus the terms of rating_terms."""
         if minutes < 1:
             return None
-        r = 6.0
-        r += 1.1 * c["goals"] + .8 * c["assists"] + .15 * c["key_passes"] + 1.2 * c["xg"] * (1 if role in ("ST", "WG", "AM") else .6)
-        r += .02 * (c["passes_completed"] - (c["passes"] - c["passes_completed"]) * 1.5) / max(minutes / 90, .2) * .1
-        r += .12 * c["tackles_won"] + .12 * c["interceptions"] + .06 * c["clearances"] + .08 * c["blocks"] + .05 * c["aerial_won"] + .1 * c["take_ons_won"]
-        r += .15 * c["saves"] + .1 * c["keeper_claims"]
-        r -= .5 * c["errors_leading_to_goal"] + .2 * c["errors_leading_to_shot"] + .1 * c["dispossessed"] + .06 * c["fouls"] + .4 * c["yellow_cards"] + 1.5 * (c["red_cards"] + c["second_yellow_cards"]) + 1.2 * c["own_goals"]
-        return round(max(1., min(10., r)), 1)
+        return round(max(1., min(10., 6. + sum(cls.rating_terms(c, role, minutes, result).values()))), 1)
 
 
 def match_stats(match):
