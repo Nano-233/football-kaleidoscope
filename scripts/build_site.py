@@ -7,6 +7,7 @@ and frames.bin / heads.bin (tracking as int16 positions at 0.05 m and int8 facin
 web/data/index.json listing every built match. The newsroom runs on Microsoft Foundry when FOUNDRY_PROJECT_ENDPOINT is set.
 """
 import asyncio
+import gzip
 import json
 import pathlib
 import sys
@@ -89,6 +90,12 @@ def build(src):
     meta = {k: v for k, v in match["meta"].items() if k != "frame_cols"}
     dest = ROOT / "web" / "data" / src.stem
     dest.mkdir(parents=True, exist_ok=True)
+    srv = ROOT / "server" / "data"  # the full match for the agents' tools (decision reasons, every frame), compressed; served to nobody
+    srv.mkdir(parents=True, exist_ok=True)
+    full = {**match, "events": [{k: v for k, v in e.items() if k != "freeze_frame"} for e in match["events"]],
+            "frames": np.round(np.asarray(match["frames"]), 2).tolist()}
+    with gzip.open(srv / f"{src.stem}.json.gz", "wt", encoding="utf-8") as fh:
+        json.dump(full, fh, separators=(",", ":"))
     q, hd = pack_frames(match["frames"])
     (dest / "frames.bin").write_bytes(q.tobytes())
     (dest / "heads.bin").write_bytes(hd.tobytes())

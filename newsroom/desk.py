@@ -32,7 +32,7 @@ PERSONA = {"fan": "a football fan who wants the story and why it matters", "anal
 TACTICS = """You are the tactics analyst of a football newsroom. Investigate the question with your tools before answering; never guess.
 Formations: a team has a shape in possession and a different shape out of possession at the same time (a 4-3-3 often defends as a
 4-1-4-1, a back three as a five); say which phase you mean. A system change is what formation_changes lists under "changes"; single
-windows that read differently are noise, not changes. Look for causes: changes of shape, pressing height and PPDA by period, momentum
+windows that read differently are noise, not changes. Call formation_changes first, then team_shape for each period between changes. Look for causes: changes of shape, pressing height and PPDA by period, momentum
 spells, where attacks start, substitutions. Use only numbers your tools returned. Reply with concise findings (bullet points), each with
 its numbers and the minutes (e.g. 63') it refers to."""
 
@@ -140,7 +140,11 @@ class Desk:
             """Average positions and the formation the team's shape reads as, in possession and out of possession (they differ at the same time), with the defensive line height and the block's length and width."""
             t, t0 = team_ix(team), from_minute * 60.
             t1 = to_minute * 60. if to_minute else None
-            return dict(in_possession=mv.shape(t, t0, t1, "in"), out_of_possession=mv.shape(t, t0, t1, "out"))
+            out = dict(in_possession=mv.shape(t, t0, t1, "in"), out_of_possession=mv.shape(t, t0, t1, "out"))
+            inside = [c for c in mv.formation_timeline(t)["changes"] if t0 < c["t"] < (t1 or 1e9)]
+            if inside:  # an average across a change of system describes a shape nobody played
+                out["warning"] = "the system changed inside this window (" + ", ".join(f"{c['at']} to {c['formation']}" for c in inside) + "); call team_shape for each period separately"
+            return out
 
         def formation_changes(team: Annotated[str, "home, away or the team name"]) -> dict:
             """The team's formation over the match, window by window, in and out of possession, and the changes of system."""

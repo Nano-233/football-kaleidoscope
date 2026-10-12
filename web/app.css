@@ -198,3 +198,20 @@ table.stats td.lead { color: var(--text); font-weight: 600; }
   .panel-body { overflow: visible; }
 }
 .feed p.rejected { color: var(--text-3); }
+
+/* Ask the newsroom */
+.ask-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px; font-size: 12px; color: var(--text-2); }
+.ask-controls select { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r); padding: 3px 6px; margin-left: 4px; }
+.ask-box { display: flex; gap: 8px; }
+.ask-box input { flex: 1; min-width: 0; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r); padding: 7px 10px; }
+.asks .q { font-weight: 600; margin-bottom: 4px; }
+.asks p { margin: 6px 0 0; }
+.thinking { color: var(--text-2); font-size: 13px; }
+.thinking::after { content: ""; display: inline-block; width: 8px; height: 8px; margin-left: 8px; border-radius: 50%; background: var(--accent); animation: pulse 1s infinite alternate; }
+@keyframes pulse { from { opacity: .25; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .thinking::after { animation: none; } }
+.watch { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 8px; }
+.steps { margin: 4px 0 0; padding-left: 18px; }
+.steps li { margin: 2px 0; }
+.row-between { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.row-between .back { margin-bottom: 0; }

@@ -8,7 +8,7 @@ const SX = (cv.width - 2 * PAD) / L, SY = (cv.height - 2 * PAD) / W, px = x => P
 const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const COL = { home: css('--home'), away: css('--away'), accent: css('--accent'), good: css('--good'), bad: css('--bad'), pitch: css('--pitch'), line: css('--pitch-line') };
 
-const TABS = { fan: ['Live', 'Stats', 'Clips'], analyst: ['Feed', 'Stats', 'Clips'], scout: ['Players', 'Clips'] };
+const TABS = { fan: ['Live', 'Ask', 'Players', 'Stats', 'Clips'], analyst: ['Feed', 'Ask', 'Stats', 'Clips'], scout: ['Players', 'Ask', 'Clips'] };
 const VOICE = { fan: 'fan', analyst: 'analyst', scout: 'analyst' };  // which newsroom feed each persona reads
 const GROUPS = {
   All: null,
@@ -36,7 +36,19 @@ const FAN_ROWS = ['goals', 'xg', 'shots', 'shots_on_target', 'corners', 'yellow_
 const S = {
   D: null, F: null, n: 0, dt: .2, id: null, t: 0, playing: false, last: 0,
   persona: 'fan', tab: 'Live', player: null, group: 'All', clip: null, custom: [], panelKey: '', info: {}, slots: [],
+  profile: loadProfile(), asks: [], askVer: 0, askDraft: '',
 };
+const SUGGEST = {
+  fan: ["Who's been the best player so far?", 'Why is the game going this way?', 'Explain the last goal', 'How is my player doing?'],
+  analyst: ['How did each team set up in and out of possession?', 'Where did the press win the ball back?', 'What changed after the substitutions?', 'Why did they concede?'],
+  scout: ['Report on the highest-rated player', 'Who won their duels, and how?', 'Compare the two centre-forwards'],
+};
+const LANGS = ['English', 'Español', 'Français', 'Deutsch', 'Português', 'Italiano', '中文', '日本語', 'العربية'];
+function loadProfile() {
+  const base = { depth: 'standard', language: 'English', club: '', player: '', playerId: '' };
+  try { return Object.assign(base, JSON.parse(localStorage.getItem('mn-profile'))); } catch { return base; }
+}
+function saveProfile() { try { localStorage.setItem('mn-profile', JSON.stringify(S.profile)); } catch { /* storage off: the profile lasts for this visit */ } }
 
 // ---------------------------------------------------------------- data
 async function boot() {
@@ -72,6 +84,9 @@ async function load(id) {
   $('h-code').textContent = D.meta.home.code; $('h-name').textContent = D.meta.home.name;
   $('a-code').textContent = D.meta.away.code; $('a-name').textContent = D.meta.away.name;
   $('seek').max = D.meta.duration;
+  $('club').innerHTML = '<option value="">Neutral</option>' + ['home', 'away'].map(k => `<option${S.profile.club === D.meta[k].name ? ' selected' : ''}>${esc(D.meta[k].name)}</option>`).join('');
+  if (S.profile.playerId && !S.info[S.profile.playerId]) Object.assign(S.profile, { player: '', playerId: '' });
+  S.asks = [];
   marks();
   syncUrl();
   $('loading').hidden = true;
@@ -139,7 +154,7 @@ function draw() {
   const t = S.t, f = frame(t);
   drawPitch();
   if (S.persona === 'scout' && S.player) drawActions(t);
-  const sel = S.persona === 'scout' && S.player ? slotOf(S.player, t) : -1;
+  const sel = S.persona === 'scout' && S.player ? slotOf(S.player, t) : -1, fol = S.profile.playerId ? slotOf(S.profile.playerId, t) : -1;
   for (let k = 0; k < 22; k++) {
     const x = f[5 + 2 * k], y = f[6 + 2 * k];
     if (y < -5) continue;  // sent off
@@ -151,6 +166,7 @@ function draw() {
     g.fillText(p ? p.number : '', X, Y + .5);
     if (k === f[3]) { g.beginPath(); g.arc(X, Y, 13, 0, 7); g.strokeStyle = 'rgba(255,255,255,.8)'; g.lineWidth = 1.5; g.stroke(); }
     if (k === sel) { g.beginPath(); g.arc(X, Y, 15, 0, 7); g.strokeStyle = COL.accent; g.lineWidth = 3; g.stroke(); }
+    if (k === fol && k !== sel) { g.setLineDash([3, 3]); g.beginPath(); g.arc(X, Y, 15, 0, 7); g.strokeStyle = COL.accent; g.lineWidth = 2; g.stroke(); g.setLineDash([]); }
   }
   g.globalAlpha = 1;
   g.beginPath(); g.arc(px(f[1]), py(f[2]), 4.5, 0, 7); g.fillStyle = '#fff'; g.fill(); g.strokeStyle = '#0c0d0e'; g.lineWidth = 1.5; g.stroke();
@@ -225,7 +241,7 @@ function setPersona(p) {
 function render(force) {
   if (!S.D) return;
   const minute = Math.floor(S.t / 60), shown = feed().filter(it => it.moment.t <= S.t).length;
-  const key = [S.persona, S.tab, S.tab === 'Clips' ? '' : minute, shown, S.player, S.group, S.clip && S.clip.id, S.custom.length].join('|');
+  const key = [S.persona, S.tab, S.tab === 'Clips' || S.tab === 'Ask' ? '' : minute, shown, S.player, S.group, S.clip && S.clip.id, S.custom.length, S.askVer, S.profile.playerId].join('|');
   if (!force && key === S.panelKey) return;
   S.panelKey = key;
   const body = $('panel-body'), keep = body.scrollTop, same = body.dataset.view === S.persona + S.tab + S.player;
@@ -240,6 +256,7 @@ const VIEWS = {
   Stats: () => S.persona === 'fan' ? compareView() : tableView(),
   Players: () => S.player ? playerView() : squadView(),
   Clips: () => clipsView(),
+  Ask: () => askView(),
 };
 
 function feedView(mode) {
@@ -324,7 +341,9 @@ function playerView() {
       <span><button class="link" data-seek="${e.t - 3}">Watch</button><button class="link" data-clip-event="${e.id}">Clip</button></span></li>`;
   }).join('');
   const chips = Object.keys(GROUPS).map(gname => `<button class="chip" data-group="${gname}" aria-pressed="${gname === S.group}">${gname}</button>`).join('');
-  return `<button class="back" data-player="">← All players</button>
+  const following = S.profile.playerId === S.player;
+  return `<div class="row-between"><button class="back" data-player="">← All players</button>
+    <button class="btn${following ? ' primary' : ''}" data-follow="${esc(S.player)}">${following ? 'Following' : 'Follow'}</button></div>
     <div class="player-head"><span class="big-num">${p.number}</span><div><h2>${esc(p.name)}</h2>
       <div class="sub">${esc(S.D.meta[side].name)} · ${esc(p.label || p.role)}${(p.traits || []).length ? ' · ' + esc(p.traits.map(x => x.replace(/_/g, ' ')).join(', ')) : ''}</div>
       <div class="sub">${s.minutes ?? 0} minutes played</div></div><span class="rating" title="Full-match rating">${s.rating ?? '–'}</span></div>
@@ -332,6 +351,48 @@ function playerView() {
     <div class="label">Actions (${acts.length})</div><div class="chips">${chips}</div>
     <ul class="actions" style="margin-top:10px">${rows || '<li><span></span><span class="empty">No actions in this group.</span></li>'}</ul>
     ${S.group === 'All' ? '<div class="mono" style="margin-top:8px">Pressures are under Defending.</div>' : ''}`;
+}
+
+// ---------------------------------------------------------------- ask the newsroom
+function askView() {
+  const P = S.profile;
+  const sug = SUGGEST[S.persona].map(q => (q === 'How is my player doing?' && P.player ? `How is ${P.player} doing?` : q)).filter(q => q !== 'How is my player doing?');
+  const opt = (v, cur, txt) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(txt || v)}</option>`;
+  const hist = S.asks.slice().reverse().map(a => {
+    if (a.pending) return `<li><div class="q">${esc(a.q)}</div><div class="thinking">The newsroom is working on it</div></li>`;
+    if (a.error) return `<li><div class="q">${esc(a.q)}</div><div class="empty">${esc(a.error)}</div></li>`;
+    const r = a.r;
+    const badge = r.approved ? `<span class="badge ok">Fact-checked${r.rewrites ? ` · rewritten ${r.rewrites}×` : ''}</span>` : '<span class="badge warn">Held by fact-checker</span>';
+    const steps = r.steps.map(st => `<li><b>${esc(st.agent.replace('_', ' '))}</b> → ${esc(st.tool.replace(/_/g, ' '))}${Object.values(st.args || {}).some(Boolean) ? ` <span class="mono">${esc(Object.values(st.args).filter(Boolean).join(', '))}</span>` : ''}</li>`).join('');
+    const watch = (r.watch || []).map(w => `<button class="link" data-seek="${w.t - 6}">Watch ${esc(w.clock)} ${esc(label(w.type).toLowerCase())}</button>`).join(' ');
+    return `<li><div class="q">${esc(a.q)}</div><div class="meta">${badge}${r.cached ? '<span class="badge">cached</span>' : ''}<span class="mono">as of ${esc(a.clock)}</span></div>
+      <p${r.approved ? '' : ' class="rejected"'}>${esc(r.answer || r.held)}</p>${watch ? `<div class="watch">${watch}</div>` : ''}
+      <details class="trail"><summary>How the newsroom worked it out (${r.steps.length} steps)</summary><div class="trail-body"><ol class="steps">${steps}</ol>
+      <h4>Findings handed to the writer</h4><pre>${esc(r.findings)}</pre></div></details></li>`;
+  }).join('');
+  return `<div class="ask-controls">
+      <label>Depth <select id="p-depth">${opt('quick', P.depth, 'Quick')}${opt('standard', P.depth, 'Standard')}${opt('deep', P.depth, 'Deep')}</select></label>
+      <label>Language <select id="p-lang">${LANGS.map(l => opt(l, P.language)).join('')}</select></label>
+      ${P.player ? `<span class="badge">Following ${esc(P.player)}</span>` : ''}${P.club ? `<span class="badge">${esc(P.club)} fan</span>` : ''}</div>
+    <div class="ask-box"><input type="text" id="ask-q" placeholder="Ask about this match" value="${esc(S.askDraft)}" maxlength="300" aria-label="Your question"><button class="btn primary" data-act="ask">Ask</button></div>
+    <div class="chips" style="margin:10px 0 4px">${sug.map(q => `<button class="chip" data-ask="${esc(q)}">${esc(q)}</button>`).join('')}</div>
+    <div class="mono" style="margin-bottom:6px">Answers use only what has happened up to the current minute.</div>
+    <ul class="feed asks">${hist}</ul>`;
+}
+
+const NO_SERVER = 'The ask desk needs the newsroom server (python -m server.app).';
+async function askNewsroom(q) {
+  q = (q || '').trim();
+  if (!q) return;
+  const P = S.profile, a = { q, pending: true, clock: clockAt(S.t) };
+  S.asks.push(a); S.askDraft = ''; S.askVer++; render(true);
+  try {
+    const res = await fetch('api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ match: S.id, question: q, t: Math.max(60, S.t), profile: { persona: S.persona, depth: P.depth, language: P.language, club: P.club, player: P.player } }) });
+    if (!res.ok) throw new Error(res.status === 404 || res.status === 405 || res.status === 501 ? NO_SERVER : `The newsroom could not answer (${res.status}).`);
+    a.r = await res.json();
+  } catch (err) { a.error = err.message.startsWith('The ') ? err.message : NO_SERVER; }
+  a.pending = false; S.askVer++; render(true);
 }
 
 // ---------------------------------------------------------------- clips
@@ -426,13 +487,28 @@ $('panel-body').addEventListener('click', e => {
   else if (d.act === 'export') exportClip();
   else if (d.act === 'delete') { S.custom = S.custom.filter(c => c.id !== S.clip.id); saveCustom(); S.clip = null; render(true); }
   else if (d.act === 'close') { S.clip = null; render(true); }
+  else if (d.act === 'ask') askNewsroom($('ask-q').value);
+  else if (d.ask) askNewsroom(d.ask);
+  else if (d.follow !== undefined) {
+    const on = S.profile.playerId !== d.follow;
+    Object.assign(S.profile, on ? { playerId: d.follow, player: S.info[d.follow].name } : { playerId: '', player: '' });
+    saveProfile(); render(true);
+    toast(on ? `Following ${S.info[d.follow].name}: highlighted on the pitch and at the centre of your answers.` : 'Not following anyone.');
+  }
 });
+$('panel-body').addEventListener('change', e => {
+  if (e.target.id === 'p-depth') { S.profile.depth = e.target.value; saveProfile(); }
+  if (e.target.id === 'p-lang') { S.profile.language = e.target.value; saveProfile(); }
+});
+$('panel-body').addEventListener('keydown', e => { if (e.target.id === 'ask-q' && e.key === 'Enter') askNewsroom(e.target.value); });
+$('club').onchange = e => { S.profile.club = e.target.value; saveProfile(); };
 $('panel-body').addEventListener('input', e => {
   if (e.target.id === 'clip-start' || e.target.id === 'clip-end') { setPlaying(false); updateClip(e.target.id.slice(5), +e.target.value); }
+  if (e.target.id === 'ask-q') S.askDraft = e.target.value;
   if (e.target.id === 'clip-title') { S.clip.title = e.target.value; const s = S.custom.find(x => x.id === S.clip.id); if (s) { s.title = e.target.value; saveCustom(); } }
 });
 cv.addEventListener('click', e => {  // scout: click a player on the pitch to open his actions
-  if (S.persona !== 'scout') return;
+  if (!TABS[S.persona].includes('Players')) return;
   const r = cv.getBoundingClientRect(), mx = (e.clientX - r.left) * cv.width / r.width, my = (e.clientY - r.top) * cv.height / r.height, f = frame(S.t);
   let best = -1, bd = 16;
   for (let k = 0; k < 22; k++) { const d = Math.hypot(px(f[5 + 2 * k]) - mx, py(f[6 + 2 * k]) - my); if (d < bd) { bd = d; best = k; } }
