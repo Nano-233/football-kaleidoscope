@@ -25,9 +25,6 @@ from matchsim.teams import FORMATIONS
 
 SPRINT = 7.0      # m/s (25 km/h), the usual sprint threshold
 ROLE_NORMS = pathlib.Path(__file__).with_name("role_norms.json")  # per-role per-90 averages over many simulated matches (scripts/role_norms.py)
-# how each formation usually looks without the ball
-DEFENDS_AS = {"4-3-3": ("4-3-3", "4-1-4-1", "4-5-1"), "4-2-3-1": ("4-2-3-1", "4-5-1", "4-4-2"), "3-4-3": ("5-4-1", "3-4-3"), "3-5-2": ("5-3-2", "3-5-2"),
-              "4-4-2": ("4-4-2",), "4-5-1": ("4-5-1", "4-1-4-1"), "5-3-2": ("5-3-2",), "5-4-1": ("5-4-1",)}  # the systems a team lines up in (4-1-4-1 is how a 4-3-3 defends)
 GROUPS = {
     "passing": ("pass", "cross", "ball_receipt"),
     "shooting": ("shot", "goal"),
@@ -147,28 +144,28 @@ class MatchView:
             P.append(self._team_xy(team, xy[on].mean(0)))
         return dict(self._read_formation(np.array(P)))
 
-    def formation_timeline(self, team, window=420., step=210., margin=1.5):
-        """The formation window by window (overlapping windows), read from both phases: each formation is scored on how well the shape in
-        possession fits it plus how well the shape out of possession fits the way that formation defends (DEFENDS_AS: a back three drops
-        its wing-backs into a five, a 4-3-3's wingers drop into a 4-1-4-1 or 4-5-1). A change is reported when another formation fits better
-        than the current one by `margin` in two windows running."""
+    def formation_timeline(self, team, window=420., step=210., margin=2.):
+        """The shape in possession and the shape out of possession, each read from the data window by window (overlapping windows) and
+        tracked on its own: the two can differ, and which shape a team defends in is whatever its players do, not assumed from the system.
+        A change in a phase is reported when another shape fits better than the current one by `margin` in two windows running."""
         reads, t = [], 0.
         while t < self.meta["duration"] - 120:
-            ci, co = self._window_costs(team, t, t + window, "in"), self._window_costs(team, t, t + window, "out")
-            comb = {f: ci[f] + min((co[d] for d in DEFENDS_AS.get(f, (f,)) if d in co), default=9.) for f in ci if f in DEFENDS_AS} if ci and co else {}
-            reads.append((t, comb, ci, co))
+            reads.append((t, self._window_costs(team, t, t + window, "in"), self._window_costs(team, t, t + window, "out")))
             t += step
         best = lambda c: min(c, key=c.get) if c else None
-        cur = next((best(c) for _, c, _, _ in reads if c), None)
-        start = cur
-        changes = []
-        for (ta, ca, _, _), (tb, cb, _, _) in zip(reads, reads[1:]):
-            na, nb = best(ca), best(cb)
-            if na and na == nb and na != cur and ca.get(cur, 9) > margin * ca[na] and cb.get(cur, 9) > margin * cb[nb]:
-                changes.append(dict(at=_clock(ta + window / 2), t=ta + window / 2, formation=na, previous=cur))
-                cur = na
+        start, changes = {}, []
+        for k, phase in ((1, "in_possession"), (2, "out_of_possession")):
+            cur = next((best(r[k]) for r in reads if r[k]), None)
+            start[phase] = cur
+            for ra, rb in zip(reads, reads[1:]):
+                ca, cb = ra[k], rb[k]
+                na, nb = best(ca), best(cb)
+                if na and na == nb and na != cur and ca.get(cur, 9) > margin * ca[na] and cb.get(cur, 9) > margin * cb[nb]:
+                    changes.append(dict(phase=phase, at=_clock(ra[0] + window / 2), t=ra[0] + window / 2, formation=na, previous=cur))
+                    cur = na
+        changes.sort(key=lambda c: c["t"])
         return dict(team=self.team_names[team], starting=start, changes=changes,
-                    by_window=[dict(at=_clock(t), formation=best(c), in_possession=best(ci), out_of_possession=best(co)) for t, c, ci, co in reads[::2]])
+                    by_window=[dict(at=_clock(t), in_possession=best(ci), out_of_possession=best(co)) for t, ci, co in reads[::2]])
 
     def score_reading(self, team, read_changes, tolerance=600.):
         """How a reading of the formation changes compares with what the engine did: a true change is found when the reading reports
@@ -190,9 +187,9 @@ class MatchView:
         for w in timeline["by_window"]:
             tm = (int(w["at"].rstrip("'")) - 1) * 60 + 210.
             truth_now = [f for t, f in sched if t <= tm][-1]
-            if w["formation"]:
+            if w["in_possession"]:
                 n += 1
-                ok += w["formation"] == truth_now
+                ok += w["in_possession"] == truth_now
         return round(ok / max(n, 1), 3)
 
     # ---------------------------------------------------------------- pressing
