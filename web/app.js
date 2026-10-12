@@ -590,7 +590,10 @@ function clipsView() {
   const li = x => `<li><button data-clip="${esc(x.id)}" aria-current="${!!c && c.id === x.id}"><span>${esc(x.title)}</span><span class="dur">${(x.end - x.start).toFixed(0)} s</span></button></li>`;
   return editor + (S.custom.length ? `<div class="label">Your clips</div><ul class="clips">${S.custom.map(li).join('')}</ul>` : '')
     + `<div class="label">Suggested by the newsroom (${S.D.clips.length})</div><ul class="clips">${S.D.clips.map(li).join('')}</ul>
-    <div class="mono" style="margin-top:10px">Clips export as JSON: the events and tracking frames inside the range, ready for an overlay or edit tool.</div>`;
+    <div class="mono" style="margin-top:10px">Clips export as JSON: the events and tracking frames inside the range, ready for an overlay or edit tool.</div>
+    <div class="label">Broadcast pack</div>
+    <div class="mono" style="margin-bottom:8px">Timed overlay cues (lower thirds) in ${esc(S.profile.language)}, the half-time and full-time reports as studio talking points, and the clip list, as one JSON file.</div>
+    <button class="btn" data-act="pack">Export broadcast pack</button>`;
 }
 
 function openClip(c) { S.clip = { ...c }; seek(c.start); setPlaying(true); render(true); }
@@ -635,6 +638,27 @@ function exportClip() {
   toast(`Exported ${frames.length} frames and ${out.events.length} events.`);
 }
 
+async function exportPack() {
+  const voice = VOICE[S.persona], items = (S.D.newsroom[voice] || []).filter(it => it.approved), lang = S.profile.language;
+  const recs = (S.D.recaps || []).filter(r => r.profile.persona === (S.persona === 'analyst' ? 'analyst' : 'fan'));
+  let texts = [...items.map(it => it.line), ...recs.map(r => r.answer || '')];
+  if (lang !== 'English') {  // the whole pack in one language: translate what is not cached yet, in batches
+    for (let i = 0; i < texts.length; i += 20) { texts.slice(i, i + 20).forEach(t => trQueue.add(t)); await flushTr(); }
+    texts = texts.map(t => (TR[lang] || {})[t] || t);
+  }
+  const out = {
+    format: 'matchday-newsroom/broadcast@1', synthetic: true, match: { id: S.id, home: S.D.meta.home.name, away: S.D.meta.away.name, final_score: S.D.meta.score },
+    language: lang, persona: S.persona,
+    overlays: items.map((it, i) => ({ t_in: it.overlay.t_in, t_out: it.overlay.t_out, clock: it.moment.clock, kind: it.moment.type, text: texts[i], fact_checked: true })),
+    talking_points: recs.map((r, i) => ({ when: r.kind, depth: r.profile.depth, text: texts[items.length + i] })),
+    clips: S.D.clips.map(c => ({ title: c.title, start: c.start, end: c.end, kind: c.kind })),
+  };
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 1)], { type: 'application/json' }));
+  a.download = `${S.id}_broadcast_${lang}.json`; a.click(); URL.revokeObjectURL(a.href);
+  toast(`Exported ${out.overlays.length} overlay cues, ${out.talking_points.length} reports and ${out.clips.length} clips.`);
+}
+
 let toastTimer;
 function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 2600); }
 function setTabs() { for (const b of $('tabs').children) b.setAttribute('aria-selected', b.dataset.tab === S.tab); }
@@ -664,6 +688,7 @@ $('panel-body').addEventListener('click', e => {
   else if (d.nudge) { const [k, s] = d.nudge.split(':'); updateClip(k, S.clip[k] + +s); }
   else if (d.act === 'preview') { seek(S.clip.start); setPlaying(true); }
   else if (d.act === 'export') exportClip();
+  else if (d.act === 'pack') exportPack();
   else if (d.act === 'delete') { S.custom = S.custom.filter(c => c.id !== S.clip.id); saveCustom(); S.clip = null; render(true); }
   else if (d.act === 'close') { S.clip = null; render(true); }
   else if (d.bmode) { S.board.mode = d.bmode; render(true); }

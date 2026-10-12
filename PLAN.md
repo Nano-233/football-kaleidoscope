@@ -11,10 +11,10 @@ Status markers: **[built]**, **[partly]**, nothing = to do. Priority of features
 
 ### Casual viewer: wants the story, not the numbers
 - **C1** Follow a match live and see at a glance what is happening and who is on top.
-- **C2** Be told when something important happens, and in one sentence why it matters. **[partly]**
+- **C2** Be told when something important happens, and in one sentence why it matters. **[built]**
 - **C3** Missed the match: a 60-second recap of the story, the turning points and the result. **[built]**
 - **C4** Watch the key moments as short clips with a caption. **[partly]**
-- **C5** Read everything in their own language. **[partly: answers]**
+- **C5** Read everything in their own language. **[built]**
 - **C6** Ask a simple question in plain words ("Why was that a penalty?", "Who's been best?"). **[built]**
 
 ### Club fan: one team's side of the story, or one player's
@@ -29,9 +29,9 @@ Status markers: **[built]**, **[partly]**, nothing = to do. Priority of features
 
 ### Analyst: coach, pundit, data-curious fan
 - **A1** See the shape each team actually played, in and out of possession, and when it changed. **[built: tools + answers]**
-- **A2** See pressing intensity and where the ball was won back, by period.
-- **A3** See the momentum: xG and territory over time, with spells of dominance marked.
-- **A4** See passing networks: who connects, where attacks start, which side they favour.
+- **A2** See pressing intensity and where the ball was won back, by period. **[built]**
+- **A3** See the momentum: xG and territory over time, with spells of dominance marked. **[built]**
+- **A4** See passing networks: who connects, where attacks start, which side they favour. **[built]**
 - **A5** Have a goal or chance broken down: the sequence and why each decision was made.
 - **A6** Compare halves, or before and after a tactical change, with the evidence.
 - **A7** Ask a tactical question and get an answer backed by numbers and pitch views. **[built: numbers; pitch views to do]**
@@ -47,10 +47,10 @@ Status markers: **[built]**, **[partly]**, nothing = to do. Priority of features
 - **S6** Ask a question about a player ("How did #9 cope with the press?"). **[built]**
 
 ### Broadcast producer or content creator
-- **P1** Timed, machine-readable overlays (lower thirds, stat cards) to put over a feed. **[partly]**
+- **P1** Timed, machine-readable overlays (lower thirds, stat cards) to put over a feed. **[built: broadcast pack]**
 - **P2** Suggested clips for key moments, an adjustable range, and export. **[built: JSON]**
-- **P3** Talking points for the half-time studio segment.
-- **P4** The same match in several languages and tones (pundit, fan, kids).
+- **P3** Talking points for the half-time studio segment. **[built: broadcast pack]**
+- **P4** The same match in several languages and tones (pundit, fan, kids). **[built: languages, fan/analyst tones]**
 
 ## Features
 
@@ -68,12 +68,12 @@ The functions the agents call. Every number comes from here; the AI never comput
 | `find_moments` | Every moment matching a filter (player, action, outcome, zone, period) | S4, F7, C4, P2 |
 
 ### 2. Specialist agents on Foundry and Agent Framework — Core
-- **Live desk** **[partly]**: picks the moments that matter (goals, big chances, momentum swings, tactical changes, standout spells, the followed player's moments). C2, F1, F8
+- **Live desk** **[built]**: picks the moments that matter (goals, big chances, momentum swings, tactical changes, standout spells, the followed player's moments). C2, F1, F8
 - **Tactics analyst** **[built]**: reads shape, press and momentum; explains changes and whether they worked. A1-A6, F3, F4
 - **Scout** **[built]**: player reports and trait clip reels; for fans, the same at a casual depth ("his match"). S3-S5, F6, F7
 - **Recap editor** **[built: fan quick, analyst deep]**: half-time and full-time reports at each depth (60-second casual, full analyst, one player). C3, A8, P3, F7
 - **Writer** **[built]**: turns any finding into the chosen persona, depth and club or player point of view. F1, F6, P4
-- **Localizer**: translates while keeping names and numbers intact. C5, P4
+- **Localizer** **[built]**: translates while keeping names and numbers intact. C5, P4
 - **Fact-checker** **[built]**: checks every published line against the toolkit's numbers, rewrites or holds lines, falls back to a plain line. A9
 
 ### 3. Ask the newsroom (orchestrator and chat) — Core **[built]**
@@ -92,13 +92,13 @@ standard, deep) and one focus metric. Every agent output reads it. C5, F1, F6, a
 ### 6. Match centre views
 - Live view with momentum strip and lower thirds **[partly]** — Core. C1, C2
 - Player-follow mode for fans: the pitch highlights him, the feed is his story, his rating and highlights — Core. F6-F8
-- Analyst board: shape, press, network and momentum charts synced to the replay — Core. A1-A4
+- Analyst board: shape, press, network and momentum charts synced to the replay — Core **[built]**. A1-A4
 - Scout view **[built]** plus heat map, physical output and the written report — Core. S1-S3
 - Recap page, shareable, with clips and a summary card — Strong. C3, F5
 - Ask panel — Core (feature 3)
 - Clips **[built]**, trait and player reels — Strong; video export — Stretch. S4, F7, P2
 
-### 7. Broadcast output — Strong
+### 7. Broadcast output — Strong **[built]**
 Timed JSON overlays for each persona and language, a talking-points sheet for each half, the clip JSON export **[built]**. P1, P3, P4
 
 ### 8. Platform — Core

@@ -5,7 +5,7 @@ import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
-from newsroom.agents import cover, unsupported_numbers, wrong_minutes  # noqa: E402
+from newsroom.agents import cover, unsupported_numbers, wrong_leader, wrong_minutes  # noqa: E402
 from newsroom.clients import ScriptedClient  # noqa: E402
 from newsroom.moments import moments  # noqa: E402
 
@@ -20,4 +20,7 @@ print("newsroom ok")
 assert unsupported_numbers("xG 0.07", {**packs[0], "xg": 0.072}) == []
 assert wrong_minutes("in the 21st minute", {**packs[0], "moment": {**packs[0]["moment"], "clock": "22'"}}) == ["21"]
 assert wrong_minutes("90+6' full time", {**packs[0], "moment": {**packs[0]["moment"], "clock": "90+6'"}}) == []
+pk = {**packs[0], "teams": {"home": "Kestrel United", "away": "Northbridge Rovers"}, "leader": "Kestrel United"}
+assert wrong_leader("Northbridge Rovers hold a 2-0 lead", pk) and not wrong_leader("Kestrel United lead 2-0", pk)
+assert wrong_leader("Kestrel United trail", pk)
 print("checks ok")

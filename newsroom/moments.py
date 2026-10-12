@@ -16,7 +16,7 @@ GLOSSARY = {
     "big_chances": "shots with xg of 0.25 or more",
     "ppda": "passes allowed per defensive action in the opponent's build-up zone; LOWER means a more intense press",
     "passes_completed": "passes that reached a team-mate (passes is all attempts)",
-    "score": "home-away (teams.home first); a team may say its own score first, e.g. the away side leading 0-1 is '1-0 up'",
+    "score": "home goals - away goals (teams.home first); scoreline spells it out with the names and leader says who is ahead",
 }
 
 
@@ -88,7 +88,8 @@ def moments(match, observed=True):
         tt = acc.teams()
         stats = {team[i]: {k: round(tt[i][k], 2) if isinstance(tt[i][k], float) else tt[i][k] for k in STAT_KEYS} for i in (0, 1)}
         base = dict(moment=dict(type=kind, clock=clock, t=t, id=eid), teams=dict(home=team[0], away=team[1]), team="", player="",
-                    score=f"{score[0]}-{score[1]}", xg=None, assist="", reason="", why="", stats=stats, glossary=GLOSSARY)
+                    score=f"{score[0]}-{score[1]}", scoreline=f"{team[0]} {score[0]}-{score[1]} {team[1]}",
+                    leader=team[0] if score[0] > score[1] else team[1] if score[1] > score[0] else "level", xg=None, assist="", reason="", why="", stats=stats, glossary=GLOSSARY)
         base.update(kw)
         out.append(base)
 

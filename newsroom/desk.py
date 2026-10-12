@@ -20,7 +20,7 @@ from typing import Annotated
 from agent_framework import Agent
 
 from analytics.tools import MatchView
-from newsroom.agents import _run, _verdict, unsupported_numbers
+from newsroom.agents import _run, _verdict, unsupported_numbers, wrong_leader
 
 MAX_REWRITES = 2
 DEPTH = {"quick": "two or three short sentences, plain words, at most one number",
@@ -192,6 +192,13 @@ class Desk:
         self.writer = Agent(client, _writer_text(self.profile), name="writer")
         self.checker = Agent(client, CHECKER, name="fact_checker")
 
+    def _score_pack(self):
+        """Who is ahead at the moment of the question, for the deterministic leader check."""
+        g = [e for e in self.mv.events if e["type"] in ("goal", "own_goal")]
+        h, a = (g[-1]["home"], g[-1]["away"]) if g else (0, 0)
+        names = self.mv.team_names
+        return dict(teams=dict(home=names[0], away=names[1]), leader=names[0] if h > a else names[1] if a > h else "level")
+
     async def ask(self, question):
         """Answer a reader's question. Returns the answer, whether the fact-checker approved it, the rewrites, the steps each agent took and the
         moments it refers to (for watch links)."""
@@ -205,8 +212,9 @@ class Desk:
             v = await _run(self.checker, f"FINDINGS:\n{found}\nANSWER:\n{answer}\n")
             verdict = _verdict(v.text)
             bad = unsupported_numbers(answer, facts)
-            approved = bool(verdict["approved"]) and not bad
-            issues = list(verdict.get("issues") or []) + ([f"numbers not in the tool results: {bad}"] if bad else [])
+            lead = wrong_leader(answer, self._score_pack())
+            approved = bool(verdict["approved"]) and not bad and not lead
+            issues = list(verdict.get("issues") or []) + ([f"numbers not in the tool results: {bad}"] if bad else []) + lead
             attempts.append(dict(answer=answer, approved=approved, issues=issues))
             if approved:
                 break

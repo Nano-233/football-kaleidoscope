@@ -33,9 +33,12 @@ def build(client, persona="veteran"):
     mk = lambda role, text: Agent(client, f"[[ROLE:{role}]] {text} {RULES}", name=role)
     stats = mk("stats", "You are the stats analyst. From FACTS pick the two or three numbers that best explain this moment. Reply as a JSON list of {metric, value, meaning}.")
     tactics = mk("tactics", "You are the tactics analyst. Explain in one sentence, from FACTS.why, how the moment came about.")
-    commentator = mk("commentator", f"You are the commentator, {PERSONAS[persona]}. Write one or two sentences of live commentary using the analysts' points.")
+    commentator = mk("commentator", f"You are the commentator, {PERSONAS[persona]}. Write one or two sentences of live commentary using the analysts' points. "
+                                    "First say what this moment is (FACTS.moment.type): for a shape_change the shape before and after from FACTS.shift and which phase; "
+                                    "for a spell who dominated and when from FACTS.spell; for a substitution who came on and off. Use FACTS.scoreline for the score; "
+                                    "FACTS.leader is ahead.")
     checker = mk("fact_checker", "You are the fact-checker. Compare the commentary with FACTS line by line. Reject it if any number is attached to the wrong "
-                                 "metric or team, a metric is described against its FACTS.glossary meaning, the minute differs from FACTS.moment.clock, or a claim "
+                                 "metric or team, the wrong team is said to lead (FACTS.leader is ahead), a metric is described against its FACTS.glossary meaning, the minute differs from FACTS.moment.clock, or a claim "
                                  "is not supported by FACTS. Wording, style and emphasis are not errors; set approved to true whenever you find no real error. Reply only as JSON {\"approved\": bool, \"issues\": [str]}, "
                                  "one short sentence per real error, and an empty list when approved.")
     return stats, tactics, commentator, checker
@@ -67,6 +70,18 @@ def unsupported_numbers(line, pack):
         tol = .5 * 10 ** -dec + 1e-9
         return any(abs(v - p) <= tol or (p <= 1 and abs(v - p * 100) <= tol) for p in nums)
     return [n for n in re.findall(r"\d+(?:\.\d+)?", line) if not ok(n)]
+
+
+def wrong_leader(line, pack):
+    """A team said to lead when it does not, or to trail when it is ahead (the score reads home-away, which is easy to turn round)."""
+    leader, out = pack.get("leader"), []
+    for name in (pack.get("teams") or {}).values():
+        n = re.escape(name)
+        if re.search(rf"{n}\s+(?:lead|leads|holds?\s+(?:a|the|their)\s+[\w-]*\s*lead|(?:is|are|go|goes)\s+ahead|in front)", line, flags=re.I) and leader != name:
+            out.append(f"{name} is not ahead")
+        if re.search(rf"{n}\s+(?:trail|trails|(?:is|are)\s+behind)", line, flags=re.I) and leader == name:
+            out.append(f"{name} is ahead, not behind")
+    return out
 
 
 def wrong_minutes(line, pack):
@@ -110,6 +125,8 @@ async def cover(client, pack, persona="veteran"):
         checks = []
         if bad := unsupported_numbers(line, pack):
             checks.append(f"numbers not in the facts: {bad}")
+        if bad := wrong_leader(line, pack):
+            checks.append("; ".join(bad))
         if bad := wrong_minutes(line, pack):
             checks.append(f"minute {bad} is not the clock {pack['moment']['clock']}")
         approved = bool(verdict["approved"]) and not checks
