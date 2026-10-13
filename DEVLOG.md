@@ -922,6 +922,30 @@ and first-time clearances of crosses. Both removed.
 Next: why passers choose the zone (and not the cutback) so often; the clear-chance rule at clean 0.12-0.20 spots; blocks that
 kill the ball instead of deflecting it on; the on-target share.
 
+### Why passers find the zone: markers stand off (2026-10-13)
+The pass target is a choice model fitted to real passers (`matchsim/policy.py`), so more passes into the zone means the options
+differ. `scripts/zone_options.py` (passers in front of the box, 360 frames vs sim): about as many team-mates in the zone
+(0.17 vs 0.12 per pass), but tightly marked (a man within 1.5 m) 8 % of the time against 43 %, though the sim has more defenders
+in the zone (0.75 vs 0.36): they stand near the attackers, not on them.
+A live probe (wrapping `movement.team_targets`): every attacker in the zone has a defender assigned to mark him, and his target is
+tight (within 1.5 m) 74 % of the time, but he is there 7 % of the time; he is 3-6 m short, running at 3-4 m/s. (A first probe
+reading the targets wrongly, in the team frame instead of world coordinates, pointed at the target first.) The approach speed is
+proportional to the gap (1.1 x (d - 0.4)), so a man moving at 4 m/s is followed 4 m behind.
+Tried, not kept (48 matches; loss before 148.6, noise about 10):
+- marking gap shrinking to arm's length near goal (`mark_gap(o)`): no change in tight marking, loss 163.3;
+- following the target's velocity (feed-forward of the smoothed target motion): loss 409, everyone runs 16 km, because block
+  shifts move every target, not only a marker's man;
+- arriving at the physical limit (v = sqrt(2 a d)) for urgent moves: loss 192.7, 12.1 km per player.
+The next attempt should apply to a marker following his man only (his man's velocity, not the target's), not to all movement.
+
+### One decision per touch, and no shot by rule (2026-10-13)
+The shooting decision was a fresh random draw at every decision tick while the player held the ball, so a 70 % look became a
+90 %+ shot over the touch; and a "clear chance" rule shot every time xG >= 0.10 unless a team-mate had a better one. Real
+players at clean 12-16 m spots pass about half the time. Now a player draws his threshold once per touch and shoots when the
+chance's appeal crosses it (as he closes in, or the keeper comes); the clear-chance threshold still makes him act quickly, but
+does not force the shot. Shots 17.6 -> 16.6 per team-match, goals 1.28, loss 158.1 (noise). The share at clean 0.12-0.20 spots
+is still 0.83-0.95 against about 0.5: the decision's weights, for the calibrator once the logic is done.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

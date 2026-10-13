@@ -100,6 +100,7 @@ class Match:
         s.added = [None, None]
         s.injured, s.pending_inj = np.zeros(22, bool), []
         s.ctrl_t = 0.
+        s.shot_u, s.shot_u_t = 1., -1.  # his threshold for shooting on this touch (see the shooting decision)
         s.first_time_ok = 1.0
         s.poss_fade = np.array([.5, .5])
         s.chance_xg, s.chance_t = 0., 0.
@@ -1096,10 +1097,9 @@ class Match:
                 if xg0 > 1.3 * s.chance_xg:  # a clearly better chance than any he has had with this ball: running at goal does not use up the chance he had 30 m back
                     s.chance_xg, s.chance_t = xg0, s.t
                 z = TUNE["shoot_slope"] * np.log(xg0 / TUNE["shoot_ref"]) + 1.5 * np.log(SHOT_PROP[s.role[c]]) + 1.2 * (tc.shoot - .5) + np.log(s.mod["shot"][c]) + TUNE["shoot_press"] * pr - TUNE["shoot_hold"] * (min(s.t - s.chance_t, .6) if gk_close else s.t - s.chance_t) + TUNE["gk_shoot"] * gk_prox + TUNE["face_k"] * 2. * (fg - .5)  # the chance is taken early: a player who keeps carrying has passed it up
-                if TUNE["clear_xg"] > 0 and xg >= TUNE["clear_xg"]:  # a clear chance is taken: the only reason not to shoot is a team-mate with a better one (the pass has to get there and he has to score)
-                    take = best_mate <= xg
-                else:
-                    take = bool(s.rng.random() < sig(z)) and best_mate < 1.5 * xg
+                if s.shot_u_t != s.ctrl_t:  # one disposition per touch, drawn when he gets the ball: he shoots when the chance is worth it to him (as he gets closer, or the keeper
+                    s.shot_u, s.shot_u_t = float(s.rng.random()), s.ctrl_t  # comes), not on a fresh coin every few tenths of a second, which made nearly every good look a shot
+                take = bool(s.shot_u < sig(z)) and best_mate < 1.5 * xg  # real players pass up half of the clean chances at 12-16 m; even a clear one is not taken by rule
             elif rk == "free_kick":
                 take = bool(s.role[c] > 0 and s.rng.random() < sig(TUNE["fk_shot_k"] * (TUNE["fk_shot_d"] - dg)))  # real free kicks: shot 88% of the time at 18-23 m, 69% at 23-28, 9% at 28-35 (the rest are crossed or played)
             if TUNE["xt_k"] > 0:
