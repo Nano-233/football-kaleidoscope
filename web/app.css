@@ -220,3 +220,6 @@ table.stats td.lead { color: var(--text); font-weight: 600; }
 .truth { margin-bottom: 14px; }
 .truth b { display: block; margin-bottom: 4px; }
 .truth td:last-child { text-align: right; }
+.reel-tag { position: absolute; top: 12px; left: 12px; background: rgba(12, 13, 14, .9); border: 1px solid var(--accent); border-radius: var(--r); padding: 4px 10px; font: 600 13px/18px var(--display); letter-spacing: .06em; text-transform: uppercase; }
+.termbar { display: inline-block; height: 6px; border-radius: 3px; background: var(--good); vertical-align: middle; }
+.termbar.neg { background: var(--bad); }

@@ -229,6 +229,8 @@ function hud(t) {
     $('lt-line').dataset.id = item.moment.id; $('lt-line').textContent = tr(item.line);
     $('lt-kind').textContent = `${item.moment.type.replace(/_/g, ' ')} · ${item.moment.clock}`;
   }
+  $('reel').hidden = !S.reel;
+  if (S.reel) $('reel').textContent = `${S.reel.name} · ${S.reel.who} · ${S.reel.i + 1}/${S.reel.segs.length} · ${S.reel.segs[S.reel.i].clock}`;
   const c = S.clip, tl = $('tl-clip');
   tl.hidden = !c;
   if (c) { const d = S.D.meta.duration; tl.style.left = (c.start / d * 100) + '%'; tl.style.width = ((c.end - c.start) / d * 100) + '%'; }
@@ -245,6 +247,9 @@ function tick(now) {
   if (S.playing && S.D) {
     S.t = Math.min(S.D.meta.duration, S.t + (now - S.last) / 1000 * +$('speed').value);
     if (S.clip && S.t >= S.clip.end) S.t = S.clip.start;  // a selected clip loops
+    if (S.reel && S.t >= S.reel.segs[S.reel.i].end) {  // a reel plays its moments one after another
+      if (++S.reel.i < S.reel.segs.length) S.t = S.reel.segs[S.reel.i].start; else { S.reel = null; setPlaying(false); toast('End of the reel.'); }
+    }
     if (S.t >= S.D.meta.duration) setPlaying(false);
   }
   S.last = now;
@@ -402,6 +407,61 @@ const ROLE_KV = {
 };
 const kvFor = role => ROLE_KV[role] || ROLE_KV[{ DM: 'MID', CM: 'MID', AM: 'ATT', WG: 'ATT', ST: 'ATT' }[role] || 'MID'];
 
+const REELS = {
+  Highlights: e => ['goal', 'save'].includes(e.type) || (e.type === 'shot') || ((e.type === 'pass' || e.type === 'cross') && (e.key_pass || e.assist)) || (e.type === 'take_on' && e.outcome === 'won') || (e.type === 'tackle' && e.outcome === 'won'),
+  Shots: e => e.type === 'shot',
+  'Chances created': e => (e.type === 'pass' || e.type === 'cross') && (e.key_pass || e.assist),
+  'Progressive passes': e => e.type === 'pass' && e.progressive && e.outcome === 'complete',
+  'Duels won': e => (e.type === 'tackle' || e.type === 'take_on' || e.type === 'duel' || e.type === 'fifty_fifty') && e.outcome === 'won',
+  'Duels lost': e => ((e.type === 'tackle' || e.type === 'take_on' || e.type === 'duel') && e.outcome === 'lost') || ['dribbled_past', 'dispossessed', 'miscontrol'].includes(e.type),
+  Defending: e => ['tackle', 'interception', 'block', 'clearance', 'ball_recovery'].includes(e.type),
+};
+function reelFor(pid, name) {
+  const segs = [];
+  for (const e of S.D.events) {
+    if (e.player !== pid || !REELS[name](e)) continue;
+    const a = Math.max(0, e.t - 5), b = e.t + 3, last = segs[segs.length - 1];
+    if (last && a <= last.end) last.end = b; else segs.push({ start: a, end: b, clock: e.clock });
+  }
+  return segs;
+}
+function playReel(pid, name) {
+  const segs = reelFor(pid, name);
+  if (!segs.length) return toast(`No ${name.toLowerCase()} for ${S.info[pid].name}.`);
+  S.clip = null;
+  S.reel = { name, who: S.info[pid].name, segs, i: 0 };
+  seek(segs[0].start); setPlaying(true);
+  toast(`${name}: ${S.info[pid].name}, ${segs.length} moment${segs.length > 1 ? 's' : ''}.`);
+}
+function heatSvg(grid, team) {  // 6 x 4 zones, own goal on the left, attacking left to right
+  const w = 300, h = 194, cw = w / 6, ch = h / 4, mx = Math.max(...grid.flat(), .001);
+  const cells = grid.map((col, i) => col.map((v, j) => `<rect x="${i * cw}" y="${j * ch}" width="${cw - 1}" height="${ch - 1}" fill="${team ? 'var(--away)' : 'var(--home)'}" fill-opacity="${(.08 + .9 * v / mx).toFixed(2)}"/>`).join('')).join('');
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" role="img" aria-label="Where he spent his time; his own goal on the left">${cells}
+    <rect x="0" y="0" width="${w}" height="${h}" fill="none" stroke="var(--line-strong)"/><line x1="${w / 2}" x2="${w / 2}" y1="0" y2="${h}" stroke="var(--line-strong)"/></svg>`;
+}
+const TERM_LABEL = { attack: 'Attack', passing: 'Passing', carrying: 'Carrying', defending: 'Defending', keeping: 'Keeping', conceded: 'Goals conceded', result: 'Result', discipline: 'Discipline' };
+const PER90_LABEL = { passes: 'Passes', passes_completed: 'Passes completed', progressive_passes: 'Progressive passes', key_passes: 'Key passes', shots: 'Shots', xg: 'xG', take_ons: 'Take-ons',
+  take_ons_won: 'Take-ons won', tackles: 'Tackles', tackles_won: 'Tackles won', interceptions: 'Interceptions', aerial_won: 'Aerials won', aerial_lost: 'Aerials lost',
+  dribbled_past: 'Dribbled past', dispossessed: 'Dispossessed', pressures: 'Pressures', recoveries: 'Recoveries', fouls: 'Fouls', saves: 'Saves' };
+
+function profileBlocks(pid, p) {
+  const pr = (S.D.profiles || {})[pid];
+  if (!pr) return '';
+  const ph = pr.physical || {}, team = p.team;
+  const terms = Object.entries(pr.rating_terms || {}).filter(([, v]) => Math.abs(v) >= .05).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+  const mt = Math.max(.1, ...terms.map(([, v]) => Math.abs(v)));
+  const vs = Object.entries(pr.per90_vs_role || {}).filter(([, v]) => v.role_avg > .3).map(([k, v]) => [k, v.him, v.role_avg, (v.him - v.role_avg) / v.role_avg])
+    .sort((a, b) => Math.abs(b[3]) - Math.abs(a[3])).slice(0, 6);
+  const reels = S.persona === 'scout' ? Object.keys(REELS).filter(r => r !== 'Highlights') : ['Shots', 'Chances created', 'Duels won'];
+  return `<div class="label">Physical</div><div class="kv"><div><b>${ph.distance_km ?? '–'} km</b><span>Distance</span></div><div><b>${ph.sprints ?? '–'}</b><span>Sprints</span></div><div><b>${ph.top_speed_kmh ?? '–'}</b><span>Top speed km/h</span></div></div>
+    ${pr.heat_map_6x4 ? `<div class="label">Where he played</div>${heatSvg(pr.heat_map_6x4, team)}` : ''}
+    ${terms.length ? `<div class="label">What made his rating</div><table class="stats"><tbody>${terms.map(([k, v]) => `<tr><td>${TERM_LABEL[k] || k}</td>
+      <td style="width:45%"><span class="termbar ${v < 0 ? 'neg' : ''}" style="width:${Math.round(Math.abs(v) / mt * 100)}%"></span></td><td class="${v >= 0 ? 'lead' : ''}">${v > 0 ? '+' : ''}${v.toFixed(2)}</td></tr>`).join('')}</tbody></table>` : ''}
+    ${vs.length ? `<div class="label">Per 90 against his position</div><table class="stats"><thead><tr><th>Metric</th><th>Him</th><th>Avg</th></tr></thead><tbody>${vs.map(([k, him, avg, d]) => `<tr><td>${PER90_LABEL[k] || k}</td>
+      <td class="${(d > 0) !== ['aerial_lost', 'dribbled_past', 'dispossessed', 'fouls'].includes(k) ? 'lead' : ''}">${him}</td><td>${avg}</td></tr>`).join('')}</tbody></table>` : ''}
+    <div class="label">Reels</div><div class="chips">${reels.map(r => `<button class="chip" data-reel="${esc(r)}">${esc(r)}</button>`).join('')}</div>`;
+}
+
 function playerView() {
   const p = S.info[S.player], s = S.D.players[S.player] || {}, side = p.team ? 'away' : 'home';
   const kv = kvFor(p.role).map(([k, l, f]) => `<div><b>${s[k] == null ? '–' : f ? f(s[k]) : s[k]}</b><span>${l}</span></div>`).join('');
@@ -420,6 +480,10 @@ function playerView() {
       <div class="sub">${esc(S.D.meta[side].name)} · ${esc(p.label || p.role)}${(p.traits || []).length ? ' · ' + esc(p.traits.map(x => x.replace(/_/g, ' ')).join(', ')) : ''}</div>
       <div class="sub">${s.minutes ?? 0} minutes played</div></div><span class="rating" title="Full-match rating">${s.rating ?? '–'}</span></div>
     <div class="label">Full match</div><div class="kv">${kv}</div>
+    <div class="bar" style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      ${S.persona === 'scout' ? `<button class="btn primary" data-report="${esc(S.player)}">Scout report</button>` : `<button class="btn primary" data-hismatch="${esc(S.player)}">His match</button>`}
+      <button class="btn" data-reel="Highlights">Highlights reel</button></div>
+    ${profileBlocks(S.player, p)}
     <div class="label">Actions (${acts.length})</div><div class="chips">${chips}</div>
     <ul class="actions" style="margin-top:10px">${rows || '<li><span></span><span class="empty">No actions in this group.</span></li>'}</ul>
     ${S.group === 'All' ? '<div class="mono" style="margin-top:8px">Pressures are under Defending.</div>' : ''}`;
@@ -669,7 +733,7 @@ $('tabs').onclick = e => { const b = e.target.closest('button'); if (b) { S.tab 
 $('match').onchange = e => load(e.target.value);
 $('play').onclick = () => setPlaying(!S.playing);
 $('next').onclick = () => { const e = S.D.events.find(e => e.t > S.t + 1 && KEY(e)); if (e) seek(e.t - 6); };
-$('seek').oninput = e => seek(+e.target.value);
+$('seek').oninput = e => { S.reel = null; seek(+e.target.value); };
 document.addEventListener('keydown', e => {
   if (e.target.matches('input[type=text], select')) return;
   if (e.key === ' ') { e.preventDefault(); setPlaying(!S.playing); }
@@ -694,6 +758,9 @@ $('panel-body').addEventListener('click', e => {
   else if (d.bmode) { S.board.mode = d.bmode; render(true); }
   else if (d.bteam !== undefined) { S.board.team = +d.bteam; render(true); }
   else if (d.bphase) { S.board.phase = d.bphase; render(true); }
+  else if (d.reel) playReel(S.player, d.reel);
+  else if (d.report) { const nm = S.info[d.report].name; S.tab = 'Ask'; setTabs(); askNewsroom(`Write a scout report on ${nm}: strengths, weaknesses and how he compares with his position, with the evidence.`); }
+  else if (d.hismatch) { const nm = S.info[d.hismatch].name; S.tab = 'Ask'; setTabs(); askNewsroom(`Tell the story of ${nm}'s match so far: his key moments, how he played and his rating.`); }
   else if (d.act === 'ask') askNewsroom($('ask-q').value);
   else if (d.ask) askNewsroom(d.ask);
   else if (d.follow !== undefined) {

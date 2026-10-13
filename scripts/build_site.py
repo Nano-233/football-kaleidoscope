@@ -150,6 +150,17 @@ def board(match):
     return out
 
 
+def profiles(match):
+    """The scout's numbers for everyone who played: heat map, physical output, rating breakdown, per 90 against his role."""
+    mv = MatchView(match)
+    out = {}
+    for pid in mv.players:
+        pr = mv.player_profile(pid)
+        if pr["minutes"] >= 1:
+            out[pid] = {k: pr[k] for k in ("physical", "heat_map_6x4", "per90_vs_role", "rating_terms")}
+    return out
+
+
 def build(src):
     match = json.loads(src.read_text(encoding="utf-8"))
     meta = {k: v for k, v in match["meta"].items() if k != "frame_cols"}
@@ -168,7 +179,7 @@ def build(src):
     timeline, players = stats_timeline(match)
     events = [{k: v for k, v in e.items() if k not in ("freeze_frame", "why", "players", "bench")} for e in match["events"]]
     doc = dict(meta=meta, n_frames=len(q), events=events, team_stats=timeline, players=players,
-               newsroom=asyncio.run(newsroom(packs)), recaps=asyncio.run(recaps(match)), reading=reading(match), board=board(match), clips=clips(match["events"], {k: v["name"] for k, v in players.items()}, meta["duration"]))
+               newsroom=asyncio.run(newsroom(packs)), recaps=asyncio.run(recaps(match)), reading=reading(match), board=board(match), profiles=profiles(match), clips=clips(match["events"], {k: v["name"] for k, v in players.items()}, meta["duration"]))
     (dest / "match.json").write_text(json.dumps(doc, separators=(",", ":")), encoding="utf-8")
     print(dest, f"{sum(f.stat().st_size for f in dest.iterdir()) / 1e6:.1f} MB,", len(packs), "moments,", len(doc["clips"]), "clips")
     return dict(id=src.stem, home=meta["home"]["name"], away=meta["away"]["name"], home_code=meta["home"]["code"], away_code=meta["away"]["code"], score=meta["score"])
