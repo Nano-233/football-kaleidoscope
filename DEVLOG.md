@@ -937,6 +937,8 @@ Tried, not kept (48 matches; loss before 148.6, noise about 10):
   shifts move every target, not only a marker's man;
 - arriving at the physical limit (v = sqrt(2 a d)) for urgent moves: loss 192.7, 12.1 km per player.
 The next attempt should apply to a marker following his man only (his man's velocity, not the target's), not to all movement.
+- that too: a marker within 8 m of his man adds the man's velocity (`mark_ff`): tight marking unchanged (7 %), loss 165.1, goals up.
+  Not kept. The gap needs a probe that follows single markers over time, not more velocity terms.
 
 ### One decision per touch, and no shot by rule (2026-10-13)
 The shooting decision was a fresh random draw at every decision tick while the player held the ball, so a 70 % look became a
