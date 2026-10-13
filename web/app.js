@@ -194,7 +194,8 @@ function draw() {
     if (k === fol && k !== sel) { g.setLineDash([3, 3]); g.beginPath(); g.arc(X, Y, 15, 0, 7); g.strokeStyle = COL.accent; g.lineWidth = 2; g.stroke(); g.setLineDash([]); }
   }
   g.globalAlpha = 1;
-  if (boardOn()) drawBoard(t);
+  if (viewOn()) { g.save(); (S.view.kind === 'shape' ? paintShape : paintNetwork)(S.view.team, S.view); g.restore(); }
+  else if (boardOn()) drawBoard(t);
   g.beginPath(); g.arc(px(f[1]), py(f[2]), 4.5, 0, 7); g.fillStyle = '#fff'; g.fill(); g.strokeStyle = '#0c0d0e'; g.lineWidth = 1.5; g.stroke();
   hud(t);
 }
@@ -229,8 +230,9 @@ function hud(t) {
     $('lt-line').dataset.id = item.moment.id; $('lt-line').textContent = tr(item.line);
     $('lt-kind').textContent = `${item.moment.type.replace(/_/g, ' ')} · ${item.moment.clock}`;
   }
-  $('reel').hidden = !S.reel;
-  if (S.reel) $('reel').textContent = `${S.reel.name} · ${S.reel.who} · ${S.reel.i + 1}/${S.reel.segs.length} · ${S.reel.segs[S.reel.i].clock}`;
+  $('reel').hidden = !S.reel && !S.view;
+  if (S.reel) $('reel').textContent = `${S.reel.name} · ${S.reel.who}${S.reel.segs.length > 1 ? ` · ${S.reel.i + 1}/${S.reel.segs.length} · ${S.reel.segs[S.reel.i].clock}` : ''}`;
+  else if (S.view) $('reel').innerHTML = `${esc(S.view.title)} <button class="link" id="hide-view">Hide</button>`;
   const c = S.clip, tl = $('tl-clip');
   tl.hidden = !c;
   if (c) { const d = S.D.meta.duration; tl.style.left = (c.start / d * 100) + '%'; tl.style.width = ((c.end - c.start) / d * 100) + '%'; }
@@ -490,18 +492,16 @@ function playerView() {
 }
 
 // ---------------------------------------------------------------- analyst board (the toolkit's numbers, last completed window only)
-const boardOn = () => S.persona === 'analyst' && S.tab === 'Board' && S.D && S.D.board && S.board.mode !== 'Momentum';
+const viewOn = () => !!(S.view && S.view.kind !== 'move');
+const boardOn = () => viewOn() || S.persona === 'analyst' && S.tab === 'Board' && S.D && S.D.board && S.board.mode !== 'Momentum';
 const toWorld = (team, x, y) => (team ? [L - x, W - y] : [x, y]);
 const lastWin = (rows, w) => { const i = Math.floor(S.t / w) - 1; return i >= 0 ? rows[Math.min(i, rows.length - 1)] : null; };
 const teamCol = tm => (tm ? COL.away : COL.home);
 const num = id => (S.info[id] ? S.info[id].number : '');
 
-function drawBoard(t) {
-  const B = S.D.board, tm = S.board.team;
-  g.save();
-  if (S.board.mode === 'Shape') {
-    const row = lastWin(B.shape[tm], B.shape_window), sh = row && row[S.board.phase];
-    if (sh) {
+function paintShape(tm, sh) {
+  if (!sh) return;
+  {
       const [lx] = toWorld(tm, sh.line, 0);
       g.setLineDash([6, 5]); g.strokeStyle = teamCol(tm); g.lineWidth = 1.5; g.beginPath(); g.moveTo(px(lx), py(0)); g.lineTo(px(lx), py(W)); g.stroke(); g.setLineDash([]);
       for (const [id, x, y] of sh.positions) {
@@ -509,10 +509,11 @@ function drawBoard(t) {
         g.beginPath(); g.arc(px(wx), py(wy), 12, 0, 7); g.fillStyle = 'rgba(12,13,14,.75)'; g.fill(); g.lineWidth = 2.5; g.strokeStyle = teamCol(tm); g.stroke();
         g.fillStyle = '#f1f2f4'; g.font = '600 11px "Segoe UI", system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(num(id), px(wx), py(wy) + .5);
       }
-    }
-  } else if (S.board.mode === 'Network') {
-    const row = lastWin(B.network[tm], B.net_window);
-    if (row) {
+  }
+}
+function paintNetwork(tm, row) {
+  if (!row) return;
+  {
       const max = Math.max(1, ...row.links.map(l => l[2]));
       for (const [a, b, n] of row.links) {
         if (!row.nodes[a] || !row.nodes[b]) continue;
@@ -526,7 +527,16 @@ function drawBoard(t) {
         g.beginPath(); g.arc(px(wx), py(wy), 11, 0, 7); g.fillStyle = teamCol(tm); g.fill();
         g.fillStyle = '#0c0d0e'; g.font = '600 10px "Segoe UI", system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(num(id), px(wx), py(wy) + .5);
       }
-    }
+  }
+}
+function drawBoard(t) {
+  const B = S.D.board, tm = S.board.team;
+  g.save();
+  if (S.board.mode === 'Shape') {
+    const row = lastWin(B.shape[tm], B.shape_window);
+    paintShape(tm, row && row[S.board.phase]);
+  } else if (S.board.mode === 'Network') {
+    paintNetwork(tm, lastWin(B.network[tm], B.net_window));
   } else if (S.board.mode === 'Press') {
     for (const [rt, team, x, y] of B.regains) {
       if (rt > t || rt < t - B.net_window || team !== tm) continue;
@@ -608,7 +618,8 @@ function askView() {
     const r = a.r;
     const badge = r.approved ? `<span class="badge ok">Fact-checked${r.rewrites ? ` · rewritten ${r.rewrites}×` : ''}</span>` : '<span class="badge warn">Held by fact-checker</span>';
     const steps = r.steps.map(st => `<li><b>${esc(st.agent.replace('_', ' '))}</b> → ${esc(st.tool.replace(/_/g, ' '))}${Object.values(st.args || {}).some(Boolean) ? ` <span class="mono">${esc(Object.values(st.args).filter(Boolean).join(', '))}</span>` : ''}</li>`).join('');
-    const watch = (r.watch || []).map(w => `<button class="link" data-seek="${w.t - 6}">Watch ${esc(w.clock)} ${esc(label(w.type).toLowerCase())}</button>`).join(' ');
+    const watch = (r.watch || []).map(w => `<button class="link" data-seek="${w.t - 6}">Watch ${esc(w.clock)} ${esc(label(w.type).toLowerCase())}</button>`).join(' ')
+      + (r.views || []).map((v, i) => `<button class="link" data-ansview="${S.asks.indexOf(a)}:${i}">${v.kind === 'move' ? 'Replay' : 'Show'}: ${esc(v.title)}</button>`).join(' ');
     return `<li><div class="q">${esc(a.q)}</div><div class="meta">${badge}${r.cached ? '<span class="badge">cached</span>' : ''}<span class="mono">as of ${esc(a.clock)}</span></div>
       <p${r.approved ? '' : ' class="rejected"'}>${esc(r.answer || r.held)}</p>${watch ? `<div class="watch">${watch}</div>` : ''}
       <details class="trail"><summary>How the newsroom worked it out (${r.steps.length} steps)</summary><div class="trail-body"><ol class="steps">${steps}</ol>
@@ -734,10 +745,12 @@ $('match').onchange = e => load(e.target.value);
 $('play').onclick = () => setPlaying(!S.playing);
 $('next').onclick = () => { const e = S.D.events.find(e => e.t > S.t + 1 && KEY(e)); if (e) seek(e.t - 6); };
 $('seek').oninput = e => { S.reel = null; seek(+e.target.value); };
+$('reel').addEventListener('click', e => { if (e.target.id === 'hide-view') { S.view = null; render(true); } });
 document.addEventListener('keydown', e => {
   if (e.target.matches('input[type=text], select')) return;
   if (e.key === ' ') { e.preventDefault(); setPlaying(!S.playing); }
   if (e.key === 'n') $('next').click();
+  if (e.key === 'Escape') { S.view = null; S.reel = null; }
   if (e.key === 'ArrowRight' && e.target.type !== 'range') seek(S.t + 5);
   if (e.key === 'ArrowLeft' && e.target.type !== 'range') seek(S.t - 5);
 });
@@ -758,6 +771,12 @@ $('panel-body').addEventListener('click', e => {
   else if (d.bmode) { S.board.mode = d.bmode; render(true); }
   else if (d.bteam !== undefined) { S.board.team = +d.bteam; render(true); }
   else if (d.bphase) { S.board.phase = d.bphase; render(true); }
+  else if (d.ansview) {
+    const [ai, vi] = d.ansview.split(':').map(Number), v = S.asks[ai].r.views[vi];
+    if (v.kind === 'move') { S.view = null; S.reel = { name: 'The move', who: v.title.replace('The move: ', ''), segs: [{ start: Math.max(0, v.start - 2), end: v.end + 3, clock: '' }], i: 0 }; seek(v.start - 2); setPlaying(true); }
+    else { S.view = v; setPlaying(false); toast('Shown on the pitch. Press Esc or Hide to go back to the live picture.'); }
+    render(true);
+  }
   else if (d.reel) playReel(S.player, d.reel);
   else if (d.report) { const nm = S.info[d.report].name; S.tab = 'Ask'; setTabs(); askNewsroom(`Write a scout report on ${nm}: strengths, weaknesses and how he compares with his position, with the evidence.`); }
   else if (d.hismatch) { const nm = S.info[d.hismatch].name; S.tab = 'Ask'; setTabs(); askNewsroom(`Tell the story of ${nm}'s match so far: his key moments, how he played and his rating.`); }

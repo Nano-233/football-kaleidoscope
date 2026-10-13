@@ -199,10 +199,32 @@ class Desk:
         names = self.mv.team_names
         return dict(teams=dict(home=names[0], away=names[1]), leader=names[0] if h > a else names[1] if a > h else "level")
 
+    def _views(self, steps, facts):
+        """Pictures for the answer, from the evidence the agents actually pulled: shapes, passing networks, the moves they broke down."""
+        views, seen = [], set()
+        names = self.mv.team_names
+        for st, f in zip(steps, facts):
+            if not isinstance(f, dict) or "error" in f:
+                continue
+            if st["tool"] == "team_shape":
+                for ph in ("in_possession", "out_of_possession"):
+                    sh = f.get(ph) or {}
+                    if "positions" in sh and (sh["team"], ph, tuple(sh["window"])) not in seen:
+                        seen.add((sh["team"], ph, tuple(sh["window"])))
+                        views.append(dict(kind="shape", team=names.index(sh["team"]), phase=ph, title=f"{sh['team']} {sh['formation']} {ph.replace('_', ' ')} {sh['window'][0]}-{sh['window'][1]}",
+                                          line=sh["defensive_line_m"], positions=[[q["id"], q["x"], q["y"]] for q in sh["positions"]]))
+            elif st["tool"] == "passing_network" and f.get("links"):
+                ids = {p["name"]: pid for pid, p in self.mv.players.items()}
+                views.append(dict(kind="network", team=names.index(f["team"]), title=f"{f['team']} passing network {f['window'][0]}-{f['window'][1]}",
+                                  links=[[ids[l["from"]], ids[l["to"]], l["passes"]] for l in f["links"]], nodes={ids[n]: xy for n, xy in f["avg_positions"].items()}))
+            elif st["tool"] == "moment_breakdown" and f.get("steps"):
+                views.append(dict(kind="move", title=f"The move: {f['moment']['clock']} {f['moment']['type'].replace('_', ' ')}", start=f["steps"][0]["t"], end=f["steps"][-1]["t"]))
+        return views[:5]
+
     async def ask(self, question):
         """Answer a reader's question. Returns the answer, whether the fact-checker approved it, the rewrites, the steps each agent took and the
         moments it refers to (for watch links)."""
-        n0 = len(self.trail)
+        n0, f0 = len(self.trail), len(self.facts)
         found = (await _run(self.orchestrator, f"QUESTION: {question}")).text.strip()
         facts = {"facts": self.facts}
         brief = f"QUESTION: {question}\nFINDINGS:\n{found}\n"
@@ -222,7 +244,8 @@ class Desk:
         last = attempts[-1]
         moments = {m["clock"]: m for f in self.facts if isinstance(f, dict) for m in f.get("moments", [])}
         watch = [dict(clock=c, t=m["t"], type=m["type"], player=m["player"]) for c, m in moments.items() if re.search(rf"(?<![\d+]){re.escape(c)}", last["answer"])][:6]
-        return dict(question=question, answer=last["answer"] if last["approved"] else None, held=None if last["approved"] else last["answer"],
+        views = self._views(self.trail[n0:], self.facts[f0:])
+        return dict(question=question, views=views, answer=last["answer"] if last["approved"] else None, held=None if last["approved"] else last["answer"],
                     approved=last["approved"], rewrites=len(attempts) - 1, findings=found, steps=self.trail[n0:], attempts=attempts, watch=watch)
 
 
