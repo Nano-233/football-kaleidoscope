@@ -813,6 +813,10 @@ Measured (`scratchpad crossbox.py`, Euro 2020 360 frames at the moment of the cr
 Fixed: `cross_sigma` 1.6: a cross struck on the move from wide at a moving target is less precise than a lofted pass to a standing man. Cross completion 0.46 -> 0.40, shots 15.8 -> 14.6, clearances 27.0 -> 29.0 (real 29.0), loss 187.6 -> 186.4 (noise).
 Tried, not kept: filling the penalty-spot place too (`of_mask` 14): attackers in the cut-back zone become real-like but shots rise to 16.1 (loss 194.9). Still open: crosses 13-15 per team vs 7.2, box occupancy at the cross. Tried, not kept: pricing the cross with the error it is really struck with and the aerial rule (consistent odds): crossers pick better moments and cross more (19 per team, open-play crosses 31 vs 11.8, completion back to 0.45), Nor is it the cross option's value: in the crossing zones (x > 80 m, within 18 m of a touchline) real wide players cross with 14 % of their actions (Euro 2020: pass 48 %, carry 32 %, dribble 6 %), the sim 26-30 %, and lowering `cross_v` from 0.8 to 0.3 only moves it to 26 %: most sim crosses are lofted passes into the area chosen by the learned pass policy (labelled crosses by the provider definition), towards the free man in a half-empty box. The cause is the box positions when the ball is wide (see above), structural work.
 
+### The near-post runner (2026-10-12)
+
+With crosses as imprecise as any lofted ball struck on the move, filling the near-post place of the attack plan again (`of_mask` 13: near post, back post, edge of the area; it was taken out on Oct 9 when crosses were too precise and the place "made shots, not chances") gives loss 180.5 -> 160.9 on 48 matches, goals 1.03 -> 1.17 (1.24), cross completion 0.39 -> 0.36. Shots rise 14.3 -> 17.3 (real 12.9): the shooting gate is the next thing to re-derive (see "Why the simulation has so few big chances").
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
