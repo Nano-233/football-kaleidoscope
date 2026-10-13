@@ -226,3 +226,7 @@ table.stats td.lead { color: var(--text); font-weight: 600; }
 .steps.live { font-size: 12px; color: var(--text-2); }
 .steps.live li:last-child { color: var(--text); }
 .feed .steps li { padding: 1px 0; border: 0; }
+.tabs { overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tabs button { flex: none; white-space: nowrap; }
+.feed .jump + .jump { margin-left: 10px; }

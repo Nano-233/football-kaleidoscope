@@ -328,7 +328,7 @@ function feedView(mode) {
       : it.fallback ? `<span class="badge warn" title="Every agent draft was held, so a plain line built from the facts went out">Drafts held · plain line</span>`
       : it.rewrites ? `<span class="badge ok">Fact-checked · rewritten ${it.rewrites}×</span>` : `<span class="badge ok">Fact-checked</span>`;
     return `<li><div class="meta"><span class="t">${esc(it.moment.clock)}</span><span class="kind">${esc(it.moment.type.replace(/_/g, ' '))}</span>${mode === 'analyst' ? badge : ''}
-      <button class="jump" data-seek="${it.moment.t - 8}">Watch</button></div>
+      <button class="jump" data-share="${it.moment.t}|${esc(it.moment.type)}">Share</button><button class="jump" data-seek="${it.moment.t - 8}">Watch</button></div>
       <p${it.approved ? '' : ' class="rejected"'}>${esc(tr(it.line))}</p>${mode === 'analyst' ? trail(it) : ''}</li>`;
   }).join('') + '</ul>';
 }
@@ -751,6 +751,36 @@ async function exportPack() {
   toast(`Exported ${out.overlays.length} overlay cues, ${out.talking_points.length} reports and ${out.clips.length} clips.`);
 }
 
+// a shareable card: the moment's line over a snapshot of the pitch at that instant (drawn by the same painter as the replay)
+async function shareCard(t, kind, text) {
+  const keep = S.t, keepView = S.view;
+  S.t = t; S.view = null; draw();
+  const W_ = 1200, H_ = 630, c = document.createElement('canvas'); c.width = W_; c.height = H_;
+  const x = c.getContext('2d'), M = S.D.meta, [h, a] = scoreAt(t);
+  x.fillStyle = css('--bg'); x.fillRect(0, 0, W_, H_);
+  x.drawImage(cv, 40, 140, 660, 432);
+  S.t = keep; S.view = keepView; draw();
+  x.fillStyle = css('--text'); x.font = '700 30px "Barlow Condensed", sans-serif'; x.fillText('MATCHDAY NEWSROOM', 40, 64);
+  x.fillStyle = css('--text-3'); x.font = '600 18px "Barlow Condensed", sans-serif'; x.fillText('SYNTHETIC MATCH · FICTIONAL CLUBS', 40, 92);
+  x.fillStyle = css('--text'); x.font = '700 56px "Barlow Condensed", sans-serif'; x.textAlign = 'right';
+  x.fillText(`${M.home.code} ${h}–${a} ${M.away.code}`, W_ - 40, 72); x.textAlign = 'left';
+  x.fillStyle = css('--accent'); x.font = '700 24px "Barlow Condensed", sans-serif'; x.fillText(`${kind.replace(/_/g, ' ').toUpperCase()} · ${clockAt(t)}`, 730, 170);
+  x.fillStyle = css('--text'); x.font = '400 26px "Segoe UI", system-ui, sans-serif';
+  let y = 214, line = '';
+  for (const w of text.split(/\s+/)) {  // wrap into the right-hand column
+    if (x.measureText(line + w).width > 430) { x.fillText(line, 730, y); y += 36; line = ''; if (y > 560) { line = '…'; break; } }
+    line += w + ' ';
+  }
+  x.fillText(line, 730, y);
+  const blob = await new Promise(r => c.toBlob(r, 'image/png')), name = `${S.id}_${clockAt(t).replace(/\W/g, '')}.png`;
+  const file = new File([blob], name, { type: 'image/png' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: `${M.home.name} ${h}–${a} ${M.away.name}` }); return; } catch { /* cancelled: fall back to a download */ }
+  }
+  const aEl = document.createElement('a'); aEl.href = URL.createObjectURL(blob); aEl.download = name; aEl.click(); URL.revokeObjectURL(aEl.href);
+  toast('Card saved.');
+}
+
 let toastTimer;
 function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 2600); }
 function setTabs() { for (const b of $('tabs').children) b.setAttribute('aria-selected', b.dataset.tab === S.tab); }
@@ -793,6 +823,10 @@ $('panel-body').addEventListener('click', e => {
     if (v.kind === 'move') { S.view = null; S.reel = { name: 'The move', who: v.title.replace('The move: ', ''), segs: [{ start: Math.max(0, v.start - 2), end: v.end + 3, clock: '' }], i: 0 }; seek(v.start - 2); setPlaying(true); }
     else { S.view = v; setPlaying(false); toast('Shown on the pitch. Press Esc or Hide to go back to the live picture.'); }
     render(true);
+  }
+  else if (d.share) {
+    const [st, kind] = d.share.split('|'), li = b.closest('li');
+    shareCard(+st, kind, li.querySelector('p').textContent);
   }
   else if (d.reel) playReel(S.player, d.reel);
   else if (d.report) { const nm = S.info[d.report].name; S.tab = 'Ask'; setTabs(); askNewsroom(`Write a scout report on ${nm}: strengths, weaknesses and how he compares with his position, with the evidence.`); }
