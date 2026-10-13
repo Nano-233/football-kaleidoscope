@@ -994,6 +994,10 @@ Effect (48 matches): shots 16.6 -> 15.6, goals 1.26 (1.24), loss 156 -> 164.6. T
 blocks 37 (real 20), tackles 24.1 (20.5), more passes counted under pressure (the sim's pressure is "an opponent within 1.75 m",
 not StatsBomb's pressing events). The passer seeing a body on the line (the flight's rule in his estimate) changed nothing; not kept.
 Next: blocks from pressers in front of the passer, then the calibrator for the constants tied to spacing, then the xG refit.
+Then: a defender's reach for a passing ball grows with the time he has to read it, from his body (0.5 m) at the strike to 1 m after
+0.3 s (it was 1 m from the first instant, the chance scaled down instead): blocks 37 -> 33 (real 20), loss 161.9. How the ball now
+reaches the good shooting spots (per team-match, sim | real): forward pass 1.44 | 0.52 (was 1.83), carried in 1.21 | 0.33 (was 0.79),
+won in the zone 1.21 | 0.28, a defender's error 0.42 | 0.02, cutback 0.15 | 0.45; all 5.6 | 2.5.
 
 ## Is the tuner machine learning?
 

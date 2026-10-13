@@ -1646,7 +1646,8 @@ class Match:
             sp = clip(raw_, 0, 1)
             q = a0 + sp[:, None] * ab
             d = nrm(s.pos - q, axis=1)
-            ok = (d < 1.0) & (s.block_until <= s.t)
+            reach = TUNE["body_r"] + (1. - TUNE["body_r"]) * float(clip((s.t - f["t0"]) / .3, 0., 1.))  # at the strike only a body on the line is in the way; a stretch for the ball takes the time to read it
+            ok = (d < reach) & (s.block_until <= s.t)
             ok &= raw_ > -.1  # a ball already past him, going away, is not his to block: only men it comes towards or goes by (a presser at the passer's shoulder does not get a swipe at every pass)
             g_ = 11 * (1 - f["team"])  # the defending keeper reaches further and is better at it than outfield players
             ok[g_] = bool(d[g_] < 3.2 + .8 * s.mod["sweep"][g_] and s.block_until[g_] <= s.t)
