@@ -25,7 +25,7 @@ TUNE = dict(xg_z0=-2.08, xg_d=-.07, xg_a=1.89, xg_h=-.2, xg_b=.72, xg_c=.25, cle
             carry_base=0.22, carry_prog=.2, carry_streak=.3, dwell_base=0.9, dwell_shape=2.4, dwell_scale=1.61,
             tackle_rate=1.2, wide_error=3.2, off_miss=.2, off_mult=.02, off_lag=.25, head_keep=.7, safe_out_x=.12, card_thr=.85, adv_sev=.14, clear_dir_sd=1.2, rec_sprint=3., fk_xg=2.2, fk_over0=.45, fk_over_d=.02, fk_shot_k=.5, fk_shot_d=27.2, foul_risk=6., box_avoid=.2, tackle_risk=2.2, tackle_danger=.7)
 TUNE.update(burst_gain=-1e9, block_v=.8, push_k=1., pol_space=0., follow_poss=.2, pin_from=.35, recover_on=1., cover_margin=3., threat_depth=.34, threat_ball=25., mark_base=4., mark_reach=19., layer_bias=.9, space_cover=0., space_k=100., n_space=3, assign_on=1., press_v=7., cover_v=3.5, mark_k=100., lane_job_k=35., post_v=5., space_v=3., job_hyst=1.5, press_hyst=2.0, templ_w=.9, busy_gate=.6, flat_gate=.6, run_gate=.95, mark_sprint_d=3.0, box_start=38., wn_end=42., lag_k=1., drop_k=1., mark_gap=1.1, box_gate=.85, dang_far=38., dang_gate=.85, react_def=.35, close_gap=1.5, jock_k=1., press_k=1., open_w=1., lane_w=1., slot_gate=.5, lean_r=24., lean_min=.35, shoot_close=28., shot_gap=.7, jobs_on=1., jobs_d=38., jobs_att=40., jobs_w=.9, job_mark=3., job_lane=12., job_post=1.4, job_wv=4., way_pen=0., way_r=2.2, run_k=1., ball_side=.9, hover=.3)  # block shape (read by movement.py through TP)
-TUNE.update(body_sep=.7, area_run=1., area_slide=.25, mark_lat=8., area_half=13.75, area_ball=.8, far_free=1., far_dy=14., of_mask=13., cross_sigma=1.6, threat_xg=.15, tackle_floor=.5, cover_k=.04, behind_k=1.5, foul_miss=.35, duel_reach=1.4, gk_reach=1.6, stop_a=15., touch_sd=.9, pin_d=4., pin_p=.6, pin_r=1.5, slide_c=1., lat_def_c=1., fb_up=6., far_tuck=1., tackle_dir_sd=.5, tackle_v0=2.5, tackle_v1=6., body_r=.5, contact_mu=.35, contact_e=.3, loose_k=.07, loose_v0=5., touch_r=.9, take_tau=.35, take_k=.04, take_v0=10.)  # a player's body as the ball meets it: radius with a leg out (m), friction that takes pace off a glancing ball, how much a head-on ball comes back
+TUNE.update( body_sep=.7, area_run=1., area_slide=.25, mark_lat=8., area_half=13.75, area_ball=.8, far_free=1., far_dy=14., of_mask=13., cross_sigma=1.6, threat_xg=.15, tackle_floor=.5, cover_k=.04, behind_k=1.5, foul_miss=.35, duel_reach=1.4, gk_reach=1.6, stop_a=15., touch_sd=.9, pin_d=4., pin_p=.6, pin_r=1.5, slide_c=1., lat_def_c=1., fb_up=6., far_tuck=1., tackle_dir_sd=.5, tackle_v0=2.5, tackle_v1=6., body_r=.5, contact_mu=.35, contact_e=.3, loose_k=.07, loose_v0=5., touch_r=.9, take_tau=.35, take_k=.04, take_v0=10.)  # a player's body as the ball meets it: radius with a leg out (m), friction that takes pace off a glancing ball, how much a head-on ball comes back
 movement.TP = TUNE
 sig = lambda x: 1 / (1 + np.exp(-x))
 
@@ -130,6 +130,7 @@ class Match:
         s.last_why = None
         s.carry_streak, s.carry_into = 0, -1
         s.next_dec, s.protect_until = 0., 0.
+        s.loop = None  # a loose ball in the air (see _loose_ball)
         s.hands = False  # the keeper has the ball in his hands: nobody may challenge him for it (Law 12)
         s.carry_tgt = s.ball.copy()
         s.carry_dir, s.carry_speed = np.array([1., 0.]), 3.
@@ -326,10 +327,16 @@ class Match:
             s.dead["short"] = bool(helpers and s.rng.random() < .16)
             s.dead["sup"] = int(min(helpers, key=lambda j: nrm(s.pos[j] - pos))) if helpers else -1
 
-    def _out(s, b):
+    def _loop_z(s):
+        lp = s.loop
+        u = s.t - lp["t0"]
+        return lp["z0"] + lp["vz"] * u - 4.905 * u * u
+
+    def _out(s, b, over=False):
         x, y = b
         tl = s.last_touch // 11 if s.last_touch >= 0 else 0
-        if (x < 0 or x > L) and abs(y - W / 2) < GOAL_HALF and s.last_touch >= 0:  # over the line between the posts: in
+        s.loop = None
+        if (x < 0 or x > L) and abs(y - W / 2) < GOAL_HALF and s.last_touch >= 0 and not over:  # over the line between the posts (under the bar): in
             sc_t = 1 if x < 0 else 0  # the side that attacks that goal
             if s.pending_pass is not None:
                 s.pending_pass["outcome"], s.pending_pass = "out", None
@@ -529,6 +536,8 @@ class Match:
     def _ball_z(s):
         """Ball height in metres: parabola for lofted passes and shots, zero otherwise."""
         f = s.flight
+        if s.state == "loose" and s.loop is not None:
+            return max(0., s._loop_z())
         if s.state != "flight" or f is None:
             return 0.
         u = float(clip((s.t - f["t0"]) / f["dur"], 0, 1))
@@ -690,7 +699,10 @@ class Match:
         a = float(s.rng.normal(0, TUNE["tackle_dir_sd"]))
         return np.array([d[0] * np.cos(a) - d[1] * np.sin(a), d[0] * np.sin(a) + d[1] * np.cos(a)]) * float(s.rng.uniform(TUNE["tackle_v0"], TUNE["tackle_v1"]))
 
-    def _loose_ball(s, v):
+    def _loose_ball(s, v, vz=0.):
+        """The ball is nobody's, moving at v; vz > 0 sends it up as well (a deflection off a leg): until it comes down it is over
+        everyone's head, keeps its pace, and over the goal line above the bar it is out, not in."""
+        s.loop = dict(t0=s.t, vz=vz, z0=.5, until=s.t + 2. * vz / 9.81) if vz > 1.5 else None
         s._end_spell()
         s.state, s.poss, s.carrier, s.flight = "loose", -1, -1, None
         s.ball_v = np.array(v, float)
@@ -1827,7 +1839,10 @@ class Match:
                 dir_h = _unit(away + .8 * np.array([0., 1. if pt[1] > W / 2 else -1.]))
                 ang_h = float(s.rng.normal(0, .25 + TUNE["clear_dir_sd"] * pe_h))  # the more he is hurried the more erratic the direction of the header
                 out = np.array([dir_h[0] * np.cos(ang_h) - dir_h[1] * np.sin(ang_h), dir_h[0] * np.sin(ang_h) + dir_h[1] * np.cos(ang_h)]) * 8. + TUNE["head_keep"] * pe_h * v_in
-                return s._loose_ball(out)
+                # how much of it he can direct depends on the way he faces: meeting it facing out he heads it away; running back towards his own goal he can only glance it on
+                q_h = float((1. + s.head[i] @ away) / 2.) * (1. - .5 * pe_h)
+                out = q_h * out + (1. - q_h) * s._body_hit(i, pt, v_in)
+                return s._loose_ball(out, vz=(1. - q_h) * float(nrm(v_in)) * float(s.rng.uniform(.3, .7)))  # a glance off the top of the head sends a dropping cross up as it goes on: over his own bar or line
             if s.role[i] > 0 and u < TUNE["head_clear"] + TUNE["head_on"] and s._header_on(i, pt):
                 return
         if s.rng.random() < s._claim_p(i, 8., t, pt, False):  # he controls it: the first-touch odds, with the men around him
@@ -1896,18 +1911,25 @@ class Match:
             s.ball = f["end"].copy()
             s.block_until[blocker] = s.t + .5  # the man who took it on the body cannot play it again at once
             s.deflected = dict(shooter=c, blocker=blocker, t=s.t)
-            s._loose_ball(s._body_hit(blocker, f["end"], _unit(f["end"] - f["start"]) * f["speed"]))  # off his body as it met it, at the pace the shot was struck (a flight of a metre or two is padded to a minimum time): the corner, the throw or the second ball is wherever that sends it
+            s._loose_ball(s._body_hit(blocker, f["end"], _unit(f["end"] - f["start"]) * f["speed"]), vz=f["speed"] * float(s.rng.uniform(0., .35)))  # struck rising (10-20 degrees), off a leg it keeps most of that lift: some blocks loop up and over  # off his body as it met it, at the pace the shot was struck (a flight of a metre or two is padded to a minimum time): the corner, the throw or the second ball is wherever that sends it
 
     # ------------------------------------------------------------------ loose ball
     def _loose(s):
         sp = nrm(s.ball_v)
         a0 = s.ball.copy()
-        nsp = max(0., sp - 2.2 * s.dt)
+        lp = getattr(s, "loop", None)
+        if lp is not None and s.t >= lp["until"]:  # it comes down and bounces on, slower
+            s.loop, lp = None, None
+            s.ball_v = s.ball_v * .55
+            sp = nrm(s.ball_v)
+        nsp = sp if lp is not None else max(0., sp - 2.2 * s.dt)  # in the air it does not roll to a stop
         s.ball_v = s.ball_v * (nsp / sp) if sp > 1e-6 else s.ball_v
         b = a0 + s.ball_v * s.dt
         s.ball = b
         if not (0 <= b[0] <= L and 0 <= b[1] <= W):
-            return s._out(b)
+            return s._out(b, over=lp is not None and s._loop_z() > 2.44)
+        if lp is not None and s._loop_z() > 2.:  # over everyone's head (a keeper's too, near enough)
+            return
         ab = b - a0
         spn = clip(((s.pos - a0) @ ab) / max(ab @ ab, 1e-9), 0, 1) if ab @ ab > 1e-9 else np.zeros(22)
         q = a0 + spn[:, None] * ab

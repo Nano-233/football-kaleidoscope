@@ -1007,6 +1007,18 @@ the box (`hold_d` 17 m): he does not retreat inside it unless the carrier is alr
 the carries into the zone did not fall measurably). Tried with it: the jockeying gap shrinking to arm's length near goal like the
 marking gap: carries 0.79, but shots 17.0 and loss 165.2; not kept.
 
+### A loose ball can be in the air (2026-10-13)
+Corners 4.7 vs 11.6. `block_after.py`: blocked shots go behind 0.10 vs 0.25; `clear_out.py`: clearances in a defender's own box go
+behind 0.02 (headed) / 0.05 (kicked) vs 0.11 / 0.11, and kicked clearances there are 5.2 vs 11.7 a match. In the real data the
+clearances that give corners are mostly headed clearances of crosses, central, a third in the six-yard box: the ball skims up off
+the head and goes over the line or the bar. The engine's loose ball was flat, so none of that could happen.
+Now `_loose_ball(v, vz)`: a ball sent up as well keeps its pace while in the air, is over everyone's head above 2 m, and over the
+goal line above the bar (2.44 m) is out, not in. A blocked shot keeps part of its lift (struck rising 10-20 degrees: vz = pace x
+U(0, 0.35)); a header is directed only as far as the defender faces out and is not hurried (q = (1 + facing . away) / 2 x
+(1 - pressure / 2)); the rest is a glance off his head (the contact model) that goes up and on. Blocks behind 0.10 -> 0.13, headed
+clearances behind 0.02 -> 0.04, goals 1.17 (1.24), corners still about 4.8: the rest is in the volume of kicked clearances and in
+more 3-D deflections (crosses blocked, tackles). Loss 165 (noise about 10).
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
