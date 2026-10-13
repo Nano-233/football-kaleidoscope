@@ -1,0 +1,262 @@
+{
+ "summary": {
+  "matches": 4,
+  "answers": 20,
+  "accuracy": {
+   "best": 1.0,
+   "formation": 0.88,
+   "goals": 1.0,
+   "pressing": 1.0
+  },
+  "overall": 0.95,
+  "approved": 0.95,
+  "avg_tool_calls": 4.0,
+  "avg_seconds": 26.2
+ },
+ "matches": [
+  {
+   "match": "match_1",
+   "rows": [
+    {
+     "kind": "formation",
+     "question": "What system did Kestrel United start the match in, and did they change their system during it? When, and to what?",
+     "approved": false,
+     "rewrites": 2,
+     "tool_calls": 2,
+     "seconds": 46.1,
+     "correct": true,
+     "detail": {
+      "starting_named": true,
+      "changes_found": "1/1"
+     }
+    },
+    {
+     "kind": "formation",
+     "question": "What system did Northbridge Rovers start the match in, and did they change their system during it? When, and to what?",
+     "approved": true,
+     "rewrites": 0,
+     "tool_calls": 2,
+     "seconds": 18.6,
+     "correct": true,
+     "detail": {
+      "starting_named": true,
+      "changes_found": "1/1"
+     }
+    },
+    {
+     "kind": "goals",
+     "question": "Who scored the goals in this match, and at which minutes?",
+     "approved": true,
+     "rewrites": 0,
+     "tool_calls": 1,
+     "seconds": 6.2,
+     "correct": true,
+     "detail": "3/3 goals with scorer and minute"
+    },
+    {
+     "kind": "best",
+     "question": "Who was the best player in this match by rating?",
+     "approved": true,
+     "rewrites": 0,
+     "tool_calls": 3,
+     "seconds": 9.3,
+     "correct": true,
+     "detail": "truth Velrio Duranton (8.3)"
+    },
+    {
+     "kind": "pressing",
+     "question": "Which team pressed harder over the whole match?",
+     "approved": true,
+     "rewrites": 0,
+     "tool_calls": 3,
+     "seconds": 16.4,
+     "correct": true,
+     "detail": "truth Kestrel United"
+    }
+   ]
+  },
+  {
+   "match": "match_7",
+   "rows": [
+    {
+     "kind": "formation",
+     "question": "What system did Kestrel United start the match in, and did they change their system during it? When, and to what?",
+     "approved": true,
+     "rewrites": 0,
+     "tool_calls": 2,
+     "seconds": 25.0,
+     "correct": true,
+     "detail": {
+      "starting_named": true,
+      "changes_found": "1/1"
+     }
+    },
+    {
+     "kind": "formation",
+     "question": "What system did Northbridge Rovers start the match in, and did they change their system during it? When, and to what?",
+     "approved": true,
+     "rewrites": 0,
+     "tool_calls": 5,
+     "seconds": 90.5,
+     "correct": false,
+     "detail": {
+      "starting_named": true,
+      "changes_found": "1/2"
+     }
+    },
+    {
+     "kind": "goals",
+     "question": "Who scored the goals in this match, and at which minutes?",
+     "approved": true,
+     "rewrites": 0,
+     "tool_calls": 1,
+     "seconds": 5.4,
+     "correct": true,
+     "detail": "3/3 goals with scorer and minute"
+    },
+    {
+     "kind": "best",
+     "question": "Who was the best player in this match by rating?",
+     "approved": true,
+     "rewrites": 0,
+     "tool_calls": 3,
+     "seconds": 10.1,
+     "correct": true,
+     "detail": "truth Nodek Tammer (8.0)"
+    },
+    {
+     "kind": "pressing",
+     "question": "Which team pressed harder over the whole match?",
+     "approved": true,
+     "rewrites": 0,
+     "tool_calls": 3,
+     "seconds": 30.2,
+     "correct": true,
+     "detail": "truth Kestrel United"
+    }
+   ]
+  },
+  {
+   "match": "match_31",
+   "rows": [
+    {
+     "kind": "formation",
+     "question": "What system did Kestrel United start the match in, and did they change their system during it? When, and to what?",
+     "approved": true,
+     "rewrites": 0,
+     "tool_calls": 15,
+     "seconds": 65.8,
+     "correct": true,
+     "detail": {
+      "starting_named": true,
+      "changes_found": "1/1"
+     }
+    },
+    {
+     "kind": "formation",
+     "question": "What system did Northbridge Rovers start the match in, and did they change their system during it? When, and to what?",
+     "approved": true,
+     "rewrites": 0,
+     "tool_calls": 2,
+     "seconds": 24.7,
+     "correct": true,
+     "detail": {
+      "starting_named": true,
+      "changes_found": "1/1"
+     }
+    },
+    {
+     "kind": "goals",
+     "question": "Who scored the goals in this match, and at which minutes?",
+     "approved": true,
+     "rewrites": 0,
+     "tool_calls": 1,
+     "seconds": 7.5,
+     "correct": true,
+     "detail": "3/3 goals with scorer and minute"
+    },
+    {
+     "kind": "best",
+     "question": "Who was the best player in this match by rating?",
+     "approved": true,
+     "rewrites": 0,
+     "tool_calls": 3,
+     "seconds": 9.1,
+     "correct": true,
+     "detail": "truth Rivar Reyes (8.0)"
+    },
+    {
+     "kind": "pressing",
+     "question": "Which team pressed harder over the whole match?",
+     "approved": true,
+     "rewrites": 0,
+     "tool_calls": 3,
+     "seconds": 37.9,
+     "correct": true,
+     "detail": "truth Kestrel United"
+    }
+   ]
+  },
+  {
+   "match": "match_32",
+   "rows": [
+    {
+     "kind": "formation",
+     "question": "What system did Kestrel United start the match in, and did they change their system during it? When, and to what?",
+     "approved": true,
+     "rewrites": 0,
+     "tool_calls": 2,
+     "seconds": 34.4,
+     "correct": true,
+     "detail": {
+      "starting_named": true,
+      "changes_found": "1/1"
+     }
+    },
+    {
+     "kind": "formation",
+     "question": "What system did Northbridge Rovers start the match in, and did they change their system during it? When, and to what?",
+     "approved": true,
+     "rewrites": 1,
+     "tool_calls": 8,
+     "seconds": 24.0,
+     "correct": true,
+     "detail": {
+      "starting_named": true,
+      "changes_found": "1/1"
+     }
+    },
+    {
+     "kind": "goals",
+     "question": "Who scored the goals in this match, and at which minutes?",
+     "approved": true,
+     "rewrites": 0,
+     "tool_calls": 1,
+     "seconds": 6.3,
+     "correct": true,
+     "detail": "0/0 goals with scorer and minute"
+    },
+    {
+     "kind": "best",
+     "question": "Who was the best player in this match by rating?",
+     "approved": true,
+     "rewrites": 0,
+     "tool_calls": 3,
+     "seconds": 8.9,
+     "correct": true,
+     "detail": "truth Mormay Mercerley (8.5)"
+    },
+    {
+     "kind": "pressing",
+     "question": "Which team pressed harder over the whole match?",
+     "approved": true,
+     "rewrites": 0,
+     "tool_calls": 17,
+     "seconds": 47.0,
+     "correct": true,
+     "detail": "truth Kestrel United"
+    }
+   ]
+  }
+ ]
+}

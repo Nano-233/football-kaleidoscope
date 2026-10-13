@@ -367,7 +367,22 @@ function tableView() {
 }
 
 // what the reader saw against what the engine actually did: the data is synthetic, so the truth is known
+let EVAL = null;
+fetch('data/eval.json').then(r => (r.ok ? r.json() : null)).then(j => { EVAL = j; }).catch(() => {});
+function evalBlock() {
+  if (!EVAL) return '';
+  const e = EVAL.summary, name = { formation: 'Formations and changes', goals: 'Scorers and minutes', best: 'Best player by rating', pressing: 'Which side pressed harder' };
+  return `<div class="label">Newsroom answers scored against the truth</div>
+    <table class="stats"><tbody>${Object.entries(e.accuracy).map(([k, v]) => `<tr><td>${name[k] || k}</td><td>${Math.round(v * 100)}%</td></tr>`).join('')}
+      <tr><td><b>All ${e.answers} answers, ${e.matches} matches</b></td><td class="lead">${Math.round(e.overall * 100)}%</td></tr>
+      <tr><td>Approved by the fact-checker</td><td>${Math.round(e.approved * 100)}%</td></tr>
+      <tr><td>Tool calls · seconds per answer</td><td>${e.avg_tool_calls} · ${e.avg_seconds}</td></tr></tbody></table>
+    <div class="mono" style="margin-top:6px">The engine records what really happened, so every answer can be marked (scripts/eval_newsroom.py).</div>`;
+}
 function truthPanel() {
+  return truthMatch() + evalBlock();
+}
+function truthMatch() {
   if (!S.D.reading || S.t < S.D.meta.duration - 1) return '<div class="label">Tactics read against the truth</div><div class="mono">Shown at full time: the engine\'s own record of every system change, against what the newsroom read from the tracking data.</div>';
   return '<div class="label">Tactics read against the truth</div>' + S.D.reading.map(r => {
     const sc = r.score;
