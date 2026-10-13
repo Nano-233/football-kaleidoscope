@@ -96,6 +96,8 @@ standard, deep) and one focus metric. Every agent output reads it. C5, F1, F6, a
 - Scout view **[built]** plus heat map, physical output and the written report — Core. S1-S3
 - Recap page, shareable, with clips and a summary card — Strong. C3, F5
 - Ask panel — Core (feature 3)
+- Breakdowns **[built]**: each goal and big chance replayed with pauses, drawn on the pitch (both teams' lines read from that moment, the defenders' block, last line and space between the lines, open passing lanes and triangles, forward runs, numbers around the ball, the shooter's view of goal), a caption built from the data at each stop — Strong. C1, A1, P1
+- Hover and click on everything drawn over the pitch (pass map links, average positions, regains, a player's actions): details on hover, click jumps to the event — Strong. A1-A4, S1
 - Clips **[built]**, trait and player reels — Strong; video export — Stretch. S4, F7, P2
 
 ### 7. Broadcast output — Strong **[built]**

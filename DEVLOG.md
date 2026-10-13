@@ -839,6 +839,26 @@ pressure or keeper push (`shoot_press` 0, `gk_shoot` 0.5): range shots match rea
 shots rise to 19.2 (loss 161.2). The near-goal excess is not in these terms; the likely cause is that real shooters at those spots more often have a
 defender in the lane, which the clean-look xG ignores and the sim's thinner central defence (above) still allows.
 
+### Breakdowns: pause the move and draw on it (2026-10-13)
+Idea: broadcast telestration (names, lines joining each unit, passing triangles, the in- and out-of-possession shapes) but built
+from the tracking, not drawn by hand. `MatchView.breakdown(event_id)` turns the move behind a goal or big chance into stops:
+the regain, both shapes, the last pass, the shot. Captions are plain sentences from the numbers, so nothing needs fact-checking.
+- Lines without a formation list: `lines_now` fits every split of the outfield players into 3 or 4 lines (Hungarian, as the
+  formation reader) and keeps the best, with a small penalty for a fourth line. Depth-gap clustering alone was tried first and
+  failed: a deep block puts 7 players within 3 m of depth (read as 3-7), and attackers spread in depth read as 2-2-1-2-3.
+- The lines are read from the last 4 s, not the last minute: a 60 s average gave a sensible label but the lines drawn through
+  where the players stood at that frame zig-zagged. The shape drawn has to be the shape read.
+- Open lane: no opponent within 2 m of the straight path. A triangle is two open options that can also pass to each other.
+  A run is 10 m forward in the next 2.5 s (5 m caught jogging). The numbers are players within 15 m of the ball.
+- Rebounds within 3 s get one breakdown, ending on the last shot.
+Readings in transition can be odd (2-4-4 without the ball). That is where the players were; it is not smoothed away.
+
+### Press board counted restarts as regains (2026-10-13)
+Saw: hovering the Press board dots showed "ball won" with no player. Measured: every possession change was plotted, including
+throw-ins and goal kicks (logged at the first touch, up to 25 s after the ball went out). Fixed: a regain is a possession
+change that follows a winning action by that team (interception, tackle, recovery, block, duel, save...) within 2 s; the dot
+now carries who won it and how.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

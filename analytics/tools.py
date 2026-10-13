@@ -8,6 +8,7 @@ tracking frames; no model computes a figure. Each tool returns a small JSON-read
     mv.momentum()                         # xG and field tilt by 5 minutes, spells of dominance
     mv.passing_network(team=0)            # pass links, connectors, where attacks start, preferred side
     mv.sequence(event_id)                 # what led to a moment, with the engine's reasons
+    mv.breakdown(event_id)                # the move behind a shot as stops to pause on: the regain, both shapes, the pass options, the shot
     mv.player_profile(player_id)          # stats, rating terms, heat map, physical output, against role averages
     mv.find_moments(player=..., types=[...], outcome=..., third=..., minutes=(a, b))
 
@@ -23,6 +24,35 @@ from scipy.optimize import linear_sum_assignment
 
 from analytics.stats import StatsAccumulator, L, W
 from matchsim.teams import FORMATIONS
+
+def _rows(n, parts):
+    """Every way to split n outfield players into `parts` lines of 1-5, back to front."""
+    if parts == 1:
+        return [(n,)] if 1 <= n <= 5 else []
+    return [(a,) + r for a in range(1, 6) for r in _rows(n - a, parts - 1)]
+
+
+def _rows_layout(rows):
+    """A plain layout for a split into lines: lines evenly deep, each line spread across the width (normalised like MatchView._norm)."""
+    pts = []
+    for i, c in enumerate(rows):
+        ys = [.5] if c == 1 else [.3, .7] if c == 2 else [.15, .5, .85] if c == 3 else list(np.linspace(0, 1, c))
+        pts += [(i / (len(rows) - 1), y) for y in ys]
+    return np.array(pts)
+
+
+def _hull(P):
+    """Convex hull of 2-D points (monotone chain), as indices in order."""
+    idx = sorted(range(len(P)), key=lambda i: (P[i][0], P[i][1]))
+    cross = lambda o, a, b: (P[a][0] - P[o][0]) * (P[b][1] - P[o][1]) - (P[a][1] - P[o][1]) * (P[b][0] - P[o][0])
+    lo, hi = [], []
+    for seq, out in ((idx, lo), (idx[::-1], hi)):
+        for i in seq:
+            while len(out) >= 2 and cross(out[-2], out[-1], i) <= 0:
+                out.pop()
+            out.append(i)
+    return lo[:-1] + hi[:-1]
+
 
 SPRINT = 7.0      # m/s (25 km/h), the usual sprint threshold
 ROLE_NORMS = pathlib.Path(__file__).with_name("role_norms.json")  # per-role per-90 averages over many simulated matches (scripts/role_norms.py)
@@ -131,6 +161,39 @@ class MatchView:
             r, c = linear_sum_assignment(cost)
             cand.append((name, float(cost[r, c].mean())))
         return sorted(cand, key=lambda x: x[1]) or [("unknown", 0.)]
+
+    def lines_now(self, team, t, in_possession, back=60.):
+        """The team's lines at time t, read from its average positions over the last `back` seconds of the current phase. No list of
+        formations: every split of the outfield players into 3 or 4 lines is fitted (Hungarian, as _read_formation) and the best is the
+        reading, so a side can be 2-3-5 with the ball and 4-4-1-1 without it if that is where its players stood. A fourth line must earn
+        its place (a small penalty), so a flat 4-5-1 is not read as 4-1-4-1 by noise. Returns the label and the tracking slots in each line."""
+        fr = self._frame_range(t - back, t + .1)
+        fr = fr[fr[:, 4] == (team if in_possession else 1 - team)]
+        if len(fr) < 25:
+            fr = self._frame_range(t - 3, t + .1)
+        P, slots = [], []
+        for k in range(11 * team, 11 * team + 11):
+            xy = fr[:, [5 + 2 * k, 6 + 2 * k]]
+            on = xy[:, 1] > -5
+            if on.mean() < .5 or self.role_now[self._occupant(k, t)] == "GK":
+                continue
+            P.append(self._team_xy(team, xy[on].mean(0)))
+            slots.append(k)
+        P = np.array(P)
+        best = None
+        for parts in (3, 4):
+            for rows in _rows(len(P), parts):
+                if rows[0] < 2:
+                    continue
+                cost = ((self._norm(P)[:, None] - _rows_layout(rows)[None]) ** 2 * np.array([1.6, 1.])).sum(2)
+                r, c = linear_sum_assignment(cost)
+                score = cost[r, c].mean() + .015 * (parts - 3)
+                if best is None or score < best[0]:
+                    best = (score, rows, dict(zip(r, c)))
+        _, rows, slot_of = best
+        starts = np.cumsum((0,) + rows)
+        lines = [[slots[i] for i in sorted((i for i in range(len(P)) if a <= slot_of[i] < b), key=lambda i: P[i][1])] for a, b in zip(starts, starts[1:])]
+        return dict(label="-".join(map(str, rows)), lines=lines)
 
     def _window_costs(self, team, t0, t1, phase):
         """Template fit costs for the average shape in one window and phase ({} when there are too few frames)."""
@@ -363,6 +426,115 @@ class MatchView:
                                 alternatives=[dict(kind=o["kind"], to=self.names.get(o.get("to")), p_success=o.get("p_success"), xg=o.get("xg")) for o in w.get("options", [])[:3]])
             steps.append(s)
         return dict(moment=dict(clock=e0["clock"], type=e0["type"], player=self.names.get(e0.get("player"))), steps=steps)
+
+    def _slot(self, pid, t):
+        return next((k for k in range(22) if self._occupant(k, t) == pid), None)
+
+    def _at(self, t):
+        """Ball and the 22 slots (world frame) at time t."""
+        f = self.F[min(int(round(t / self.dt)), len(self.F) - 1)]
+        return np.array(f[1:3]), np.array(f[5:49]).reshape(22, 2)
+
+    @staticmethod
+    def _lane_open(a, b, opp, room=2.):
+        """No opponent within `room` metres of the straight path from a to b."""
+        d = b - a
+        u = np.clip(((opp - a) @ d) / max(d @ d, 1e-6), 0, 1)
+        return bool((np.linalg.norm(opp - (a + u[:, None] * d), axis=1) > room).all())
+
+    def breakdown(self, event_id):
+        """The move behind a shot as a few stops to pause the replay on and draw over, each with a plain caption built from the data:
+        where the ball was won; both teams' lines (the attackers' shape with the ball, the defenders' without it), the defenders' block,
+        their last line and the space between their back two lines; the last pass with every open lane from the passer, the triangles
+        those lanes make, the runs about to be made and the numbers around the ball; the shot with the defenders between it and the goal.
+        Players are tracking slots, so the drawing follows the frame shown."""
+        e0 = self.by_id[event_id]
+        tm, idx = e0["team"], next(i for i, e in enumerate(self.events) if e["id"] == event_id)
+        start = idx
+        while start > 0:
+            e = self.events[start - 1]
+            if e0["t"] - e["t"] > 25 or (e["type"] == "possession_change" and e.get("team") == tm) or e["type"] in ("kickoff", "half_start"):
+                break
+            start -= 1
+        seq = self.events[start:idx]
+        name = lambda pid: self.names.get(pid, "")
+        mine, theirs = range(11 * tm, 11 * tm + 11), range(11 * (1 - tm), 11 * (1 - tm) + 11)
+        fwd = 1 if tm == 0 else -1
+        goal = np.array([L if tm == 0 else 0., W / 2])
+        on = lambda xy, ks: [k for k in ks if xy[k][1] > -5]
+        stops = []
+        # where the ball was won
+        rg = next((e for e in self.events[max(start - 1, 0):start + 4] if e.get("team") == tm and e["type"] in ("interception", "tackle", "ball_recovery", "block") and e.get("player")), None)
+        if rg and e0["t"] - rg["t"] <= 20:
+            d = float(np.hypot(*(goal - [rg["x"], rg["y"]])))
+            k = self._slot(rg["player"], rg["t"])
+            stops.append(dict(t=rg["t"], kind="regain", caption=f"{name(rg['player'])} wins the ball back {d:.0f} m from goal.", ring=[k], names=[k]))
+        # both shapes early in the move, the defenders' block, their last line, the space between their back two lines
+        passes = [e for e in seq if e["type"] in ("pass", "cross") and e.get("player")]
+        ts = next((e["t"] for e in passes if e0["t"] - e["t"] <= 14), e0["t"] - 5)
+        if not stops or ts - stops[0]["t"] > 2:
+            a, d = self.lines_now(tm, ts, True, back=4.), self.lines_now(1 - tm, ts, False, back=4.)  # the shape drawn is the shape read
+            _, xy = self._at(ts)
+            dk = [k for k in on(xy, theirs) if self.role_now[self._occupant(k, ts)] != "GK"]
+            P = xy[dk]
+            hull = [dk[i] for i in _hull(P)]
+            last = float(P[:, 0].max() if tm == 0 else P[:, 0].min())  # the defenders' deepest outfield player
+            back, mid = (np.mean([xy[k][0] for k in row]) for row in d["lines"][:2])
+            gap = abs(mid - back)
+            depth, width = float(np.ptp(P[:, 0])), float(np.ptp(P[:, 1]))
+            whose = self.team_names[1 - tm] + ("'" if self.team_names[1 - tm].endswith("s") else "'s")
+            stops.append(dict(t=ts, kind="shape",
+                              caption=f"{self.team_names[tm]} attack in a {a['label']} against {whose} {d['label']} without the ball: "
+                                      f"a block {width:.0f} m wide and {depth:.0f} m deep" + (f", {gap:.0f} m between its back line and the line in front." if gap >= 5 else "."),
+                              lines=[dict(team=tm, label=f"{self.team_names[tm]} with the ball: {a['label']}", rows=a["lines"]),
+                                     dict(team=1 - tm, label=f"{self.team_names[1 - tm]} without the ball: {d['label']}", rows=d["lines"])],
+                              hull=[1 - tm, hull], last_line=[1 - tm, round(last, 1)],
+                              between=None if gap < 5 else [round(float(back), 1), round(float(mid), 1), round(float(P[:, 1].min()), 1), round(float(P[:, 1].max()), 1)]))
+        # the last pass: every open lane from the passer, the triangles they make, the runs being made, the numbers around the ball
+        lp = next((e for e in reversed(passes) if e0["t"] - e["t"] <= 8 and e["t"] >= ts), None)
+        if lp:
+            ball, xy = self._at(lp["t"])
+            _, xy2 = self._at(lp["t"] + 2.5)
+            p, rcv = self._slot(lp["player"], lp["t"]), self._slot(lp.get("receiver"), lp["t"])
+            opp = xy[on(xy, theirs)]
+            opts = [k for k in on(xy, mine) if k != p and 5 < np.hypot(*(xy[k] - xy[p])) < 40 and self._lane_open(xy[p], xy[k], opp)]
+            n = len(opts)
+            if rcv is not None and rcv not in opts:
+                opts.append(rcv)
+            tris = sorted(([a, b] for i, a in enumerate(opts) for b in opts[i + 1:] if np.hypot(*(xy[a] - xy[b])) < 30 and self._lane_open(xy[a], xy[b], opp)),
+                          key=lambda ab: (rcv not in ab, np.hypot(*(xy[ab[0]] - xy[ab[1]]))))[:2]
+            runs = sorted(([k, *map(lambda v: round(float(v), 1), (*xy[k], *xy2[k]))] for k in on(xy, mine) if k != p and (xy2[k][0] - xy[k][0]) * fwd >= 10),
+                          key=lambda r: -abs(r[3] - r[1]))[:3]  # 10 m forward in 2.5 s: a run, not a jog
+            near = lambda ks: sum(np.hypot(*(xy[k] - ball)) <= 15 for k in on(xy, ks))
+            us, them = near(mine), near(theirs)
+            open_ = rcv is None or self._lane_open(xy[p], xy[rcv], opp)
+            what = "crosses for" if lp["type"] == "cross" else "goes over the top to" if lp.get("lofted") else "picks out" if open_ else "forces it through to"
+            stops.append(dict(t=lp["t"], kind="options",
+                              caption=f"{name(lp['player'])} has {n} open passing lane{'s' * (n != 1)} and {what} {name(lp.get('receiver')) or 'a team-mate'}. "
+                                      f"{us} v {them} within 15 m of the ball" + (f"; {len(runs)} forward run{'s' * (len(runs) != 1)} under way." if runs else "."),
+                              ring=[p], names=sorted({p, *opts, *(r[0] for r in runs)}), opts=[[p, k, int(k == rcv)] for k in opts], tris=[[p, a, b] for a, b in tris],
+                              runs=runs, zone=[round(float(ball[0]), 1), round(float(ball[1]), 1), 15, int(us), int(them)]))
+        # the shot
+        _, xy = self._at(e0["t"])
+        s = self._slot(e0["player"], e0["t"])
+        if s is not None:
+            A, B, C = xy[s], np.array([goal[0], W / 2 - 3.66]), np.array([goal[0], W / 2 + 3.66])
+
+            def inside(q):  # inside the triangle shooter - post - post
+                v0, v1, v2 = C - A, B - A, q - A
+                d00, d01, d02, d11, d12 = v0 @ v0, v0 @ v1, v0 @ v2, v1 @ v1, v1 @ v2
+                den = d00 * d11 - d01 * d01
+                u, v = (d11 * d02 - d01 * d12) / den, (d00 * d12 - d01 * d02) / den
+                return u >= 0 and v >= 0 and u + v <= 1
+            gk = [k for k in theirs if self.role_now[self._occupant(k, e0["t"])] == "GK"]
+            block = [k for k in on(xy, theirs) if k not in gk and inside(xy[k])]
+            d = float(np.hypot(*(goal - xy[s])))
+            stops.append(dict(t=e0["t"], kind="shot",
+                              caption=f"{name(e0['player'])} shoots from {d:.0f} m with {len(block) or 'no'} defender{'s' * (len(block) != 1)} between him and the goal (xG {e0.get('xg', 0):.2f}).",
+                              ring=[s] + block, names=[s] + block, cone=[s, round(float(goal[0]), 1)], keeper=gk[:1]))
+        return dict(id=event_id, t=e0["t"], clock=e0["clock"], team=tm, outcome=e0.get("outcome"),
+                    title=f"{e0['clock']} {'goal' if e0.get('outcome') == 'goal' else 'chance'} · {name(e0['player'])}",
+                    start=round(max(0., stops[0]["t"] - 3), 1), end=round(e0["t"] + 3, 1), stops=stops)
 
     # ---------------------------------------------------------------- player
     def player_profile(self, pid):

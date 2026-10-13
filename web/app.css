@@ -234,3 +234,7 @@ table.stats td.lead { color: var(--text); font-weight: 600; }
 .winbar { display: flex; gap: 2px; height: 10px; border-radius: 3px; overflow: hidden; }
 .winbar i { display: block; }
 #voice[aria-pressed="true"] { border-color: var(--accent); color: var(--text); background: rgba(79, 156, 249, .12); }
+.bd-box { position: absolute; top: 12px; left: 12px; width: min(62%, 540px); background: rgba(12, 13, 14, .92); border-left: 4px solid var(--accent); border-radius: 0 var(--r) var(--r) 0; padding: 9px 12px 10px; }
+.bd-box p { margin: 3px 0 8px; font-size: 14px; line-height: 20px; }
+.bd-box .bar { display: flex; gap: 6px; }
+.pitch-tip { position: absolute; pointer-events: none; z-index: 5; max-width: 300px; background: rgba(12, 13, 14, .95); border: 1px solid var(--line-strong); border-radius: var(--r); padding: 5px 9px; font-size: 12px; line-height: 17px; white-space: pre-line; }

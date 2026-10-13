@@ -118,7 +118,8 @@ def reading(match):
     return out
 
 
-SHAPE_W, NET_W = 300., 900.  # analyst board windows: shape every 5 minutes, passing network and pressing every 15
+SHAPE_W, NET_W = 300., 900.
+WIN_BALL = ("interception", "tackle", "ball_recovery", "block", "fifty_fifty", "duel", "save", "keeper_claim", "keeper_sweep")  # analyst board windows: shape every 5 minutes, passing network and pressing every 15
 
 
 def board(match):
@@ -144,10 +145,21 @@ def board(match):
                                            nodes={ids[n]: xy for n, xy in net["avg_positions"].items()}, entries=net["final_third_entries_left_centre_right"]))
             t += NET_W
         out["pressing"].append(mv.pressing(tm, NET_W)["by_window"])
-    for e in match["events"]:
+    evs = match["events"]
+    for i, e in enumerate(evs):  # the ball won in play (not a restart): the possession change follows the winning action
         if e["type"] == "possession_change" and e.get("team") in (0, 1) and "x" in e:
-            out["regains"].append([round(e["t"], 1), e["team"], e["x"], e["y"]])
+            won = next((w for w in reversed(evs[max(0, i - 4):i]) if w.get("team") == e["team"] and w["type"] in WIN_BALL and e["t"] - w["t"] <= 2), None)
+            if won:
+                out["regains"].append([round(e["t"], 1), e["team"], e["x"], e["y"], won.get("player"), won["type"]])
     return out
+
+
+def breakdowns(match):
+    """The pause-and-draw breakdown of every goal and big chance (penalties aside)."""
+    mv = MatchView(match)
+    shots = [e for e in match["events"] if e["type"] == "shot" and e.get("kind") != "penalty" and (e.get("outcome") == "goal" or e.get("xg", 0) >= .25)]
+    shots = [e for e, n in zip(shots, shots[1:] + [None]) if not (n and n["team"] == e["team"] and n["t"] - e["t"] <= 3)]  # a rebound: one breakdown, ending on the last shot
+    return [mv.breakdown(e["id"]) for e in shots]
 
 
 def profiles(match):
@@ -179,7 +191,7 @@ def build(src):
     timeline, players = stats_timeline(match)
     events = [{k: v for k, v in e.items() if k not in ("freeze_frame", "why", "players", "bench")} for e in match["events"]]
     doc = dict(meta=meta, n_frames=len(q), events=events, team_stats=timeline, players=players,
-               newsroom=asyncio.run(newsroom(packs)), recaps=asyncio.run(recaps(match)), reading=reading(match), board=board(match), profiles=profiles(match), clips=clips(match["events"], {k: v["name"] for k, v in players.items()}, meta["duration"]))
+               newsroom=asyncio.run(newsroom(packs)), recaps=asyncio.run(recaps(match)), reading=reading(match), board=board(match), breakdowns=breakdowns(match), profiles=profiles(match), clips=clips(match["events"], {k: v["name"] for k, v in players.items()}, meta["duration"]))
     (dest / "match.json").write_text(json.dumps(doc, separators=(",", ":")), encoding="utf-8")
     print(dest, f"{sum(f.stat().st_size for f in dest.iterdir()) / 1e6:.1f} MB,", len(packs), "moments,", len(doc["clips"]), "clips")
     return dict(id=src.stem, home=meta["home"]["name"], away=meta["away"]["name"], home_code=meta["home"]["code"], away_code=meta["away"]["code"], score=meta["score"])

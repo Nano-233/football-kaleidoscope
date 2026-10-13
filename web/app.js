@@ -36,7 +36,7 @@ const FAN_ROWS = ['goals', 'xg', 'shots', 'shots_on_target', 'corners', 'yellow_
 const S = {
   D: null, F: null, n: 0, dt: .2, id: null, t: 0, playing: false, last: 0,
   persona: 'fan', tab: 'Live', player: null, group: 'All', clip: null, custom: [], panelKey: '', info: {}, slots: [],
-  profile: loadProfile(), asks: [], askVer: 0, askDraft: '', board: { mode: 'Shape', team: 0, phase: 'in_possession' }, wi: { team: 1, change: {}, formation: '', busy: false, res: null, err: '' },
+  bd: null, profile: loadProfile(), asks: [], askVer: 0, askDraft: '', board: { mode: 'Shape', team: 0, phase: 'in_possession' }, wi: { team: 1, change: {}, formation: '', busy: false, res: null, err: '' },
 };
 const SUGGEST = {
   fan: ["Who's been the best player so far?", 'Why is the game going this way?', 'Explain the last goal', 'How is my player doing?'],
@@ -99,7 +99,7 @@ async function load(id) {
     for (let j = 0; j < 44; j++) F[o + 5 + j] = q[k + 4 + j] / 20;
     for (let j = 0; j < 22; j++) F[o + 50 + j] = h[i * 22 + j] / 40;
   }
-  Object.assign(S, { D, F, n, dt: D.meta.dt, id, t: 0, player: null, clip: null, custom: loadCustom(id), panelKey: '' });
+  Object.assign(S, { D, F, n, dt: D.meta.dt, id, t: 0, player: null, clip: null, bd: null, custom: loadCustom(id), panelKey: '' });
   S.info = {};
   for (const side of ['home', 'away']) for (const p of [...D.meta[side].players, ...D.meta[side].bench]) S.info[p.id] = { ...p, team: side === 'home' ? 0 : 1 };
   S.slots = [...D.meta.home.players, ...D.meta.away.players].map(p => p.id);
@@ -177,6 +177,7 @@ function frame(t) {  // 5 Hz tracking, drawn interpolated (Catmull-Rom for playe
 function draw() {
   if (!S.D) return;
   const t = S.t, f = frame(t);
+  HITS.length = 0;
   drawPitch();
   if (S.persona === 'scout' && S.player) drawActions(t);
   const sel = S.persona === 'scout' && S.player ? slotOf(S.player, t) : -1, fol = S.profile.playerId ? slotOf(S.profile.playerId, t) : -1;
@@ -196,6 +197,7 @@ function draw() {
   g.globalAlpha = 1;
   if (viewOn()) { g.save(); (S.view.kind === 'shape' ? paintShape : paintNetwork)(S.view.team, S.view); g.restore(); }
   else if (boardOn()) drawBoard(t);
+  if (S.bd && S.bd.hold) { g.save(); g.globalAlpha = Math.min(1, (performance.now() - S.bd.at) / 450); paintStop(S.bd.b.stops[S.bd.i], f); g.restore(); }
   g.beginPath(); g.arc(px(f[1]), py(f[2]), 4.5, 0, 7); g.fillStyle = '#fff'; g.fill(); g.strokeStyle = '#0c0d0e'; g.lineWidth = 1.5; g.stroke();
   hud(t);
 }
@@ -210,7 +212,9 @@ function drawActions(t) {
     if (e.end_x != null && ['pass', 'cross', 'shot', 'carry', 'clearance'].includes(e.type)) {
       g.strokeStyle = c; g.lineWidth = e.type === 'shot' ? 2 : 1.2; g.setLineDash(e.type === 'carry' ? [4, 3] : []);
       g.beginPath(); g.moveTo(px(e.x), py(e.y)); g.lineTo(px(e.end_x), py(e.end_y)); g.stroke(); g.setLineDash([]);
+      hitSeg(px(e.x), py(e.y), px(e.end_x), py(e.end_y), evTip(e), () => jumpTo(e.t));
     }
+    hitPt(px(e.x), py(e.y), evTip(e), () => jumpTo(e.t));
     g.fillStyle = c; g.beginPath(); g.arc(px(e.x), py(e.y), e.type === 'shot' || e.type === 'goal' ? 5 : 3, 0, 7); g.fill();
   }
   g.globalAlpha = 1;
@@ -231,7 +235,15 @@ function hud(t) {
     if (S.playing && !S.reel) sayLine(tr(item.line));
     $('lt-kind').textContent = `${item.moment.type.replace(/_/g, ' ')} · ${item.moment.clock}`;
   }
-  $('reel').hidden = !S.reel && !S.view;
+  $('bd').hidden = !S.bd;
+  if (S.bd) {
+    const b = S.bd.b, st = b.stops[S.bd.i];
+    $('overlay').hidden = true;
+    const k = `${b.title} · ${st ? `${S.bd.i + 1}/${b.stops.length} · ${BD_KIND[st.kind]}` : 'the finish'}`, cap = S.bd.hold ? tr(st.caption) : 'Playing the move…';
+    if ($('bd-kind').textContent !== k) $('bd-kind').textContent = k;
+    if ($('bd-cap').textContent !== cap) $('bd-cap').textContent = cap;
+  }
+  $('reel').hidden = (!S.reel && !S.view) || !!S.bd;
   if (S.reel) $('reel').textContent = `${S.reel.name} · ${S.reel.who}${S.reel.segs.length > 1 ? ` · ${S.reel.i + 1}/${S.reel.segs.length} · ${S.reel.segs[S.reel.i].clock}` : ''}`;
   else if (S.view) $('reel').innerHTML = `${esc(S.view.title)} <button class="link" id="hide-view">Hide</button>`;
   const c = S.clip, tl = $('tl-clip');
@@ -247,7 +259,8 @@ function marks() {
 
 // ---------------------------------------------------------------- playback
 function tick(now) {
-  if (S.playing && S.D) {
+  if (S.bd) bdTick(now);
+  else if (S.playing && S.D) {
     S.t = Math.min(S.D.meta.duration, S.t + (now - S.last) / 1000 * +$('speed').value);
     if (S.clip && S.t >= S.clip.end) S.t = S.clip.start;  // a selected clip loops
     if (S.reel && S.t >= S.reel.segs[S.reel.i].end) {  // a reel plays its moments one after another
@@ -331,7 +344,7 @@ function feedView(mode) {
       : it.fallback ? `<span class="badge warn" title="Every agent draft was held, so a plain line built from the facts went out">Drafts held · plain line</span>`
       : it.rewrites ? `<span class="badge ok">Fact-checked · rewritten ${it.rewrites}×</span>` : `<span class="badge ok">Fact-checked</span>`;
     return `<li><div class="meta"><span class="t">${esc(it.moment.clock)}</span><span class="kind">${esc(it.moment.type.replace(/_/g, ' '))}</span>${mode === 'analyst' ? badge : ''}
-      <button class="jump" data-share="${it.moment.t}|${esc(it.moment.type)}">Share</button><button class="jump" data-seek="${it.moment.t - 8}">Watch</button></div>
+      <button class="jump" data-share="${it.moment.t}|${esc(it.moment.type)}">Share</button>${bdBtn(it.moment.t)}<button class="jump" data-seek="${it.moment.t - 8}">Watch</button></div>
       <p${it.approved ? '' : ' class="rejected"'}>${esc(tr(it.line))}</p>${mode === 'analyst' ? trail(it) : ''}</li>`;
   }).join('') + '</ul>';
 }
@@ -531,6 +544,117 @@ function playerView() {
     ${S.group === 'All' ? '<div class="mono" style="margin-top:8px">Pressures are under Defending.</div>' : ''}`;
 }
 
+// ---------------------------------------------------------------- hover and click on what is drawn over the pitch
+const HITS = [];  // refilled every frame by whatever draws: {pt or seg, tip, go}
+const hitPt = (x, y, tip, go) => HITS.push({ x, y, tip, go });
+const hitSeg = (x, y, x2, y2, tip, go) => HITS.push({ x, y, x2, y2, tip, go });
+const pname = id => (S.info[id] ? `${S.info[id].number} ${S.info[id].name}` : '');
+function evTip(e) {
+  const out = e.outcome ? ` · ${e.outcome.replace(/_/g, ' ')}` : '';
+  const to = e.receiver ? ` to ${pname(e.receiver)}` : e.target ? ` against ${pname(e.target)}` : '';
+  return `${e.clock} · ${label(e.type)}${to}${out}${e.xg != null ? ` · xG ${e.xg.toFixed(2)}` : ''}\nclick to watch`;
+}
+function jumpTo(t) { S.reel = null; S.bd = null; seek(t - 1.5); setPlaying(false); }
+function nextPass(tm, a, b, row) {  // a passing-network link: each click watches the next completed pass between the two
+  const t0 = row.t0 ?? 0, t1 = row.t1 ?? S.t;
+  const ps = S.D.events.filter(e => e.team === tm && e.player === a && e.receiver === b && e.outcome === 'complete' && e.t >= t0 && e.t <= t1);
+  if (!ps.length) return;
+  const e = ps.find(e => e.t > S.t + .5) || ps[0];
+  jumpTo(e.t); toast(`${pname(a)} → ${pname(b)}: pass ${ps.indexOf(e) + 1} of ${ps.length}, ${e.clock}`);
+}
+function hitAt(ev) {
+  const r = cv.getBoundingClientRect(), mx = (ev.clientX - r.left) * cv.width / r.width, my = (ev.clientY - r.top) * cv.height / r.height;
+  let best = null, bd = 1e9;
+  for (const h of HITS) {
+    let d;
+    if (h.x2 == null) d = Math.hypot(h.x - mx, h.y - my) - 4;  // points win over the lines they sit on
+    else { const dx = h.x2 - h.x, dy = h.y2 - h.y, u = Math.max(0, Math.min(1, ((mx - h.x) * dx + (my - h.y) * dy) / (dx * dx + dy * dy || 1))); d = Math.hypot(h.x + u * dx - mx, h.y + u * dy - my); }
+    if (d < (h.x2 == null ? 8 : 5) && d <= bd) { bd = d; best = h; }
+  }
+  return best;
+}
+
+// ---------------------------------------------------------------- breakdowns: the move behind a goal or big chance, paused and drawn on
+const BD_KIND = { regain: 'Winning it back', shape: 'The shapes', options: 'The pass', shot: 'The shot' };
+const BD_RATE = 1.2;  // the move plays at about real speed between the stops
+function bdBtn(t) { const i = (S.D.breakdowns || []).findIndex(b => Math.abs(b.t - t) <= 3); return i < 0 ? '' : `<button class="jump" data-bd="${i}">Breakdown</button>`; }
+function startBreakdown(b) { S.reel = null; S.view = null; S.clip = null; S.bd = { b, i: 0, hold: 0, at: 0 }; seek(b.start); setPlaying(true); }
+function bdTick(now) {
+  const bd = S.bd, st = bd.b.stops[bd.i], dt = now - S.last;
+  if (bd.hold) {
+    if (!S.playing) bd.hold += dt;  // paused: the stop waits
+    else if (now >= bd.hold) { bd.hold = 0; bd.i++; }
+  } else if (S.playing) {
+    S.t = Math.min(S.D.meta.duration, S.t + dt / 1000 * BD_RATE);
+    if (st && S.t >= st.t) { S.t = st.t; bd.at = now; bd.hold = now + Math.max(5000, st.caption.length * 60); sayLine(tr(st.caption)); }
+    else if (!st && S.t >= bd.b.end) { S.bd = null; setPlaying(false); toast('End of the breakdown.'); }
+  }
+}
+function bdNext() {
+  const bd = S.bd; if (!bd) return;
+  if (bd.hold) { bd.hold = 0; bd.i++; } else { const st = bd.b.stops[bd.i]; S.t = st ? st.t : bd.b.end; }
+  setPlaying(true);
+}
+function tag(x, y, text, col) {  // a label with a dark backing, centred on x, bottom at y
+  g.font = '600 14px "Barlow Condensed", "Segoe UI", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+  const w = g.measureText(text).width + 10;
+  g.fillStyle = 'rgba(12,13,14,.82)'; g.fillRect(x - w / 2, y - 16, w, 19);
+  g.fillStyle = col || '#f1f2f4'; g.fillText(text, x, y - 2);
+}
+function arrow(x1, y1, x2, y2, col) {
+  const a = Math.atan2(y2 - y1, x2 - x1);
+  g.strokeStyle = g.fillStyle = col; g.lineWidth = 2.5; g.setLineDash([7, 5]);
+  g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2 - 8 * Math.cos(a), y2 - 8 * Math.sin(a)); g.stroke(); g.setLineDash([]);
+  g.beginPath(); g.moveTo(x2, y2); g.lineTo(x2 - 12 * Math.cos(a - .45), y2 - 12 * Math.sin(a - .45)); g.lineTo(x2 - 12 * Math.cos(a + .45), y2 - 12 * Math.sin(a + .45)); g.closePath(); g.fill();
+}
+function paintStop(st, f) {
+  const P = k => [px(f[5 + 2 * k]), py(f[6 + 2 * k])], lw = g.lineWidth;
+  if (st.hull) {  // the defenders' block
+    const pts = st.hull[1].map(P);
+    g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath();
+    g.fillStyle = teamCol(st.hull[0]) + '1c'; g.fill(); g.strokeStyle = teamCol(st.hull[0]); g.lineWidth = 1; g.setLineDash([4, 4]); g.stroke(); g.setLineDash([]);
+  }
+  if (st.between) {  // the space between the defenders' back line and the line in front of it
+    const [a, b, y0, y1] = st.between, x0 = px(Math.min(a, b)), x1 = px(Math.max(a, b));
+    g.fillStyle = 'rgba(79,156,249,.16)'; g.fillRect(x0, py(y0), x1 - x0, py(y1) - py(y0));
+    tag((x0 + x1) / 2, py(y0) - 4, 'Space between the lines', COL.accent);
+  }
+  if (st.last_line) {
+    const x = px(st.last_line[1]);
+    g.strokeStyle = teamCol(st.last_line[0]); g.lineWidth = 2; g.setLineDash([10, 6]); g.beginPath(); g.moveTo(x, py(0)); g.lineTo(x, py(W)); g.stroke(); g.setLineDash([]);
+    tag(x, py(0) + 18, 'Last line');
+  }
+  for (const ln of st.lines || []) for (const row of ln.rows) {  // each line of each team, joined across the pitch
+    const pts = row.map(P).sort((p, q) => p[1] - q[1]);
+    g.strokeStyle = teamCol(ln.team); g.lineWidth = 2.5; g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.stroke();
+  }
+  (st.lines || []).forEach((ln, i) => { g.font = '700 22px "Barlow Condensed", sans-serif'; const w = g.measureText(ln.label).width; const x = i ? cv.width - PAD - w / 2 - 8 : PAD + w / 2 + 8; tag(x, cv.height - 6, ln.label, teamCol(ln.team)); });
+  if (st.zone) {  // the numbers around the ball
+    const [x, y, r, us, them] = st.zone;
+    g.strokeStyle = 'rgba(255,255,255,.7)'; g.lineWidth = 1.5; g.setLineDash([3, 5]); g.beginPath(); g.ellipse(px(x), py(y), r * SX, r * SY, 0, 0, 7); g.stroke(); g.setLineDash([]);
+    tag(px(x), py(y) - r * SY - 4, `${us} v ${them} around the ball`);
+  }
+  for (const [a, b, c] of st.tris || []) {  // passing triangles
+    const pts = [a, b, c].map(P);
+    g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath();
+    g.fillStyle = 'rgba(79,156,249,.14)'; g.fill();
+  }
+  for (const [a, b, chosen] of st.opts || []) {  // every open lane from the passer; the one he picked is solid
+    const [x1, y1] = P(a), [x2, y2] = P(b);
+    g.strokeStyle = COL.accent; g.lineWidth = chosen ? 4 : 1.8; g.setLineDash(chosen ? [] : [6, 5]);
+    g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke(); g.setLineDash([]);
+  }
+  for (const [k, x0, y0, x1, y1] of st.runs || []) arrow(px(x0), py(y0), px(x1), py(y1), COL.good);
+  if (st.cone) {  // the shooter's view of the goal
+    const [x, y] = P(st.cone[0]), gx = px(st.cone[1]);
+    g.beginPath(); g.moveTo(x, y); g.lineTo(gx, py(W / 2 - 3.66)); g.lineTo(gx, py(W / 2 + 3.66)); g.closePath();
+    g.fillStyle = 'rgba(232,93,93,.18)'; g.fill(); g.strokeStyle = 'rgba(232,93,93,.8)'; g.lineWidth = 1.5; g.stroke();
+  }
+  for (const k of [...(st.ring || []), ...(st.keeper || [])]) { const [x, y] = P(k); g.strokeStyle = '#fff'; g.lineWidth = 2.5; g.beginPath(); g.ellipse(x, y + 3, 16, 11, 0, 0, 7); g.stroke(); }
+  for (const k of st.names || []) { const [x, y] = P(k), p = who(k, S.t); if (p) tag(x, y - 15, p.name.split(' ').pop()); }
+  g.lineWidth = lw;
+}
+
 // ---------------------------------------------------------------- analyst board (the toolkit's numbers, last completed window only)
 const viewOn = () => !!(S.view && S.view.kind !== 'move');
 const boardOn = () => viewOn() || S.persona === 'analyst' && S.tab === 'Board' && S.D && S.D.board && S.board.mode !== 'Momentum';
@@ -546,6 +670,7 @@ function paintShape(tm, sh) {
       g.setLineDash([6, 5]); g.strokeStyle = teamCol(tm); g.lineWidth = 1.5; g.beginPath(); g.moveTo(px(lx), py(0)); g.lineTo(px(lx), py(W)); g.stroke(); g.setLineDash([]);
       for (const [id, x, y] of sh.positions) {
         const [wx, wy] = toWorld(tm, x, y);
+        hitPt(px(wx), py(wy), `${pname(id)}\naverage position ${Math.round(x)} m from his own goal`);
         g.beginPath(); g.arc(px(wx), py(wy), 12, 0, 7); g.fillStyle = 'rgba(12,13,14,.75)'; g.fill(); g.lineWidth = 2.5; g.strokeStyle = teamCol(tm); g.stroke();
         g.fillStyle = '#f1f2f4'; g.font = '600 11px "Segoe UI", system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(num(id), px(wx), py(wy) + .5);
       }
@@ -560,11 +685,13 @@ function paintNetwork(tm, row) {
         const [ax, ay] = toWorld(tm, ...row.nodes[a]), [bx, by] = toWorld(tm, ...row.nodes[b]);
         g.globalAlpha = .25 + .75 * n / max; g.strokeStyle = teamCol(tm); g.lineWidth = 1 + 7 * n / max;
         g.beginPath(); g.moveTo(px(ax), py(ay)); g.lineTo(px(bx), py(by)); g.stroke();
+        hitSeg(px(ax), py(ay), px(bx), py(by), `${pname(a)} → ${pname(b)}\n${n} completed passes · click to watch them in turn`, () => nextPass(tm, a, b, row));
       }
       g.globalAlpha = 1;
       for (const [id, xy] of Object.entries(row.nodes)) {
         const [wx, wy] = toWorld(tm, ...xy);
         g.beginPath(); g.arc(px(wx), py(wy), 11, 0, 7); g.fillStyle = teamCol(tm); g.fill();
+        hitPt(px(wx), py(wy), `${pname(id)}\naverage position on the ball · ${row.links.reduce((s, l) => s + (l[0] === id || l[1] === id ? l[2] : 0), 0)} passes in his links`);
         g.fillStyle = '#0c0d0e'; g.font = '600 10px "Segoe UI", system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(num(id), px(wx), py(wy) + .5);
       }
   }
@@ -578,10 +705,11 @@ function drawBoard(t) {
   } else if (S.board.mode === 'Network') {
     paintNetwork(tm, lastWin(B.network[tm], B.net_window));
   } else if (S.board.mode === 'Press') {
-    for (const [rt, team, x, y] of B.regains) {
+    for (const [rt, team, x, y, by, how] of B.regains) {
       if (rt > t || rt < t - B.net_window || team !== tm) continue;
       g.globalAlpha = .35 + .65 * (1 - (t - rt) / B.net_window);
       g.beginPath(); g.arc(px(x), py(y), 6, 0, 7); g.fillStyle = teamCol(tm); g.fill(); g.strokeStyle = '#0c0d0e'; g.lineWidth = 1; g.stroke();
+      hitPt(px(x), py(y), `${clockAt(rt)} · ball won${by ? ` by ${pname(by)}` : ''}${how ? ` (${label(how).toLowerCase()})` : ''}\nclick to watch`, () => jumpTo(rt));
     }
   }
   g.restore();
@@ -771,7 +899,8 @@ function clipsView() {
       <div class="bar"><button class="btn" data-act="preview">Preview</button><button class="btn primary" data-act="export">Export JSON</button>
         ${c.custom ? '<button class="btn" data-act="delete">Delete</button>' : ''}<button class="btn" data-act="close">Close</button></div></div>` : '';
   const li = x => `<li><button data-clip="${esc(x.id)}" aria-current="${!!c && c.id === x.id}"><span>${esc(x.title)}</span><span class="dur">${(x.end - x.start).toFixed(0)} s</span></button></li>`;
-  return editor + (S.custom.length ? `<div class="label">Your clips</div><ul class="clips">${S.custom.map(li).join('')}</ul>` : '')
+  const bds = (S.D.breakdowns || []).map((b, i) => `<li><button data-bd="${i}"><span>${esc(b.title)}</span><span class="dur">${b.stops.length} stops</span></button></li>`).join('');
+  return editor + (bds ? `<div class="label">Breakdowns: the move paused and drawn on the pitch</div><ul class="clips">${bds}</ul>` : '') + (S.custom.length ? `<div class="label">Your clips</div><ul class="clips">${S.custom.map(li).join('')}</ul>` : '')
     + `<div class="label">Suggested by the newsroom (${S.D.clips.length})</div><ul class="clips">${S.D.clips.map(li).join('')}</ul>
     <div class="mono" style="margin-top:10px">Clips export as JSON: the events and tracking frames inside the range, ready for an overlay or edit tool.</div>
     <div class="label">Broadcast pack</div>
@@ -895,20 +1024,33 @@ $('tabs').onclick = e => { const b = e.target.closest('button'); if (b) { S.tab 
 $('match').onchange = e => load(e.target.value);
 $('play').onclick = () => setPlaying(!S.playing);
 $('next').onclick = () => { const e = S.D.events.find(e => e.t > S.t + 1 && KEY(e)); if (e) seek(e.t - 6); };
-$('seek').oninput = e => { S.reel = null; seek(+e.target.value); };
+$('seek').oninput = e => { S.reel = null; S.bd = null; seek(+e.target.value); };
+$('bd-next').onclick = bdNext;
+$('bd-exit').onclick = () => { S.bd = null; setPlaying(false); };
+const tipEl = $('pitch-tip');
+cv.addEventListener('mousemove', e => {
+  const h = hitAt(e);
+  tipEl.hidden = !h; cv.style.cursor = h && h.go ? 'pointer' : '';
+  if (!h) return;
+  const w = cv.parentElement.getBoundingClientRect();
+  tipEl.textContent = h.tip;
+  tipEl.style.left = Math.min(e.clientX - w.left + 14, w.width - tipEl.offsetWidth - 8) + 'px'; tipEl.style.top = (e.clientY - w.top + 14) + 'px';
+});
+cv.addEventListener('mouseleave', () => { tipEl.hidden = true; });
 $('reel').addEventListener('click', e => { if (e.target.id === 'hide-view') { S.view = null; render(true); } });
 document.addEventListener('keydown', e => {
   if (e.target.matches('input[type=text], select')) return;
   if (e.key === ' ') { e.preventDefault(); setPlaying(!S.playing); }
   if (e.key === 'n') $('next').click();
-  if (e.key === 'Escape') { S.view = null; S.reel = null; }
+  if (e.key === 'Escape') { S.view = null; S.reel = null; S.bd = null; }
   if (e.key === 'ArrowRight' && e.target.type !== 'range') seek(S.t + 5);
   if (e.key === 'ArrowLeft' && e.target.type !== 'range') seek(S.t - 5);
 });
 $('panel-body').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   const d = b.dataset;
-  if (d.seek) { seek(+d.seek); setPlaying(true); }
+  if (d.bd !== undefined) startBreakdown(S.D.breakdowns[+d.bd]);
+  else if (d.seek) { seek(+d.seek); setPlaying(true); }
   else if (d.player !== undefined) { S.player = d.player || null; S.group = 'All'; render(true); }
   else if (d.group) { S.group = d.group; render(true); }
   else if (d.clipEvent) clipFromEvent(d.clipEvent);
@@ -968,7 +1110,9 @@ $('panel-body').addEventListener('input', e => {
   if (e.target.id === 'ask-q') S.askDraft = e.target.value;
   if (e.target.id === 'clip-title') { S.clip.title = e.target.value; const s = S.custom.find(x => x.id === S.clip.id); if (s) { s.title = e.target.value; saveCustom(); } }
 });
-cv.addEventListener('click', e => {  // scout: click a player on the pitch to open his actions
+cv.addEventListener('click', e => {  // a drawn event or link jumps to it; otherwise click a player on the pitch to open his actions
+  const h = hitAt(e);
+  if (h && h.go) return h.go();
   if (!TABS[S.persona].includes('Players')) return;
   const r = cv.getBoundingClientRect(), mx = (e.clientX - r.left) * cv.width / r.width, my = (e.clientY - r.top) * cv.height / r.height, f = frame(S.t);
   let best = -1, bd = 16;
