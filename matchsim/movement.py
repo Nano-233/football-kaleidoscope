@@ -709,7 +709,13 @@ def team_targets(m, t):
             d[role == GK] = 1e9
             n = 1 + (tc.press > .8)
             gap = (2.4 + 1.4 * (1 - tc.press) + .15 * cs) * TP.get("jock_k", 1.)
-            tgt1 = C + _unit(gv + FORCE_WIDE * inside) * (gap * (TP.get("shot_gap", .7) if float(nrm(C - GOAL)) < TP.get("shoot_close", 28.) else 1.)) + Cv * .2
+            gap *= TP.get("shot_gap", .7) if float(nrm(C - GOAL)) < TP.get("shoot_close", 28.) else 1.
+            tgt1 = C + _unit(gv + FORCE_WIDE * inside) * gap + Cv * .2
+            if TP.get("hold_d", 17.) > 0:  # he does not back off into his own box: at its edge he stands, and the carrier has to beat him or pass
+                rg = float(nrm(tgt1 - GOAL))
+                rh = min(TP.get("hold_d", 17.), float(nrm(C - GOAL)) - .7)
+                if rg < rh:
+                    tgt1 = GOAL + _unit(tgt1 - GOAL) * rh
             in_range = float(nrm(C - GOAL)) < TP.get("shoot_close", 28.)  # the carrier can shoot: the nearest man, whatever his role, gets tight and stands in the shot lane
             if in_range:
                 R = max(R, 12.)

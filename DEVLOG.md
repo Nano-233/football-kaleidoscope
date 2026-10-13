@@ -999,6 +999,14 @@ Then: a defender's reach for a passing ball grows with the time he has to read i
 reaches the good shooting spots (per team-match, sim | real): forward pass 1.44 | 0.52 (was 1.83), carried in 1.21 | 0.33 (was 0.79),
 won in the zone 1.21 | 0.28, a defender's error 0.42 | 0.02, cutback 0.15 | 0.45; all 5.6 | 2.5.
 
+### Carries into the box (2026-10-13)
+`scripts/zone_carries.py`: carries that end in the good shooting spots, 1.0 vs 0.38 per team-match; real carriers there mostly have a
+man within 2 m as they set off (0.52 vs 0.21) and go 2-5 m, sim carriers have 2-4 m of room and go 5-10 m. The presser's spot is a
+jockeying gap goal-side of the carrier, so as the carrier comes on he backs off with him, into his own box. Now he holds the edge of
+the box (`hold_d` 17 m): he does not retreat inside it unless the carrier is already there. Loss 161.9 -> 154.3, shots 16.1 (noise;
+the carries into the zone did not fall measurably). Tried with it: the jockeying gap shrinking to arm's length near goal like the
+marking gap: carries 0.79, but shots 17.0 and loss 165.2; not kept.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
