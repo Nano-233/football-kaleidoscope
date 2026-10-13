@@ -6,7 +6,7 @@
   "home_code": "HAR",
   "away_code": "STB",
   "score": [
-   5,
+   3,
    3
   ]
  },
@@ -17,8 +17,8 @@
   "home_code": "RED",
   "away_code": "ASH",
   "score": [
-   4,
-   0
+   6,
+   3
   ]
  },
  {
@@ -28,7 +28,7 @@
   "home_code": "WMW",
   "away_code": "OAK",
   "score": [
-   2,
+   3,
    1
   ]
  },
@@ -39,8 +39,8 @@
   "home_code": "KES",
   "away_code": "NBR",
   "score": [
-   1,
-   2
+   2,
+   1
   ]
  },
  {
@@ -50,8 +50,8 @@
   "home_code": "KES",
   "away_code": "NBR",
   "score": [
-   2,
-   1
+   3,
+   2
   ]
  }
 ]
