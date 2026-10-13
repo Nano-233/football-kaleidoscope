@@ -51,8 +51,27 @@ function loadProfile() {
 // published lines in the reader's language: fetched in small batches from the localizer, the original shown until it arrives
 const TR = {}, trQueue = new Set();
 let trTimer = null;
+// units: every number with a unit is shown in the reader's choice; published text is converted before it is translated
+const UNITS = { len: { m: [1, 'm'], yd: [1.09361, 'yd'], ft: [3.28084, 'ft'] }, spd: { kmh: [1, 'km/h'], mph: [.621371, 'mph'], ms: [1 / 3.6, 'm/s'] }, dist: { km: [1, 'km'], mi: [.621371, 'mi'] } };
+const units = () => { const [len, spd, dist] = (S.profile.units || 'm,kmh,km').split(','); return { len, spd, dist }; };
+function conv(kind, v, dp = 0) {
+  if (v == null) return '–';
+  const [f, u] = UNITS[kind][units()[kind]] || UNITS[kind][Object.keys(UNITS[kind])[0]];
+  return `${(v * f).toFixed(dp)} ${u}`;
+}
+function unitsText(s) {
+  if (!s || (S.profile.units || 'm,kmh,km') === 'm,kmh,km') return s;
+  return s.replace(/(\d+(?:\.\d+)?)\s?(km\/h|kph|m\/s|km|metres|meters|metre|meter|m)\b/g, (all, n, w) => {
+    const dp = (n.split('.')[1] || '').length;
+    if (w === 'km/h' || w === 'kph') return conv('spd', +n, dp);
+    if (w === 'm/s') return conv('spd', +n * 3.6, dp);
+    if (w === 'km') return conv('dist', +n, Math.max(dp, 1));
+    return conv('len', +n, dp);
+  });
+}
 function tr(text) {
   const lang = S.profile.language;
+  text = unitsText(text);
   if (!text || lang === 'English') return text;
   const hit = (TR[lang] || {})[text];
   if (hit) return hit;
@@ -299,7 +318,7 @@ function render(force) {
 }
 
 const VIEWS = {
-  Live: () => feedView('fan'),
+  Live: () => liveStrip() + feedView('fan'),
   Feed: () => feedView('analyst'),
   Stats: () => S.persona === 'fan' ? compareView() : tableView(),
   Players: () => S.player ? playerView() : squadView(),
@@ -404,6 +423,9 @@ function evalBlock() {
   return `<div class="label">Newsroom answers scored against the truth</div>
     <table class="stats"><tbody>${Object.entries(e.accuracy).map(([k, v]) => `<tr><td>${name[k] || k}</td><td>${Math.round(v * 100)}%</td></tr>`).join('')}
       <tr><td><b>All ${e.answers} answers, ${e.matches} matches</b></td><td class="lead">${Math.round(e.overall * 100)}%</td></tr>
+      ${e.changes && e.changes.true ? `<tr><td>System changes found (formation and minute)</td><td>${e.changes.found} of ${e.changes.true}</td></tr>
+      <tr><td>…with the manager's real reason</td><td>${e.changes.reasons_right} of ${e.changes.found}</td></tr>
+      <tr><td>…minute off by, on average</td><td>${e.changes.mean_minute_error}</td></tr>` : ''}
       <tr><td>Approved by the fact-checker</td><td>${Math.round(e.approved * 100)}%</td></tr>
       <tr><td>Tool calls · seconds per answer</td><td>${e.avg_tool_calls} · ${e.avg_seconds}</td></tr></tbody></table>
     <div class="mono" style="margin-top:6px">The engine records what really happened, so every answer can be marked (scripts/eval_newsroom.py).</div>`;
@@ -508,7 +530,7 @@ function profileBlocks(pid, p) {
   const vs = Object.entries(pr.per90_vs_role || {}).filter(([, v]) => v.role_avg > .3).map(([k, v]) => [k, v.him, v.role_avg, (v.him - v.role_avg) / v.role_avg])
     .sort((a, b) => Math.abs(b[3]) - Math.abs(a[3])).slice(0, 6);
   const reels = S.persona === 'scout' ? Object.keys(REELS).filter(r => r !== 'Highlights') : ['Shots', 'Chances created', 'Duels won'];
-  return `<div class="label">Physical</div><div class="kv"><div><b>${ph.distance_km ?? '–'} km</b><span>Distance</span></div><div><b>${ph.sprints ?? '–'}</b><span>Sprints</span></div><div><b>${ph.top_speed_kmh ?? '–'}</b><span>Top speed km/h</span></div></div>
+  return `<div class="label">Physical</div><div class="kv"><div><b>${conv('dist', ph.distance_km, 1)}</b><span>Distance</span></div><div><b>${ph.sprints ?? '–'}</b><span>Sprints</span></div><div><b>${conv('spd', ph.top_speed_kmh, 1)}</b><span>Top speed</span></div></div>
     ${pr.heat_map_6x4 ? `<div class="label">Where he played</div>${heatSvg(pr.heat_map_6x4, team)}` : ''}
     ${terms.length ? `<div class="label">What made his rating</div><table class="stats"><tbody>${terms.map(([k, v]) => `<tr><td>${TERM_LABEL[k] || k}</td>
       <td style="width:45%"><span class="termbar ${v < 0 ? 'neg' : ''}" style="width:${Math.round(Math.abs(v) / mt * 100)}%"></span></td><td class="${v >= 0 ? 'lead' : ''}">${v > 0 ? '+' : ''}${v.toFixed(2)}</td></tr>`).join('')}</tbody></table>` : ''}
@@ -670,7 +692,7 @@ function paintShape(tm, sh) {
       g.setLineDash([6, 5]); g.strokeStyle = teamCol(tm); g.lineWidth = 1.5; g.beginPath(); g.moveTo(px(lx), py(0)); g.lineTo(px(lx), py(W)); g.stroke(); g.setLineDash([]);
       for (const [id, x, y] of sh.positions) {
         const [wx, wy] = toWorld(tm, x, y);
-        hitPt(px(wx), py(wy), `${pname(id)}\naverage position ${Math.round(x)} m from his own goal`);
+        hitPt(px(wx), py(wy), `${pname(id)}\naverage position ${conv('len', x)} from his own goal`);
         g.beginPath(); g.arc(px(wx), py(wy), 12, 0, 7); g.fillStyle = 'rgba(12,13,14,.75)'; g.fill(); g.lineWidth = 2.5; g.strokeStyle = teamCol(tm); g.stroke();
         g.fillStyle = '#f1f2f4'; g.font = '600 11px "Segoe UI", system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(num(id), px(wx), py(wy) + .5);
       }
@@ -715,18 +737,22 @@ function drawBoard(t) {
   g.restore();
 }
 
-function momentumSvg() {
-  const M = S.D.board.momentum, n = Math.max(1, Math.floor(S.t / M.window_s)), rows = M.series.slice(0, n), w = 368, h = 150, mid = 70;
-  const mx = Math.max(.3, ...rows.flatMap(r => r.xg)), bw = w / Math.max(rows.length, 18);
-  const bars = rows.map((r, i) => `<rect x="${i * bw + 1}" y="${mid - r.xg[0] / mx * 60}" width="${bw - 2}" height="${r.xg[0] / mx * 60}" fill="var(--home)"/>
-    <rect x="${i * bw + 1}" y="${mid}" width="${bw - 2}" height="${r.xg[1] / mx * 60}" fill="var(--away)"/>`).join('');
-  const tilt = rows.map((r, i) => `${i * bw + bw / 2},${mid - (r.field_tilt_home - .5) * 120}`).join(' ');
+function momentumSvg(h = 150) {
+  const M = S.D.board.momentum, n = Math.max(1, Math.floor(S.t / M.window_s)), rows = M.series.slice(0, n), w = 368, mid = h / 2 - 5;
+  const mx = Math.max(.3, ...rows.flatMap(r => r.xg)), bw = w / Math.max(rows.length, 18), bh = mid - 10;
+  const bars = rows.map((r, i) => `<rect x="${i * bw + 1}" y="${mid - r.xg[0] / mx * bh}" width="${bw - 2}" height="${r.xg[0] / mx * bh}" fill="var(--home)"/>
+    <rect x="${i * bw + 1}" y="${mid}" width="${bw - 2}" height="${r.xg[1] / mx * bh}" fill="var(--away)"/>`).join('');
+  const tilt = rows.map((r, i) => `${i * bw + bw / 2},${mid - (r.field_tilt_home - .5) * 2 * bh}`).join(' ');
   return `<svg viewBox="0 0 ${w} ${h}" width="100%" role="img" aria-label="xG by five minutes for both teams, with field tilt">
     <line x1="0" x2="${w}" y1="${mid}" y2="${mid}" stroke="var(--line-strong)"/>${bars}
     <polyline points="${tilt}" fill="none" stroke="var(--accent)" stroke-width="2"/>
     <text x="0" y="12" fill="var(--text-3)" font-size="10">${esc(S.D.meta.home.code)} xG ↑</text><text x="0" y="${h - 4}" fill="var(--text-3)" font-size="10">${esc(S.D.meta.away.code)} xG ↓ · line: field tilt</text></svg>`;
 }
 
+function liveStrip() {  // the fan's glance at the game: who is on top, five minutes at a time, and the chances now
+  if (!S.D.board || S.t < 300) return '';
+  return `${winBar()}<div class="label" style="margin-top:10px">Momentum · xG by five minutes</div>${momentumSvg(90)}`;
+}
 function winSvg() {
   const W_ = S.D.board.winprob, n = Math.max(1, Math.floor(S.t / 60) + 1), rows = W_.series.slice(0, n), w = 368, h = 110, dx = w / Math.max(W_.series.length - 1, 1);
   const line = k => rows.map((r, i) => `${(i * dx).toFixed(1)},${(h - r[k] * h).toFixed(1)}`).join(' ');
@@ -745,7 +771,7 @@ function boardView() {
     const row = lastWin(B.shape[b.team], B.shape_window), sh = row && row[b.phase];
     body = !row ? '<div class="empty">The first five minutes are not over yet.</div>' : !sh ? '<div class="empty">Too little of that phase in this window.</div>' :
       `<div class="label">${esc(M[b.team ? 'away' : 'home'].name)} · ${clockAt(row.t0)}–${clockAt(row.t1)} · ${b.phase === 'in_possession' ? 'with the ball' : 'without the ball'}</div>
-       <div class="kv"><div><b>${esc(sh.formation)}</b><span>Shape</span></div><div><b>${sh.line} m</b><span>Defensive line</span></div><div><b>${sh.length} × ${sh.width} m</b><span>Block</span></div></div>
+       <div class="kv"><div><b>${esc(sh.formation)}</b><span>Shape</span></div><div><b>${conv('len', sh.line)}</b><span>Defensive line</span></div><div><b>${conv('len', sh.length).split(' ')[0]} × ${conv('len', sh.width)}</b><span>Block</span></div></div>
        <div class="mono" style="margin-top:8px">Average positions over the last completed five minutes; the dashed line is the defensive line. The two phases are read separately: a team can line up one way with the ball and another without it.</div>`;
   } else if (b.mode === 'Network') {
     const row = lastWin(B.network[b.team], B.net_window);
@@ -756,7 +782,7 @@ function boardView() {
   } else if (b.mode === 'Press') {
     const rows = B.pressing[b.team], cur = Math.floor(S.t / B.net_window);
     body = `<div class="label">${esc(M[b.team ? 'away' : 'home'].name)} · pressing by 15 minutes</div>
-      <table class="stats"><thead><tr><th>Window</th><th>PPDA</th><th>Height</th><th>Counter-press</th></tr></thead><tbody>${rows.slice(0, cur).map(r => `<tr><td>${esc(r.window.join('–'))}</td><td>${r.ppda ?? '–'}</td><td>${r.action_height_m ?? '–'} m</td><td>${r.counterpress_wins}</td></tr>`).join('') || '<tr><td colspan="4">First window not over yet.</td></tr>'}</tbody></table>
+      <table class="stats"><thead><tr><th>Window</th><th>PPDA</th><th>Height</th><th>Counter-press</th></tr></thead><tbody>${rows.slice(0, cur).map(r => `<tr><td>${esc(r.window.join('–'))}</td><td>${r.ppda ?? '–'}</td><td>${conv('len', r.action_height_m)}</td><td>${r.counterpress_wins}</td></tr>`).join('') || '<tr><td colspan="4">First window not over yet.</td></tr>'}</tbody></table>
       <div class="mono" style="margin-top:8px">PPDA: opponent passes per defensive action in their build-up (lower = harder press). Dots on the pitch: where the ball was won in the last fifteen minutes.</div>`;
   } else {
     const sp = B.momentum.dominant_spells.filter(x => x.end_t <= S.t);
@@ -862,7 +888,7 @@ async function askNewsroom(q) {
   S.asks.push(a); S.askDraft = ''; S.askVer++; render(true);
   try {
     const res = await fetch('api/ask?stream=1', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ match: S.id, question: q, t: Math.max(60, S.t), profile: { persona: S.persona, depth: P.depth, language: P.language, club: P.club, player: P.player } }) });
+      body: JSON.stringify({ match: S.id, question: q, t: Math.max(60, S.t), profile: { persona: S.persona, depth: P.depth, language: P.language, club: P.club, player: P.player, units: P.units } }) });
     if (!res.ok) throw new Error(res.status === 404 || res.status === 405 || res.status === 501 ? NO_SERVER : `The newsroom could not answer (${res.status}).`);
     // server-sent events: each step of the newsroom as it happens, then the answer
     const reader = res.body.getReader(), dec = new TextDecoder();
@@ -1102,6 +1128,15 @@ $('panel-body').addEventListener('change', e => {
 });
 $('panel-body').addEventListener('keydown', e => { if (e.target.id === 'ask-q' && e.key === 'Enter') askNewsroom(e.target.value); });
 $('club').onchange = e => { S.profile.club = e.target.value; saveProfile(); };
+function setUnits(u) {
+  S.profile.units = u; saveProfile();
+  const [len, spd, dist] = u.split(','); $('u-len').value = len; $('u-spd').value = spd; $('u-dist').value = dist;
+  for (const b of $('u-preset').children) b.setAttribute('aria-selected', b.dataset.u === u);
+  $('lt-line').dataset.id = ''; render(true);
+}
+$('u-preset').onclick = e => { const b = e.target.closest('button'); if (b) setUnits(b.dataset.u); };
+for (const id of ['u-len', 'u-spd', 'u-dist']) $(id).onchange = () => setUnits([$('u-len').value, $('u-spd').value, $('u-dist').value].join(','));
+setUnits(S.profile.units || 'm,kmh,km');
 $('voice').onclick = () => { voiceOn = !voiceOn; $('voice').setAttribute('aria-pressed', String(voiceOn)); if (!voiceOn && speaking) speaking.pause(); toast(voiceOn ? 'Commentary will be read out as the lines appear.' : 'Voice off.'); };
 $('lang').innerHTML = LANGS.map(l => `<option${l === S.profile.language ? ' selected' : ''}>${l}</option>`).join('');
 $('lang').onchange = e => { S.profile.language = e.target.value; saveProfile(); $('lt-line').dataset.id = ''; render(true); };

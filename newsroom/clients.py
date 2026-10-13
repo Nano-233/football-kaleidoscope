@@ -6,7 +6,9 @@
 The scripted client answers from the FACTS block in the prompt with templates, so the whole pipeline (agents, workflow, fact-check,
 feed) runs and is testable with no credentials. It is a stand-in for the model, not a second implementation of the agents.
 """
+import functools
 import json
+import logging
 import os
 import re
 
@@ -19,8 +21,43 @@ def make_client():
     if os.environ.get("FOUNDRY_PROJECT_ENDPOINT"):
         from agent_framework_foundry import FoundryChatClient
         from azure.identity import DefaultAzureCredential
-        return FoundryChatClient(project_endpoint=os.environ["FOUNDRY_PROJECT_ENDPOINT"], model=os.environ.get("FOUNDRY_MODEL", "gpt-4.1-mini"), credential=DefaultAzureCredential())
+        cred = DefaultAzureCredential()
+        _tracing(cred)
+        client = FoundryChatClient(project_endpoint=os.environ["FOUNDRY_PROJECT_ENDPOINT"], model=os.environ.get("FOUNDRY_MODEL", "gpt-4.1-mini"), credential=cred)
+        client.client = client.client.with_options(timeout=45., max_retries=3)  # one stalled call (seen: 103 s) is retried, not waited out
+        return client
     return ScriptedClient()
+
+
+@functools.cache
+def _tracing(cred):
+    """Send Agent Framework's traces (each agent run, model call and tool call) to the Application Insights connected to the Foundry
+    project, where the portal's Tracing page shows them. Once per process; prompts and replies are not recorded. Off with TRACING=0."""
+    if os.environ.get("TRACING") == "0":
+        return
+    try:
+        from azure.ai.projects import AIProjectClient
+        from azure.monitor.opentelemetry import configure_azure_monitor
+        from agent_framework.observability import create_metric_views, create_resource, enable_instrumentation
+        cs = os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING") or AIProjectClient(endpoint=os.environ["FOUNDRY_PROJECT_ENDPOINT"], credential=cred).telemetry.get_application_insights_connection_string()
+        configure_azure_monitor(connection_string=cs, views=create_metric_views(), resource=create_resource(service_name="matchday-newsroom"))
+        enable_instrumentation(enable_sensitive_data=False)
+    except Exception as ex:  # no Application Insights on the project, or the package is missing: run without traces
+        logging.getLogger(__name__).warning("tracing off: %s", ex)
+
+
+def traced(name):
+    """One span around a newsroom job (a question, a moment), so its agent runs and tool calls sit under one trace."""
+    from opentelemetry import trace
+    tracer = trace.get_tracer("matchday-newsroom")
+
+    def deco(fn):
+        @functools.wraps(fn)
+        async def wrap(*a, **kw):
+            with tracer.start_as_current_span(name):
+                return await fn(*a, **kw)
+        return wrap
+    return deco
 
 
 def _facts(messages):

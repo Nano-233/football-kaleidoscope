@@ -1,17 +1,23 @@
 {
  "summary": {
-  "matches": 4,
-  "answers": 20,
+  "matches": 5,
+  "answers": 25,
   "accuracy": {
    "best": 1.0,
-   "formation": 0.88,
+   "formation": 0.6,
    "goals": 1.0,
-   "pressing": 1.0
+   "pressing": 0.8
   },
-  "overall": 0.95,
-  "approved": 0.95,
-  "avg_tool_calls": 4.0,
-  "avg_seconds": 26.2
+  "overall": 0.8,
+  "approved": 1.0,
+  "changes": {
+   "true": 14,
+   "found": 8,
+   "reasons_right": 4,
+   "mean_minute_error": 4.6
+  },
+  "avg_tool_calls": 3.7,
+  "avg_seconds": 49.5
  },
  "matches": [
   {
@@ -19,29 +25,41 @@
    "rows": [
     {
      "kind": "formation",
-     "question": "What system did Kestrel United start the match in, and did they change their system during it? When, and to what?",
-     "approved": false,
+     "question": "What system did Kestrel United start the match in, and did they change their system during it? When, to what, and why?",
+     "approved": true,
      "rewrites": 2,
-     "tool_calls": 2,
-     "seconds": 46.1,
-     "correct": true,
+     "tool_calls": 3,
+     "seconds": 31.5,
+     "correct": false,
      "detail": {
       "starting_named": true,
-      "changes_found": "1/1"
-     }
+      "changes_found": "1/3"
+     },
+     "changes": 3,
+     "found": 1,
+     "reasons_right": 0,
+     "minute_errors": [
+      4
+     ]
     },
     {
      "kind": "formation",
-     "question": "What system did Northbridge Rovers start the match in, and did they change their system during it? When, and to what?",
+     "question": "What system did Northbridge Rovers start the match in, and did they change their system during it? When, to what, and why?",
      "approved": true,
      "rewrites": 0,
-     "tool_calls": 2,
-     "seconds": 18.6,
+     "tool_calls": 3,
+     "seconds": 18.8,
      "correct": true,
      "detail": {
       "starting_named": true,
       "changes_found": "1/1"
-     }
+     },
+     "changes": 1,
+     "found": 1,
+     "reasons_right": 1,
+     "minute_errors": [
+      1
+     ]
     },
     {
      "kind": "goals",
@@ -49,7 +67,7 @@
      "approved": true,
      "rewrites": 0,
      "tool_calls": 1,
-     "seconds": 6.2,
+     "seconds": 50.8,
      "correct": true,
      "detail": "3/3 goals with scorer and minute"
     },
@@ -59,9 +77,9 @@
      "approved": true,
      "rewrites": 0,
      "tool_calls": 3,
-     "seconds": 9.3,
+     "seconds": 16.2,
      "correct": true,
-     "detail": "truth Velrio Duranton (8.3)"
+     "detail": "truth Paar Lundova (8.5)"
     },
     {
      "kind": "pressing",
@@ -69,7 +87,7 @@
      "approved": true,
      "rewrites": 0,
      "tool_calls": 3,
-     "seconds": 16.4,
+     "seconds": 21.7,
      "correct": true,
      "detail": "truth Kestrel United"
     }
@@ -80,29 +98,39 @@
    "rows": [
     {
      "kind": "formation",
-     "question": "What system did Kestrel United start the match in, and did they change their system during it? When, and to what?",
+     "question": "What system did Kestrel United start the match in, and did they change their system during it? When, to what, and why?",
      "approved": true,
      "rewrites": 0,
-     "tool_calls": 2,
-     "seconds": 25.0,
-     "correct": true,
-     "detail": {
-      "starting_named": true,
-      "changes_found": "1/1"
-     }
-    },
-    {
-     "kind": "formation",
-     "question": "What system did Northbridge Rovers start the match in, and did they change their system during it? When, and to what?",
-     "approved": true,
-     "rewrites": 0,
-     "tool_calls": 5,
-     "seconds": 90.5,
+     "tool_calls": 3,
+     "seconds": 24.5,
      "correct": false,
      "detail": {
       "starting_named": true,
-      "changes_found": "1/2"
-     }
+      "changes_found": "0/1"
+     },
+     "changes": 1,
+     "found": 0,
+     "reasons_right": 0,
+     "minute_errors": []
+    },
+    {
+     "kind": "formation",
+     "question": "What system did Northbridge Rovers start the match in, and did they change their system during it? When, to what, and why?",
+     "approved": true,
+     "rewrites": 0,
+     "tool_calls": 24,
+     "seconds": 64.6,
+     "correct": true,
+     "detail": {
+      "starting_named": true,
+      "changes_found": "1/1"
+     },
+     "changes": 1,
+     "found": 1,
+     "reasons_right": 0,
+     "minute_errors": [
+      8
+     ]
     },
     {
      "kind": "goals",
@@ -110,9 +138,9 @@
      "approved": true,
      "rewrites": 0,
      "tool_calls": 1,
-     "seconds": 5.4,
+     "seconds": 16.0,
      "correct": true,
-     "detail": "3/3 goals with scorer and minute"
+     "detail": "5/5 goals with scorer and minute"
     },
     {
      "kind": "best",
@@ -120,9 +148,9 @@
      "approved": true,
      "rewrites": 0,
      "tool_calls": 3,
-     "seconds": 10.1,
+     "seconds": 113.0,
      "correct": true,
-     "detail": "truth Nodek Tammer (8.0)"
+     "detail": "truth Morvik Kovacini (8.7)"
     },
     {
      "kind": "pressing",
@@ -130,40 +158,52 @@
      "approved": true,
      "rewrites": 0,
      "tool_calls": 3,
-     "seconds": 30.2,
+     "seconds": 623.6,
      "correct": true,
      "detail": "truth Kestrel United"
     }
    ]
   },
   {
-   "match": "match_31",
+   "match": "RED-ASH",
    "rows": [
     {
      "kind": "formation",
-     "question": "What system did Kestrel United start the match in, and did they change their system during it? When, and to what?",
+     "question": "What system did Redmere City start the match in, and did they change their system during it? When, to what, and why?",
      "approved": true,
      "rewrites": 0,
-     "tool_calls": 15,
-     "seconds": 65.8,
+     "tool_calls": 3,
+     "seconds": 22.5,
      "correct": true,
      "detail": {
       "starting_named": true,
       "changes_found": "1/1"
-     }
+     },
+     "changes": 1,
+     "found": 1,
+     "reasons_right": 1,
+     "minute_errors": [
+      8
+     ]
     },
     {
      "kind": "formation",
-     "question": "What system did Northbridge Rovers start the match in, and did they change their system during it? When, and to what?",
+     "question": "What system did Ashmere Town start the match in, and did they change their system during it? When, to what, and why?",
      "approved": true,
      "rewrites": 0,
-     "tool_calls": 2,
-     "seconds": 24.7,
+     "tool_calls": 3,
+     "seconds": 23.5,
      "correct": true,
      "detail": {
       "starting_named": true,
       "changes_found": "1/1"
-     }
+     },
+     "changes": 1,
+     "found": 1,
+     "reasons_right": 1,
+     "minute_errors": [
+      10
+     ]
     },
     {
      "kind": "goals",
@@ -171,9 +211,9 @@
      "approved": true,
      "rewrites": 0,
      "tool_calls": 1,
-     "seconds": 7.5,
+     "seconds": 18.9,
      "correct": true,
-     "detail": "3/3 goals with scorer and minute"
+     "detail": "9/9 goals with scorer and minute"
     },
     {
      "kind": "best",
@@ -181,60 +221,73 @@
      "approved": true,
      "rewrites": 0,
      "tool_calls": 3,
+     "seconds": 12.4,
+     "correct": true,
+     "detail": "truth Lumik Wolfeton (10.0)"
+    },
+    {
+     "kind": "pressing",
+     "question": "Which team pressed harder over the whole match?",
+     "approved": true,
+     "rewrites": 0,
+     "tool_calls": 3,
+     "seconds": 18.9,
+     "correct": true,
+     "detail": "truth Redmere City"
+    }
+   ]
+  },
+  {
+   "match": "HAR-STB",
+   "rows": [
+    {
+     "kind": "formation",
+     "question": "What system did Harlow Athletic start the match in, and did they change their system during it? When, to what, and why?",
+     "approved": true,
+     "rewrites": 0,
+     "tool_calls": 10,
+     "seconds": 23.4,
+     "correct": true,
+     "detail": {
+      "starting_named": true,
+      "changes_found": "1/1"
+     },
+     "changes": 1,
+     "found": 1,
+     "reasons_right": 1,
+     "minute_errors": [
+      1
+     ]
+    },
+    {
+     "kind": "formation",
+     "question": "What system did Stonebay Albion start the match in, and did they change their system during it? When, to what, and why?",
+     "approved": true,
+     "rewrites": 0,
+     "tool_calls": 3,
+     "seconds": 19.0,
+     "correct": true,
+     "detail": {
+      "starting_named": true,
+      "changes_found": "2/2"
+     },
+     "changes": 2,
+     "found": 2,
+     "reasons_right": 0,
+     "minute_errors": [
+      2,
+      3
+     ]
+    },
+    {
+     "kind": "goals",
+     "question": "Who scored the goals in this match, and at which minutes?",
+     "approved": true,
+     "rewrites": 0,
+     "tool_calls": 1,
      "seconds": 9.1,
      "correct": true,
-     "detail": "truth Rivar Reyes (8.0)"
-    },
-    {
-     "kind": "pressing",
-     "question": "Which team pressed harder over the whole match?",
-     "approved": true,
-     "rewrites": 0,
-     "tool_calls": 3,
-     "seconds": 37.9,
-     "correct": true,
-     "detail": "truth Kestrel United"
-    }
-   ]
-  },
-  {
-   "match": "match_32",
-   "rows": [
-    {
-     "kind": "formation",
-     "question": "What system did Kestrel United start the match in, and did they change their system during it? When, and to what?",
-     "approved": true,
-     "rewrites": 0,
-     "tool_calls": 2,
-     "seconds": 34.4,
-     "correct": true,
-     "detail": {
-      "starting_named": true,
-      "changes_found": "1/1"
-     }
-    },
-    {
-     "kind": "formation",
-     "question": "What system did Northbridge Rovers start the match in, and did they change their system during it? When, and to what?",
-     "approved": true,
-     "rewrites": 1,
-     "tool_calls": 8,
-     "seconds": 24.0,
-     "correct": true,
-     "detail": {
-      "starting_named": true,
-      "changes_found": "1/1"
-     }
-    },
-    {
-     "kind": "goals",
-     "question": "Who scored the goals in this match, and at which minutes?",
-     "approved": true,
-     "rewrites": 0,
-     "tool_calls": 1,
-     "seconds": 6.3,
-     "correct": true,
-     "detail": "0/0 goals with scorer and minute"
+     "detail": "6/6 goals with scorer and minute"
     },
     {
      "kind": "best",
@@ -242,19 +295,88 @@
      "approved": true,
      "rewrites": 0,
      "tool_calls": 3,
-     "seconds": 8.9,
+     "seconds": 10.2,
      "correct": true,
-     "detail": "truth Mormay Mercerley (8.5)"
+     "detail": "truth Wirin Warder (9.9)"
     },
     {
      "kind": "pressing",
      "question": "Which team pressed harder over the whole match?",
      "approved": true,
      "rewrites": 0,
-     "tool_calls": 17,
-     "seconds": 47.0,
+     "tool_calls": 3,
+     "seconds": 21.3,
+     "correct": false,
+     "detail": "truth Harlow Athletic"
+    }
+   ]
+  },
+  {
+   "match": "WMW-OAK",
+   "rows": [
+    {
+     "kind": "formation",
+     "question": "What system did Westmoor Wanderers start the match in, and did they change their system during it? When, to what, and why?",
+     "approved": true,
+     "rewrites": 0,
+     "tool_calls": 3,
+     "seconds": 19.7,
+     "correct": false,
+     "detail": {
+      "starting_named": true,
+      "changes_found": "0/1"
+     },
+     "changes": 1,
+     "found": 0,
+     "reasons_right": 0,
+     "minute_errors": []
+    },
+    {
+     "kind": "formation",
+     "question": "What system did Oakhaven FC start the match in, and did they change their system during it? When, to what, and why?",
+     "approved": true,
+     "rewrites": 0,
+     "tool_calls": 3,
+     "seconds": 18.6,
+     "correct": false,
+     "detail": {
+      "starting_named": true,
+      "changes_found": "0/2"
+     },
+     "changes": 2,
+     "found": 0,
+     "reasons_right": 0,
+     "minute_errors": []
+    },
+    {
+     "kind": "goals",
+     "question": "Who scored the goals in this match, and at which minutes?",
+     "approved": true,
+     "rewrites": 0,
+     "tool_calls": 1,
+     "seconds": 8.6,
      "correct": true,
-     "detail": "truth Kestrel United"
+     "detail": "4/4 goals with scorer and minute"
+    },
+    {
+     "kind": "best",
+     "question": "Who was the best player in this match by rating?",
+     "approved": true,
+     "rewrites": 0,
+     "tool_calls": 3,
+     "seconds": 10.7,
+     "correct": true,
+     "detail": "truth Kelran Vossova (8.2)"
+    },
+    {
+     "kind": "pressing",
+     "question": "Which team pressed harder over the whole match?",
+     "approved": true,
+     "rewrites": 0,
+     "tool_calls": 3,
+     "seconds": 19.4,
+     "correct": true,
+     "detail": "truth Westmoor Wanderers"
     }
    ]
   }

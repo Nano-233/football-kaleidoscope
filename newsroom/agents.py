@@ -16,6 +16,7 @@ import re
 
 from agent_framework import Agent
 
+from newsroom.clients import traced
 from newsroom.moments import template_line
 
 PERSONAS = {
@@ -112,6 +113,7 @@ def _verdict(text):
     return v if isinstance(v, dict) and "approved" in v else {"approved": False, "issues": ["checker reply was not JSON"]}
 
 
+@traced("newsroom.cover_moment")
 async def cover(client, pack, persona="veteran"):
     """One moment through the newsroom. Returns the published item with every agent's contribution kept for the audit trail."""
     stats, tactics, commentator, checker = build(client, persona)

@@ -28,6 +28,17 @@ $scope = az cognitiveservices account show -n $Account -g $Rg --query id -o tsv;
 # "Foundry User" (formerly "Azure AI User") covers the Responses API and agents; the OpenAI role alone only covers chat completions.
 foreach ($role in "Foundry User") { az role assignment create --assignee-object-id $me --assignee-principal-type User --role $role --scope $scope -o none; Ok }
 
+# Tracing: Application Insights (on a Log Analytics workspace), connected to the project so the Foundry portal's Tracing page shows
+# every agent run, model call and tool call (the app sends them through FoundryChatClient.configure_azure_monitor).
+foreach ($ns in "Microsoft.OperationalInsights", "Microsoft.Insights") { az provider register --namespace $ns --wait; Ok }
+az config set extension.use_dynamic_install=yes_without_prompt -o none 2>$null
+$ws = az monitor log-analytics workspace create -g $Rg -n "$Account-logs" -l $Location --query id -o tsv; Ok
+$ai = az monitor app-insights component create -g $Rg --app "$Account-insights" -l $Location --workspace $ws --query "{id:id,cs:connectionString}" -o json | ConvertFrom-Json; Ok
+$body = @{ properties = @{ category = "AppInsights"; target = $ai.id; authType = "ApiKey"; isSharedToAll = $false; credentials = @{ key = $ai.cs }; metadata = @{ ApiType = "Azure"; ResourceId = $ai.id } } } | ConvertTo-Json -Depth 5 -Compress
+$tmp = New-TemporaryFile; Set-Content $tmp $body -Encoding ascii
+az rest --method put --url "https://management.azure.com$scope/projects/$Project/connections/$Account-insights?api-version=2025-06-01" --body "@$tmp" -o none; Ok
+Remove-Item $tmp
+
 Write-Host "`nDone. Set these (PowerShell), then: python scripts/run_newsroom.py out/match_1.json"
 Write-Host "`$env:FOUNDRY_PROJECT_ENDPOINT = `"https://$Account.services.ai.azure.com/api/projects/$Project`""
 Write-Host "`$env:FOUNDRY_MODEL = `"$Model`""

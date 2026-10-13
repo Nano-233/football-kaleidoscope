@@ -22,6 +22,7 @@ from agent_framework import Agent
 from analytics.tools import MatchView
 from matchsim.whatif import cached_what_if, t_at_minute
 from newsroom.agents import _run, _verdict, unsupported_numbers, wrong_leader
+from newsroom.clients import traced
 
 MAX_REWRITES = 2
 DEPTH = {"quick": "two or three short sentences, plain words, at most one number",
@@ -33,7 +34,8 @@ PERSONA = {"fan": "a football fan who wants the story and why it matters", "anal
 TACTICS = """You are the tactics analyst of a football newsroom. Investigate the question with your tools before answering; never guess.
 Formations: a team has a shape in possession and a shape out of possession at the same time, and they may differ; read both from the
 tools (never assume how a system defends) and say which phase you mean. A system change is what formation_changes lists under "changes"; single
-windows that read differently are noise, not changes. Call formation_changes first, then team_shape for each period between changes. Look for causes: changes of shape, pressing height and PPDA by period, momentum
+windows that read differently are noise, not changes. Call formation_changes first, then team_shape for each period between changes. For each change of system, say why it was made: the match state at that minute
+(the score from find_moments with goals, red cards, substitutions) is what a manager reacts to. Look for causes: changes of shape, pressing height and PPDA by period, momentum
 spells, where attacks start, substitutions. For a "what if" question (a different instruction or formation from a minute on), use what_if
 and report both columns, as it was and with the change, as chances out of the runs; say the runs are simulations. Use only numbers your tools returned. Reply with concise findings (bullet points), each with
 its numbers and the minutes (e.g. 63') it refers to."""
@@ -43,7 +45,7 @@ terms, physical output, per-90 against his role's average, heat map) and his mom
 compared with his role. Use only numbers your tools returned. Reply with concise findings (bullet points) with numbers and minutes."""
 
 ORCHESTRATOR = """You run the newsroom desk. For the reader's question, call the specialists you need (tactics_analyst for teams, shapes,
-pressing, momentum, why things happened and "what if" questions about a different instruction or formation; scout for players), with a precise task for each; you may call both. Use match_summary for
+pressing, momentum, why things happened and "what if" questions about a different instruction or formation; scout for players), with a precise task for each; when you need both, call them in the same step so they work at the same time. Use match_summary for
 the basic facts. Then reply with the combined findings exactly as the specialists gave them (bullet points, numbers and minutes kept).
 Do not add numbers of your own."""
 
@@ -51,6 +53,35 @@ CHECKER = """You are the fact-checker. Compare the ANSWER with the FINDINGS the 
 attached to the wrong player, team, metric or minute, a metric is described wrongly (PPDA: lower means a harder press), or a claim is not
 supported by the findings. Wording, tone and language are not errors. Reply only as JSON {"approved": bool, "issues": [str]}, one short
 sentence per real error, an empty list when approved."""
+
+
+UNITS = {"m": ("_m", 1.), "yd": ("_yd", 1.09361), "ft": ("_ft", 3.28084), "kmh": ("_kmh", 1.), "mph": ("_mph", .621371), "ms": ("_m_s", 1 / 3.6),
+         "km": ("_km", 1.), "mi": ("_mi", .621371)}
+UNIT_WORDS = {"m": "metres", "yd": "yards", "ft": "feet", "kmh": "km/h", "mph": "mph", "ms": "m/s", "km": "km", "mi": "miles"}
+
+
+def _units(profile):
+    """The reader's units, "length,speed,distance" (e.g. "yd,mph,mi"); metric when unset or unknown."""
+    u = str((profile or {}).get("units") or "m,kmh,km").split(",")
+    ok = len(u) == 3 and u[0] in ("m", "yd", "ft") and u[1] in ("kmh", "mph", "ms") and u[2] in ("km", "mi")
+    return u if ok else ["m", "kmh", "km"]
+
+
+def in_units(obj, units):
+    """Tool output with every quantity named by its unit (*_m, *_kmh, *_km) converted to the reader's units and renamed to match."""
+    plan = {"_m": units[0], "_kmh": units[1], "_km": units[2]}
+    if isinstance(obj, dict):
+        out = {}
+        for k, v in obj.items():
+            suf = next((s for s in plan if isinstance(k, str) and k.endswith(s)), None)
+            if suf and isinstance(v, (int, float)) and not isinstance(v, bool) and plan[suf] != suf[1:]:
+                new, f = UNITS[plan[suf]]
+                k, v = k[:-len(suf)] + new, round(v * f, 2 if suf == "_km" else 1)
+            out[k] = in_units(v, units)
+        return out
+    if isinstance(obj, list):
+        return [in_units(x, units) for x in obj]
+    return obj
 
 
 def _writer_text(profile):
@@ -61,7 +92,8 @@ def _writer_text(profile):
     lang = p.get("language", "English")
     return (f"You are the newsroom's writer. Turn the FINDINGS into the answer to the QUESTION for {who}. Length and style: "
             f"{DEPTH.get(p.get('depth', 'standard'), DEPTH['standard'])}.{side} Write in {lang}; keep player and team names as they are. "
-            "Use only facts and numbers from the FINDINGS; never invent one. Mention minutes as they appear (e.g. 63').")
+            "Use only facts and numbers from the FINDINGS; never invent one. Mention minutes as they appear (e.g. 63'). "
+            f"Units: {', '.join(UNIT_WORDS[u] for u in _units(p))}; the FINDINGS already use them, so never convert a number.")
 
 
 def _until(match, t):
@@ -77,10 +109,11 @@ def _until(match, t):
 
 class Desk:
     def __init__(self, client, match, profile=None, until=None, on_step=None):
+        self.units = _units(profile)
         self.client, self.profile, self.on_step = client, profile or {}, on_step
         self.mv = MatchView(_until(match, until))
         self.full = match
-        self.facts, self.trail = [], []
+        self.facts, self.raw, self.trail = [], [], []  # facts: what the agents saw (reader's units); raw: the same in metres, for drawing
         mv = self.mv
         teams = {0: 0, 1: 1, "home": 0, "away": 1}
         for t, side in enumerate(("home", "away")):
@@ -110,6 +143,8 @@ class Desk:
                     out = fn(**kw)
                 except Exception as ex:  # the model gets the error back and can retry with better arguments
                     out = {"error": str(ex)}
+                self.raw.append(out)
+                out = in_units(out, self.units)
                 self.facts.append(out)
                 self.trail.append(dict(agent=agent, tool=fn.__name__, args=kw))
                 self._say(agent, fn.__name__, kw)
@@ -207,6 +242,7 @@ class Desk:
                 out = dict(out, team=mv.team_names[team_ix(team)], from_minute=from_minute)
             except Exception as ex:
                 out = {"error": str(ex)}
+            self.raw.append(out)
             self.facts.append(out)
             self.trail.append(dict(agent="tactics_analyst", tool="what_if", args=kw))
             return json.dumps(out, default=str)
@@ -256,6 +292,7 @@ class Desk:
                 views.append(dict(kind="move", title=f"The move: {f['moment']['clock']} {f['moment']['type'].replace('_', ' ')}", start=f["steps"][0]["t"], end=f["steps"][-1]["t"]))
         return views[:5]
 
+    @traced("newsroom.ask")
     async def ask(self, question):
         """Answer a reader's question. Returns the answer, whether the fact-checker approved it, the rewrites, the steps each agent took and the
         moments it refers to (for watch links)."""
@@ -283,7 +320,7 @@ class Desk:
         last = attempts[-1]
         moments = {m["clock"]: m for f in self.facts if isinstance(f, dict) for m in f.get("moments", [])}
         watch = [dict(clock=c, t=m["t"], type=m["type"], player=m["player"]) for c, m in moments.items() if re.search(rf"(?<![\d+]){re.escape(c)}", last["answer"])][:6]
-        views = self._views(self.trail[n0:], self.facts[f0:])
+        views = self._views(self.trail[n0:], self.raw[f0:])
         return dict(question=question, views=views, answer=last["answer"] if last["approved"] else None, held=None if last["approved"] else last["answer"],
                     approved=last["approved"], rewrites=len(attempts) - 1, findings=found, steps=self.trail[n0:], attempts=attempts, watch=watch)
 

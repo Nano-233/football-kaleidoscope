@@ -81,16 +81,16 @@ A question goes to an orchestrator that hands it to the right specialists. They 
 user's profile, and the fact-checker checks it before it is shown. Answers can carry a pitch view or chart and "watch" links. The
 agent steps are visible in the UI. C6, F3, A7, S6
 
-### 4. Tactics scored against the truth — Core (the hook) **[built: formation reading; agent reading to do]**
+### 4. Tactics scored against the truth — Core (the hook) **[built]**
 The engine logs every formation change, tactical shift and the manager's reason. The tactics agent's reading is scored against
 that log (changes detected, timing, explanation), shown as an "AI accuracy" panel and reported over many matches. A9
 
 ### 5. Personal profile — Core
-Persona (fan, analyst, scout; casual = fan at quick depth), favourite club **or** followed player, language, depth (quick,
-standard, deep) and one focus metric. Every agent output reads it. C5, F1, F6, all others
+Persona (fan, analyst, scout; casual = fan at quick depth), favourite club **or** followed player, language, units (metres, yards
+or feet; km/h, mph or m/s; km or miles) **[built]**, depth (quick, standard, deep) and one focus metric. Every agent output reads it. C5, F1, F6, all others
 
 ### 6. Match centre views
-- Live view with momentum strip and lower thirds **[partly]** — Core. C1, C2
+- Live view with momentum strip, win probability and lower thirds **[built]** — Core. C1, C2
 - Player-follow mode for fans: the pitch highlights him, the feed is his story, his rating and highlights — Core. F6-F8
 - Analyst board: shape, press, network and momentum charts synced to the replay — Core **[built]**. A1-A4
 - Scout view **[built]** plus heat map, physical output and the written report — Core. S1-S3
@@ -105,7 +105,7 @@ Timed JSON overlays for each persona and language, a talking-points sheet for ea
 
 ### 8. Platform — Core
 Backend API on Azure Container Apps for questions and on-demand analysis; the static site on Azure with cached newsroom output so
-judges can use it free; Foundry deployment **[built]**, rate-limit handling **[built]**, agent tracing; live questions rate-limited
+judges can use it free; Foundry deployment **[built]**, rate-limit handling **[built]**, agent tracing to Application Insights, shown in the Foundry portal **[built]**; live questions rate-limited
 for cost.
 
 ## Demo story (2 minutes)

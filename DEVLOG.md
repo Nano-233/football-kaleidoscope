@@ -859,6 +859,32 @@ throw-ins and goal kicks (logged at the first touch, up to 25 s after the ball w
 change that follows a winning action by that team (interception, tackle, recovery, block, duel, save...) within 2 s; the dot
 now carries who won it and how.
 
+### The agents' own tactical reading scored, and where the time goes (2026-10-13)
+The formation question now also asks why, and the eval marks the reasons: a grader agent compares the reason given for each
+change with the engine's logged one (protecting the lead, chasing the game, man down, man advantage). The tactics analyst was
+told to explain a change from the match state at that minute (score, red cards, substitutions), which is what a manager reacts to.
+Result over the 5 demo matches (25 questions): 80% right overall; scorers and best player 100%, pressing 80%, formations 60%.
+System changes: 8 of 14 found with formation and minute, the minute off by 4.6 on average, the manager's reason right for
+4 of the 8. Every answer passed the fact-checker, so the misses are reading errors, not invented numbers: an answer can be
+correct to the tools and still wrong about the match. The weak link is the change reading, e.g. a 3-4-3 that defends as
+5-4-1 reported as a switch to 5-4-1 in both phases.
+Time: tracing showed a question at 38 s on average (about 7 model calls in a row at 5 s each) and one model call that hung
+for 103 s, the SDK's default timeout being 10 minutes. Calls are now cut at 45 s and retried; the orchestrator calls both
+specialists in one step when it needs both; the eval runs three matches at a time.
+
+### Tracing (2026-10-13)
+Application Insights connected to the Foundry project (infra/setup.ps1). `make_client` turns on Agent Framework's
+OpenTelemetry once per process, so each question is one `newsroom.ask` trace with the agent runs (orchestrator, tactics
+analyst, scout, writer, fact-checker), every tool call and every model call, with durations; prompts and replies are not
+recorded. The Foundry portal's Tracing page reads it. Deployed, the container gets the connection string as an env var.
+
+### Units (2026-10-13)
+The reader picks pitch distances (m, yd, ft), speed (km/h, mph, m/s) and distance run (km, mi). For the agents, tool output is
+converted before any agent sees it (every quantity is named by its unit: *_m, *_kmh, *_km, renamed to the new unit), so the
+writer never converts and the fact-checker's number checks still hold. Drawings keep the metre values. In the site, numbers
+are formatted in the chosen units and published text (commentary, recaps, breakdown captions) is converted before it is
+translated.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

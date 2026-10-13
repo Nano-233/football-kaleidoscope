@@ -25,7 +25,7 @@ from matchsim.whatif import FORMATIONS, TACTIC_KEYS, cached_what_if
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DATA, CACHE, WEB = ROOT / "server" / "data", ROOT / "server" / "cache", ROOT / "web"
 ASK_SLOTS = int(os.environ.get("ASK_SLOTS", "2"))  # ponytail: one process-wide limit; per-user quotas if it is ever opened wider
-PROFILE_KEYS = ("persona", "depth", "club", "player", "language")
+PROFILE_KEYS = ("persona", "depth", "club", "player", "language", "units")
 _matches, _gate, _client = {}, asyncio.Semaphore(ASK_SLOTS), None
 
 
