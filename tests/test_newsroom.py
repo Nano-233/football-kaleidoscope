@@ -24,3 +24,5 @@ pk = {**packs[0], "teams": {"home": "Kestrel United", "away": "Northbridge Rover
 assert wrong_leader("Northbridge Rovers hold a 2-0 lead", pk) and not wrong_leader("Kestrel United lead 2-0", pk)
 assert wrong_leader("Kestrel United trail", pk)
 print("checks ok")
+assert wrong_minutes("the spell from 15' to 30'", {**packs[0], "moment": {**packs[0]["moment"], "clock": "31'"}, "spell": {"start": "15'", "end": "30'"}}) == []
+print("minute check ok")

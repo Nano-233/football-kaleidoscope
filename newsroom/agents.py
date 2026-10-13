@@ -85,8 +85,9 @@ def wrong_leader(line, pack):
 
 
 def wrong_minutes(line, pack):
-    """Minutes the line states ("21st minute", "21'") that are not on the moment's clock."""
+    """Minutes the line states ("21st minute", "21'") that are neither the moment's clock nor a minute the pack names."""
     clock = set(re.findall(r"\d+", pack["moment"]["clock"]))
+    clock |= {m for c in re.findall(r"\d+(?:\+\d+)?'", json.dumps(pack)) for m in re.findall(r"\d+", c)}  # minutes the pack itself names (a spell's start and end, a change's minute)
     said = [a or b for a, b in re.findall(r"(\d+)(?:st|nd|rd|th)?\s+minute|(\d+)'", line)]
     return [m for m in said if m not in clock]
 
