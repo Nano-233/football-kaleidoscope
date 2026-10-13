@@ -948,6 +948,22 @@ chance's appeal crosses it (as he closes in, or the keeper comes); the clear-cha
 does not force the shot. Shots 17.6 -> 16.6 per team-match, goals 1.28, loss 158.1 (noise). The share at clean 0.12-0.20 spots
 is still 0.83-0.95 against about 0.5: the decision's weights, for the calibrator once the logic is done.
 
+### Blocks, and where shots end (2026-10-13)
+`scripts/block_after.py`, after a blocked shot (sim | real): corner 0.15 | 0.25, out otherwise 0.06 | 0.06, the shooting side keeps it
+0.38 | 0.32, the defending side has it 0.41 | 0.37 (the keeper collects 0.05). The 2-D contact model gets everything but the
+corners; the likely missing piece is height: a shot is in the air, and a leg sends it up as well as sideways, looping over the bar.
+Not done yet: it is new physics (a deflection as a lofted flight) for about 0.6 corners a match.
+`scripts/shot_target.py`, unblocked open-play shots with the feet inside 12 m (sim | real): 3.5 | 1.6 per team-match, off target
+0.53 | 0.39, scored 0.14 | 0.30. The sim takes twice the close shots and they are worse: mean xG by our own formula 0.13 for the
+sim against 0.18 for the real ones (scored on the real freeze frames).
+Our xG formula itself under-rates real shots (Euro 2020, 701 open-play shots: 0.090 predicted against 0.101 scored; 9-16 m worst).
+The maximum-likelihood refit in `scripts/fit_xg.py` (fitted on Premier League 2015/16, never switched on) predicts the Euro shots
+better out of sample (log-likelihood -206.3 vs -209.3, every band within a point or two). Switched on, goals go to 1.5-1.7 per
+team-match (real 1.24) for any shooting reference (0.168 / 0.22 / 0.28; loss 167-180): a truer finishing model exposes the volume
+of close chances. Kept off until the volume is fixed; then switch it on and re-derive the shooting reference from the real
+per-band decision shares (`shot_lane.py release=1`).
+The root of the shot excess is therefore the defending near goal (markers who trail their man, above), not the shooting.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
