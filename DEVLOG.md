@@ -807,6 +807,12 @@ Measured, not fixed (`probe_all.py`, Euro 2020 360 frames):
 - The lofted cross succeeds too often: 0.42-0.51 completed against 0.27 real, 14-17 per team against 7.2. At arrival the intended receiver is 1.4 m from where the ball can be headed and the nearest defender 2.8 m from the landing spot; only the attacker can reach it in 31 % of crosses, only a defender in 13 %; the keeper is 12 m away and almost never comes. Sending the defenders to the ball's path during the flight (instead of the landing spot) did not change who reaches it (tried, reverted): the box positions before the cross are the cause. Pricing the cross with the aerial rule (`_air_share`, consistent with the outcome) made crosses more attractive because that outcome is too generous (tried, reverted until the box defence is right).
 Next for chances: box defence before the cross (defenders between the ball and the goal, the keeper claiming in the six-yard area), then the cut-back option becomes the better choice on its own.
 
+### Crosses into half-empty boxes (2026-10-12)
+
+Measured (`scratchpad crossbox.py`, Euro 2020 360 frames at the moment of the cross): real boxes hold 2.75 attackers (1.62 with no defender within 2 m) and 5.21 defenders; the sim's 1.43 attackers (1.03 free) and 4.59 defenders, yet its crosses completed 0.46 against 0.28. Defenders win contested headers in their own box 0.53 real, 0.45 sim (small sample), and sim keepers already claim 5.5 high balls a match (real collected + punched 1.4), so neither duels nor keepers are the cause. The cause is precision: a cross carried `sigma_scale` 0.8, more accurate than any other lofted ball (about 1.3 m for a 25 m cross), and the crosser aims at where his man will be.
+Fixed: `cross_sigma` 1.6: a cross struck on the move from wide at a moving target is less precise than a lofted pass to a standing man. Cross completion 0.46 -> 0.40, shots 15.8 -> 14.6, clearances 27.0 -> 29.0 (real 29.0), loss 187.6 -> 186.4 (noise).
+Tried, not kept: filling the penalty-spot place too (`of_mask` 14): attackers in the cut-back zone become real-like but shots rise to 16.1 (loss 194.9). Still open: crosses 13-15 per team vs 7.2 (the crosser's own odds use a fixed 0.5 for the header, not the box he sees), box occupancy at the cross.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
