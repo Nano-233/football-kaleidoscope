@@ -607,7 +607,7 @@ class Match:
     def _gain_control(s, i, at):
         s.carry_into = -1
         t = i // 11
-        s.hands = bool(s.role[i] == 0 and (at[0] < 16.5 if t == 0 else at[0] > L - 16.5) and abs(at[1] - W / 2) < 20.16 and s.last_touch // 11 != t)  # the keeper picks it up in his box, unless his own side played it to him (Law 12)
+        s.hands = bool(s.role[i] == 0 and (at[0] < 16.5 if t == 0 else at[0] > L - 16.5) and abs(at[1] - W / 2) < 20.16 and not (s.pending_pass is not None and s.pending_pass["team"] == t))  # the keeper picks it up in his box, unless a team-mate deliberately kicked it to him (Law 12: a deflection or a miscue is not a back-pass)
         bv = s.ball_v.copy()  # the ball's direction as it arrives
         if nrm(bv) > .5:  # a standing receiver faces the ball (back to goal when it comes from behind him); a runner faces along his run;
             sp_ = float(nrm(s.vel[i]))
