@@ -15,6 +15,8 @@ home = make_team(hc, "4-3-3", Tactics(press=.6, line_height=.6, directness=.45),
 away = make_team(ac, "4-4-2", Tactics(press=.4, line_height=.4, directness=.55, marking=.5), rng=rng)
 t0 = time.time()
 res = Match(home, away, seed=seed).run()
+res["meta"]["recipe"] = dict(seed=seed, home=dict(code=hc, formation="4-3-3", tactics=dict(press=.6, line_height=.6, directness=.45)),
+                             away=dict(code=ac, formation="4-4-2", tactics=dict(press=.4, line_height=.4, directness=.55, marking=.5)))  # how to rebuild it (matchsim/whatif.py)
 print(f"simulated in {time.time() - t0:.1f}s  score {res['meta']['score']}  events {len(res['events'])}  frames {len(res['frames'])}")
 out = pathlib.Path(__file__).resolve().parents[1] / "out" / f"match_{seed}.json"
 out.write_text(json.dumps(res, separators=(",", ":")))

@@ -18,6 +18,7 @@ from aiohttp import web
 from newsroom.clients import make_client
 from newsroom.desk import Desk
 from newsroom.localize import translate
+from matchsim.whatif import FORMATIONS, TACTIC_KEYS, cached_what_if
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DATA, CACHE, WEB = ROOT / "server" / "data", ROOT / "server" / "cache", ROOT / "web"
@@ -108,6 +109,30 @@ async def tr(request):
     return web.json_response(dict(texts=[got[k] for k in keys]))
 
 
+_sim_gate = asyncio.Semaphore(1)  # a what-if uses every core for about a minute
+
+
+async def whatif(request):
+    """POST {"match": "match_7", "t": 3600, "team": 1, "change": {"press": .8, "formation": "3-4-3"}} -> as it was / with the change."""
+    body = await request.json()
+    m = match(str(body.get("match", "")))
+    recipe = m["meta"].get("recipe")
+    if not recipe:
+        raise web.HTTPBadRequest(text="this match cannot be replayed")
+    t = max(60., min(float(body.get("t", 60)), m["meta"]["duration"] - 300))
+    team = 1 if int(body.get("team", 0)) else 0
+    ch = body.get("change") or {}
+    change = {k: max(0., min(1., float(ch[k]))) for k in TACTIC_KEYS if k in ch}
+    if ch.get("formation") in FORMATIONS:
+        change["formation"] = ch["formation"]
+    if not change:
+        raise web.HTTPBadRequest(text="nothing to change")
+    async with _sim_gate:
+        out = await asyncio.get_running_loop().run_in_executor(None, cached_what_if, recipe, t, team, change)
+    stored = sum(1 for e in m["events"] if e["t"] < out["at"]["t"])
+    return web.json_response(dict(out, replay_matches=abs(stored - out["at"]["events"]) <= 2, team_name=m["meta"][("home", "away")[team]]["name"]))
+
+
 async def index(request):
     return web.FileResponse(WEB / "index.html")
 
@@ -116,6 +141,7 @@ def app():
     a = web.Application(client_max_size=64 * 1024)
     a.router.add_post("/api/ask", ask)
     a.router.add_post("/api/translate", tr)
+    a.router.add_post("/api/whatif", whatif)
     a.router.add_get("/", index)
     a.router.add_static("/", WEB)
     return a

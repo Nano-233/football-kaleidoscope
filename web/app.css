@@ -230,3 +230,4 @@ table.stats td.lead { color: var(--text); font-weight: 600; }
 .tabs::-webkit-scrollbar { display: none; }
 .tabs button { flex: none; white-space: nowrap; }
 .feed .jump + .jump { margin-left: 10px; }
+.wi-scale { display: flex; justify-content: space-between; margin: -6px 0 6px 52px; font-size: 10px; }

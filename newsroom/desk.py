@@ -20,6 +20,7 @@ from typing import Annotated
 from agent_framework import Agent
 
 from analytics.tools import MatchView
+from matchsim.whatif import cached_what_if, t_at_minute
 from newsroom.agents import _run, _verdict, unsupported_numbers, wrong_leader
 
 MAX_REWRITES = 2
@@ -33,7 +34,8 @@ TACTICS = """You are the tactics analyst of a football newsroom. Investigate the
 Formations: a team has a shape in possession and a shape out of possession at the same time, and they may differ; read both from the
 tools (never assume how a system defends) and say which phase you mean. A system change is what formation_changes lists under "changes"; single
 windows that read differently are noise, not changes. Call formation_changes first, then team_shape for each period between changes. Look for causes: changes of shape, pressing height and PPDA by period, momentum
-spells, where attacks start, substitutions. Use only numbers your tools returned. Reply with concise findings (bullet points), each with
+spells, where attacks start, substitutions. For a "what if" question (a different instruction or formation from a minute on), use what_if
+and report both columns, as it was and with the change, as chances out of the runs; say the runs are simulations. Use only numbers your tools returned. Reply with concise findings (bullet points), each with
 its numbers and the minutes (e.g. 63') it refers to."""
 
 SCOUT = """You are the scout of a football newsroom. Investigate players with your tools before answering: the player report (stats, rating
@@ -41,7 +43,7 @@ terms, physical output, per-90 against his role's average, heat map) and his mom
 compared with his role. Use only numbers your tools returned. Reply with concise findings (bullet points) with numbers and minutes."""
 
 ORCHESTRATOR = """You run the newsroom desk. For the reader's question, call the specialists you need (tactics_analyst for teams, shapes,
-pressing, momentum and why things happened; scout for players), with a precise task for each; you may call both. Use match_summary for
+pressing, momentum, why things happened and "what if" questions about a different instruction or formation; scout for players), with a precise task for each; you may call both. Use match_summary for
 the basic facts. Then reply with the combined findings exactly as the specialists gave them (bullet points, numbers and minutes kept).
 Do not add numbers of your own."""
 
@@ -77,6 +79,7 @@ class Desk:
     def __init__(self, client, match, profile=None, until=None, on_step=None):
         self.client, self.profile, self.on_step = client, profile or {}, on_step
         self.mv = MatchView(_until(match, until))
+        self.full = match
         self.facts, self.trail = [], []
         mv = self.mv
         teams = {0: 0, 1: 1, "home": 0, "away": 1}
@@ -182,9 +185,33 @@ class Desk:
                                    types=[event_type] if event_type else None, group=action_group or None, outcome=outcome or None, third=third or None,
                                    minutes=(from_minute, to_minute or 999) if (from_minute or to_minute) else None)
 
+        async def what_if(team: Annotated[str, "home, away or the team name"], from_minute: Annotated[int, "the minute the change is made"],
+                          press: Annotated[float, "pressing intensity 0-1; -1 to leave as it was"] = -1., line_height: Annotated[float, "defensive line 0 deep - 1 high; -1 to leave"] = -1.,
+                          directness: Annotated[float, "0 patient - 1 direct; -1 to leave"] = -1., risk: Annotated[float, "0 safe - 1 adventurous; -1 to leave"] = -1.,
+                          formation: Annotated[str, "a formation such as 3-4-3; empty to leave"] = "") -> str:
+            """Replay the match to that minute, make the change for that team, and play the rest of the match 12 times with and 12 times without it
+            (the same random numbers for each pair): win/draw/loss chances, goals and xG after the change, as it was and with the change. Takes about a minute."""
+            recipe = self.full["meta"].get("recipe")
+            if not recipe:
+                return json.dumps({"error": "this match cannot be replayed (no recipe)"})
+            change = {k: v for k, v in dict(press=press, line_height=line_height, directness=directness, risk=risk).items() if v >= 0}
+            if formation:
+                change["formation"] = formation
+            kw = dict(team=team, from_minute=from_minute, **change)
+            self._say("tactics_analyst", "what_if", kw)
+            try:
+                t = t_at_minute(self.full["events"], int(from_minute))
+                out = await asyncio.get_running_loop().run_in_executor(None, cached_what_if, recipe, t, team_ix(team), change)
+                out = dict(out, team=mv.team_names[team_ix(team)], from_minute=from_minute)
+            except Exception as ex:
+                out = {"error": str(ex)}
+            self.facts.append(out)
+            self.trail.append(dict(agent="tactics_analyst", tool="what_if", args=kw))
+            return json.dumps(out, default=str)
+
         tt = [team_shape, formation_changes, pressing, momentum, passing_network, moment_breakdown, find_moments, match_summary]
         st = [player_report, find_moments, moment_breakdown, list_players, match_summary]
-        self.tactics = Agent(client, TACTICS, name="tactics_analyst", tools=[logged("tactics_analyst", f) for f in tt])
+        self.tactics = Agent(client, TACTICS, name="tactics_analyst", tools=[logged("tactics_analyst", f) for f in tt] + [what_if])
         self.scout = Agent(client, SCOUT, name="scout", tools=[logged("scout", f) for f in st])
         self.orchestrator = Agent(client, ORCHESTRATOR, name="orchestrator", tools=[
             self.tactics.as_tool(name="tactics_analyst", description="Investigates teams, shapes, pressing, momentum and why things happened.", arg_name="task"),

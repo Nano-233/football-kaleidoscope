@@ -31,7 +31,9 @@ SEEDS = 4
 def play(home, away, seed):
     rng = np.random.default_rng(seed)
     (fh, th), (fa, ta) = STYLE[home], STYLE[away]
-    return Match(make_team(home, fh, Tactics(**th), rng=rng), make_team(away, fa, Tactics(**ta), rng=rng), seed=seed).run()
+    res = Match(make_team(home, fh, Tactics(**th), rng=rng), make_team(away, fa, Tactics(**ta), rng=rng), seed=seed).run()
+    res["meta"]["recipe"] = dict(seed=seed, home=dict(code=home, formation=fh, tactics=th), away=dict(code=away, formation=fa, tactics=ta))  # how to rebuild it (matchsim/whatif.py)
+    return res
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ const SX = (cv.width - 2 * PAD) / L, SY = (cv.height - 2 * PAD) / W, px = x => P
 const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const COL = { home: css('--home'), away: css('--away'), accent: css('--accent'), good: css('--good'), bad: css('--bad'), pitch: css('--pitch'), line: css('--pitch-line') };
 
-const TABS = { fan: ['Live', 'Ask', 'Recap', 'Players', 'Stats', 'Clips'], analyst: ['Feed', 'Board', 'Ask', 'Recap', 'Stats', 'Clips'], scout: ['Players', 'Ask', 'Clips'] };
+const TABS = { fan: ['Live', 'Ask', 'Recap', 'Players', 'Stats', 'Clips'], analyst: ['Feed', 'Board', 'What if', 'Ask', 'Recap', 'Stats', 'Clips'], scout: ['Players', 'Ask', 'Clips'] };
 const VOICE = { fan: 'fan', analyst: 'analyst', scout: 'analyst' };  // which newsroom feed each persona reads
 const GROUPS = {
   All: null,
@@ -36,7 +36,7 @@ const FAN_ROWS = ['goals', 'xg', 'shots', 'shots_on_target', 'corners', 'yellow_
 const S = {
   D: null, F: null, n: 0, dt: .2, id: null, t: 0, playing: false, last: 0,
   persona: 'fan', tab: 'Live', player: null, group: 'All', clip: null, custom: [], panelKey: '', info: {}, slots: [],
-  profile: loadProfile(), asks: [], askVer: 0, askDraft: '', board: { mode: 'Shape', team: 0, phase: 'in_possession' },
+  profile: loadProfile(), asks: [], askVer: 0, askDraft: '', board: { mode: 'Shape', team: 0, phase: 'in_possession' }, wi: { team: 1, change: {}, formation: '', busy: false, res: null, err: '' },
 };
 const SUGGEST = {
   fan: ["Who's been the best player so far?", 'Why is the game going this way?', 'Explain the last goal', 'How is my player doing?'],
@@ -274,7 +274,7 @@ function setPersona(p) {
 function render(force) {
   if (!S.D) return;
   const minute = Math.floor(S.t / 60), shown = feed().filter(it => it.moment.t <= S.t).length + (S.profile.playerId ? playerNotes().length : 0);
-  const key = [S.persona, S.tab, S.tab === 'Clips' || S.tab === 'Ask' ? '' : minute, (S.D.recaps || []).filter(r => r.t <= S.t + .5).length, shown, S.player, S.group, S.clip && S.clip.id, S.custom.length, S.askVer, S.profile.playerId, JSON.stringify(S.board), S.trVer, S.profile.language].join('|');
+  const key = [S.persona, S.tab, S.tab === 'Clips' || S.tab === 'Ask' ? '' : minute, (S.D.recaps || []).filter(r => r.t <= S.t + .5).length, shown, S.player, S.group, S.clip && S.clip.id, S.custom.length, S.askVer, S.profile.playerId, JSON.stringify(S.board), JSON.stringify(S.wi), S.trVer, S.profile.language].join('|');
   if (!force && key === S.panelKey) return;
   S.panelKey = key;
   const body = $('panel-body'), keep = body.scrollTop, same = body.dataset.view === S.persona + S.tab + S.player;
@@ -292,6 +292,7 @@ const VIEWS = {
   Ask: () => askView(),
   Recap: () => recapView(),
   Board: () => boardView(),
+  'What if': () => whatIfView(),
 };
 
 // the followed player's moments as short notes, straight from the events (no model, nothing to check)
@@ -607,6 +608,46 @@ function boardView() {
     <div style="margin-top:12px">${body}</div>`;
 }
 
+// ---------------------------------------------------------------- what if: replay to now, change one instruction, play the rest many times
+const WI_SLIDERS = [['press', 'Pressing', 'passive', 'aggressive'], ['line_height', 'Defensive line', 'deep', 'high'], ['directness', 'Build-up', 'patient', 'direct'], ['risk', 'Risk', 'safe', 'adventurous']];
+const clockMin = c => { const [a, b] = c.replace("'", '').split('+'); return +a + (+b || 0); };
+function whatIfView() {
+  const M = S.D.meta, w = S.wi, side = w.team ? 'away' : 'home', rec = M.recipe;
+  if (!rec) return '<div class="empty">This match was made before replays were recorded; rebuild it with scripts/run_match.py or scripts/matchday.py.</div>';
+  const base = Object.assign({ press: .5, line_height: .5, directness: .5, risk: .5 }, rec[side].tactics), now = clockMin(clockAt(S.t));
+  const forms = ['4-3-3', '4-4-2', '4-2-3-1', '3-5-2', '3-4-3', '5-3-2', '4-5-1', '5-4-1'];
+  const sl = WI_SLIDERS.map(([k, name, lo, hi]) => { const v = w.change[k] ?? base[k];
+    return `<div class="row"><span>${name}</span><input type="range" min="0" max="1" step="0.05" value="${v}" data-wi="${k}" aria-label="${name}"><span class="mono">${v === base[k] ? 'as it was' : (v > base[k] ? '↑ ' : '↓ ') + Math.round(v * 100)}</span></div>
+      <div class="mono wi-scale"><span>${lo}</span><span>${hi}</span></div>`; }).join('');
+  const r = w.res;
+  const pct = x => Math.round(x * 100) + '%';
+  const res = w.busy ? `<div class="thinking">Replaying the match to ${now}' and playing the rest 24 times (about a minute)</div>`
+    : w.err ? `<div class="empty">${esc(w.err)}</div>`
+    : r ? `<div class="label">${esc(r.team_name)} from ${esc(r.at.clock)} (${r.at.score[0]}–${r.at.score[1]} at the time)</div>
+      <table class="stats"><thead><tr><th>Rest of the match</th><th>As it was</th><th>With the change</th></tr></thead><tbody>
+      ${[['Win', 'win', pct], ['Draw', 'draw', pct], ['Loss', 'loss', pct], ['Goals for', 'goals_for'], ['Goals against', 'goals_against'], ['xG for, after', 'xg_for_after'], ['xG against, after', 'xg_against_after'], ['Shots for, after', 'shots_for_after'], ['Shots against, after', 'shots_against_after']]
+        .map(([n, k, f]) => { const a = r.as_it_was[k], b = r.with_change[k]; return `<tr><td>${n}</td><td>${f ? f(a) : a}</td><td class="${b !== a ? 'lead' : ''}">${f ? f(b) : b}</td></tr>`; }).join('')}</tbody></table>
+      <div class="mono" style="margin-top:6px">${r.runs} simulations each way from the same moment, paired so only the change differs; ${r.runs_with_a_different_result} of ${r.runs} pairs ended with a different score.${r.replay_matches ? '' : ' Note: the replay did not reproduce the match exactly.'}</div>
+      <div class="bar" style="margin-top:10px"><button class="btn" data-act="wi-explain">Ask the newsroom to explain</button></div>` : '';
+  return `<div class="chips">${[0, 1].map(t => `<button class="chip" data-witeam="${t}" aria-pressed="${w.team === t}">${esc(M[t ? 'away' : 'home'].name)}</button>`).join('')}</div>
+    <div class="editor" style="margin-top:10px"><h3>From ${now}', ${esc(M[side].name)} change to</h3>${sl}
+      <div class="row"><span>System</span><select id="wi-form"><option value="">as it was</option>${forms.map(f => `<option${f === w.formation ? ' selected' : ''}>${f}</option>`).join('')}</select><span></span></div>
+      <div class="bar"><button class="btn primary" data-act="wi-run"${w.busy ? ' disabled' : ''}>Play it out</button><button class="btn" data-act="wi-reset">Reset</button></div></div>
+    ${res}`;
+}
+async function runWhatIf() {
+  const w = S.wi, ch = { ...w.change };
+  if (w.formation) ch.formation = w.formation;
+  if (!Object.keys(ch).length) return toast('Change at least one instruction first.');
+  w.busy = true; w.err = ''; w.res = null; w.t = S.t; render(true);
+  try {
+    const r = await fetch('api/whatif', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ match: S.id, t: S.t, team: w.team, change: ch }) });
+    if (!r.ok) throw new Error(r.status === 404 || r.status === 405 ? NO_SERVER : await r.text());
+    w.res = await r.json();
+  } catch (err) { w.err = err.message.startsWith('The ') ? err.message : 'The simulation did not run: ' + err.message; }
+  w.busy = false; render(true);
+}
+
 // ---------------------------------------------------------------- recaps (written in advance by the newsroom, shown once their moment has come)
 function recapView() {
   const want = S.persona === 'analyst' ? 'analyst' : 'fan';
@@ -843,6 +884,14 @@ $('panel-body').addEventListener('click', e => {
     const [st, kind] = d.share.split('|'), li = b.closest('li');
     shareCard(+st, kind, li.querySelector('p').textContent);
   }
+  else if (d.witeam !== undefined) { S.wi = { team: +d.witeam, change: {}, formation: '', busy: false, res: null, err: '' }; render(true); }
+  else if (d.act === 'wi-run') runWhatIf();
+  else if (d.act === 'wi-reset') { S.wi = { team: S.wi.team, change: {}, formation: '', busy: false, res: null, err: '' }; render(true); }
+  else if (d.act === 'wi-explain') {
+    const w = S.wi, r = w.res, parts = Object.entries(w.change).map(([k, v]) => `${k.replace('_', ' ')} ${Math.round(v * 100)}%`).concat(w.formation ? [`formation ${w.formation}`] : []);
+    S.tab = 'Ask'; setTabs();
+    askNewsroom(`What if ${r.team_name} had changed to ${parts.join(', ')} from ${r.at.clock}? Run what_if and explain what the simulations show and why.`);
+  }
   else if (d.reel) playReel(S.player, d.reel);
   else if (d.report) { const nm = S.info[d.report].name; S.tab = 'Ask'; setTabs(); askNewsroom(`Write a scout report on ${nm}: strengths, weaknesses and how he compares with his position, with the evidence.`); }
   else if (d.hismatch) { const nm = S.info[d.hismatch].name; S.tab = 'Ask'; setTabs(); askNewsroom(`Tell the story of ${nm}'s match so far: his key moments, how he played and his rating.`); }
@@ -856,6 +905,8 @@ $('panel-body').addEventListener('click', e => {
   }
 });
 $('panel-body').addEventListener('change', e => {
+  if (e.target.dataset.wi) { S.wi.change[e.target.dataset.wi] = +e.target.value; render(true); }
+  if (e.target.id === 'wi-form') { S.wi.formation = e.target.value; render(true); }
   if (e.target.id === 'p-depth') { S.profile.depth = e.target.value; saveProfile(); }
 });
 $('panel-body').addEventListener('keydown', e => { if (e.target.id === 'ask-q' && e.key === 'Enter') askNewsroom(e.target.value); });
