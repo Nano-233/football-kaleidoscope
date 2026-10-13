@@ -70,4 +70,4 @@ if __name__ == "__main__":
     rl = real()
     print("clean-look xG band   actions sim | real    shot share sim | real")
     for i, (a, b) in enumerate(BANDS):
-        print(f"  {a:.2f}-{b:.2f}        {sim[(i, 'all')] / n / 2:6.1f} | {rl[(i, "all")] / 31 / 2:6.1f}      {sim[(i, 'shot')] / max(sim[(i, 'all')], 1):.3f} | {rl[(i, 'shot')] / max(rl[(i, 'all')], 1):.3f}")
+        print(f"  {a:.2f}-{b:.2f}        {sim[(i, 'all')] / n / 2:6.1f} | {rl[(i, 'all')] / 31 / 2:6.1f}      {sim[(i, 'shot')] / max(sim[(i, 'all')], 1):.3f} | {rl[(i, 'shot')] / max(rl[(i, 'all')], 1):.3f}")
