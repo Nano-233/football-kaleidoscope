@@ -127,7 +127,9 @@ class Desk:
             return dict(home=mv.team_names[0], away=mv.team_names[1], score=f"{score[0]}-{score[1]}", minute=ev[-1]["clock"] if ev else "1'", goals=goals,
                         cards=[dict(minute=e["clock"], player=mv.names.get(e.get("player")), card=e["card"]) for e in ev if e["type"] == "card"],
                         substitutions=[dict(minute=e["clock"], team=mv.team_names[e["team"]], off=e["off_name"], on=e["on_name"], reason=e.get("reason")) for e in ev if e["type"] == "substitution"],
-                        starting_formations={mv.team_names[t]: mv.meta[s]["formation"] for t, s in enumerate(("home", "away"))})
+                        starting_formations={mv.team_names[t]: mv.meta[s]["formation"] for t, s in enumerate(("home", "away"))},
+                        win_probability_now={k: wp[k] for k in ("home", "draw", "away")} if (wp := mv.win_probability()["series"][-1]) else None,
+                        win_probability_note="simple model: league scoring rate blended with each side's xG so far")
 
         def list_players(team: Annotated[str, "home, away or the team name"]) -> dict:
             """The team's players: number, name, id, position, minutes and rating so far."""

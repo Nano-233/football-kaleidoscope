@@ -125,7 +125,7 @@ def board(match):
     """Everything the analyst board draws, from the same toolkit the agents use, window by window so the replay only ever shows
     windows that have finished. Positions are in each team's own frame (own goal at x = 0)."""
     mv, dur = MatchView(match), match["meta"]["duration"]
-    out = dict(shape_window=SHAPE_W, net_window=NET_W, shape=[[], []], network=[[], []], pressing=[], momentum=mv.momentum(), regains=[])
+    out = dict(shape_window=SHAPE_W, net_window=NET_W, shape=[[], []], network=[[], []], pressing=[], momentum=mv.momentum(), regains=[], winprob=mv.win_probability())
     for tm in (0, 1):
         t = 0.
         while t < dur:

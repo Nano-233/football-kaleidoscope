@@ -274,6 +274,41 @@ class MatchView:
                                  field_tilt_home=round(float(tilt[w]), 2)) for w in range(n)],
                     cumulative_xg=[round(float(xg[0].sum()), 2), round(float(xg[1].sum()), 2)], dominant_spells=spells)
 
+    # ---------------------------------------------------------------- win probability
+    def win_probability(self, step=60.):
+        """Home win / draw / away win chances minute by minute. Each side's scoring rate for the rest of the match blends the league rate
+        (1.24 goals a game) with its own xG so far, the match counting for more as it goes on; goals still to come are Poisson. The turning
+        points are the biggest swings. A simple, explainable model, not a betting price."""
+        from math import exp, factorial
+        dur, goals, shots = self.meta["duration"], [], []
+        for e in self.events:
+            if e["type"] in ("goal", "own_goal"):
+                goals.append((e["t"], e["home"], e["away"]))
+            elif e["type"] == "shot" and e.get("team") in (0, 1):
+                shots.append((e["t"], e["team"], e["xg"]))
+        pois = lambda lam, k: exp(-lam) * lam ** k / factorial(k)
+        out, t = [], 0.
+        while t <= dur + 1e-6:
+            sc = next(((h, a) for tt, h, a in reversed(goals) if tt <= t), (0, 0))
+            played = max(t / 60., 1.)
+            left = max(dur - t, 0.) / 60.
+            xg = [sum(x for tt, tm, x in shots if tt <= t and tm == s_) for s_ in (0, 1)]
+            rate = [(1.24 * 30 + xg[s_] * 90) / (30 + played) / 90 for s_ in (0, 1)]  # per minute
+            ph = [pois(rate[0] * left, k) for k in range(10)]
+            pa = [pois(rate[1] * left, k) for k in range(10)]
+            hw = dr = aw = 0.
+            for i, x in enumerate(ph):
+                for j, y in enumerate(pa):
+                    d = sc[0] + i - sc[1] - j
+                    hw, dr, aw = hw + x * y * (d > 0), dr + x * y * (d == 0), aw + x * y * (d < 0)
+            tot = hw + dr + aw
+            out.append(dict(at=self._clock(t), t=round(t, 1), home=round(hw / tot, 3), draw=round(dr / tot, 3), away=round(aw / tot, 3)))
+            t += step
+        swings = sorted(((abs(b["home"] - a["home"]) + abs(b["away"] - a["away"]), b) for a, b in zip(out, out[1:])), key=lambda x: -x[0])[:4]
+        swings = [x for x in swings if x[0] / 2 >= .1]  # a turning point moves the chances by 10 points or more
+        return dict(teams=self.team_names, series=out, turning_points=[dict(at=b["at"], t=b["t"], swing=round(sw / 2, 2)) for sw, b in sorted(swings, key=lambda x: x[1]["t"])],
+                    note="simple model: league scoring rate blended with each side's xG so far; Poisson for the goals still to come")
+
     # ---------------------------------------------------------------- passing network
     def passing_network(self, team, t0=0., t1=None, min_links=3):
         """Completed pass links between players, each player's average pass position, the main connectors, which third attacks start in

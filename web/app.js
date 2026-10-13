@@ -346,6 +346,19 @@ function trail(it) {
 }
 
 function fmtStat(row, v) { return v == null ? '–' : row[2] ? row[2](v) : v; }
+function winNow() {
+  const W_ = S.D.board && S.D.board.winprob;
+  if (!W_) return null;
+  return W_.series[Math.min(W_.series.length - 1, Math.floor(S.t / 60))];
+}
+function winBar() {
+  const w = winNow(), M = S.D.meta;
+  if (!w) return '';
+  const p = x => Math.round(x * 100);
+  return `<div class="label">Win probability · ${esc(clockAt(S.t))}</div>
+    <div class="winbar"><i style="flex:${w.home};background:var(--home)"></i><i style="flex:${w.draw};background:var(--surface-3)"></i><i style="flex:${w.away};background:var(--away)"></i></div>
+    <div class="cmp-head" style="display:grid;grid-template-columns:1fr 1fr 1fr;font-size:12px;margin-top:4px"><span>${esc(M.home.code)} ${p(w.home)}%</span><span style="text-align:center">Draw ${p(w.draw)}%</span><span style="text-align:right">${esc(M.away.code)} ${p(w.away)}%</span></div>`;
+}
 function compareView() {
   const [h, a] = statsAt(S.t), M = S.D.meta;
   const rows = STAT_ROWS.filter(r => FAN_ROWS.includes(r[0])).map(r => {
@@ -353,7 +366,7 @@ function compareView() {
     return `<div class="cmp-row"><div class="cmp-head"><span>${fmtStat(r, hv)}</span><span>${r[1]}</span><span>${fmtStat(r, av)}</span></div>
       <div class="cmp-bar"><i class="${lead === 'h' ? 'lead h' : ''}" style="flex:${hv / tot || .001}"></i><i class="${lead === 'a' ? 'lead a' : ''}" style="flex:${av / tot || .001}"></i></div></div>`;
   }).join('');
-  return `<div class="label">${esc(M.home.code)} vs ${esc(M.away.code)} · after ${esc(clockAt(S.t))}</div><div class="compare">${rows}</div>`;
+  return `${winBar()}<div class="label">${esc(M.home.code)} vs ${esc(M.away.code)} · after ${esc(clockAt(S.t))}</div><div class="compare">${rows}</div>`;
 }
 
 function tableView() {
@@ -575,6 +588,15 @@ function momentumSvg() {
     <text x="0" y="12" fill="var(--text-3)" font-size="10">${esc(S.D.meta.home.code)} xG ↑</text><text x="0" y="${h - 4}" fill="var(--text-3)" font-size="10">${esc(S.D.meta.away.code)} xG ↓ · line: field tilt</text></svg>`;
 }
 
+function winSvg() {
+  const W_ = S.D.board.winprob, n = Math.max(1, Math.floor(S.t / 60) + 1), rows = W_.series.slice(0, n), w = 368, h = 110, dx = w / Math.max(W_.series.length - 1, 1);
+  const line = k => rows.map((r, i) => `${(i * dx).toFixed(1)},${(h - r[k] * h).toFixed(1)}`).join(' ');
+  const tps = W_.turning_points.filter(tp => tp.t <= S.t).map(tp => `<line x1="${(tp.t / 60 * dx).toFixed(1)}" x2="${(tp.t / 60 * dx).toFixed(1)}" y1="0" y2="${h}" stroke="var(--line-strong)" stroke-dasharray="3 3"/>`).join('');
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" role="img" aria-label="Win probability for each side over the match; dashed lines mark turning points">${tps}
+    <polyline points="${line('home')}" fill="none" stroke="var(--home)" stroke-width="2"/><polyline points="${line('away')}" fill="none" stroke="var(--away)" stroke-width="2"/>
+    <polyline points="${line('draw')}" fill="none" stroke="var(--text-3)" stroke-width="1.5" stroke-dasharray="4 3"/></svg>
+    <div class="mono">Simple model: the league scoring rate blended with each side's xG so far; dashed lines are the turning points.</div>`;
+}
 function boardView() {
   const B = S.D.board;
   if (!B) return '<div class="empty">Rebuild the match data (scripts/build_site.py) for the board.</div>';
@@ -599,7 +621,7 @@ function boardView() {
       <div class="mono" style="margin-top:8px">PPDA: opponent passes per defensive action in their build-up (lower = harder press). Dots on the pitch: where the ball was won in the last fifteen minutes.</div>`;
   } else {
     const sp = B.momentum.dominant_spells.filter(x => x.end_t <= S.t);
-    body = `<div class="label">Momentum · xG by five minutes</div>${momentumSvg()}
+    body = `${winBar()}<div class="label">Win probability over the match</div>${winSvg()}<div class="label">Momentum · xG by five minutes</div>${momentumSvg()}
       <div class="label">Spells of dominance</div>${sp.length ? `<table class="stats"><tbody>${sp.map(x => `<tr><td>${esc(x.team)} ${esc(x.start)}–${esc(x.end)}</td><td>xG ${x.xg} v ${x.opponent_xg}</td></tr>`).join('')}</tbody></table>` : '<div class="mono">None yet.</div>'}`;
   }
   return `<div class="chips">${['Shape', 'Network', 'Press', 'Momentum'].map(m => chip('bmode', m, m, b.mode === m)).join('')}</div>
