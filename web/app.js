@@ -228,6 +228,7 @@ function hud(t) {
   $('overlay').hidden = !item;
   if (item && $('lt-line').dataset.id !== String(item.moment.id)) {
     $('lt-line').dataset.id = item.moment.id; $('lt-line').textContent = tr(item.line);
+    if (S.playing) sayLine(tr(item.line));
     $('lt-kind').textContent = `${item.moment.type.replace(/_/g, ' ')} · ${item.moment.clock}`;
   }
   $('reel').hidden = !S.reel && !S.view;
@@ -859,6 +860,19 @@ async function shareCard(t, kind, text) {
   toast('Card saved.');
 }
 
+// spoken commentary: each lower-third line read out as it appears, in the reader's language (Azure AI Speech via the server)
+let voiceOn = false, speaking = null;
+async function sayLine(text) {
+  if (!voiceOn || !text) return;
+  try {
+    const r = await fetch('api/speak', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, language: S.profile.language, persona: S.persona }) });
+    if (!r.ok) { voiceOn = false; $('voice').setAttribute('aria-pressed', 'false'); return toast('Voice needs the newsroom server with Azure AI Speech.'); }
+    const url = URL.createObjectURL(await r.blob());
+    if (speaking) speaking.pause();
+    speaking = new Audio(url); speaking.play();
+  } catch { /* no server: stay quiet */ }
+}
+
 let toastTimer;
 function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 2600); }
 function setTabs() { for (const b of $('tabs').children) b.setAttribute('aria-selected', b.dataset.tab === S.tab); }
@@ -933,6 +947,7 @@ $('panel-body').addEventListener('change', e => {
 });
 $('panel-body').addEventListener('keydown', e => { if (e.target.id === 'ask-q' && e.key === 'Enter') askNewsroom(e.target.value); });
 $('club').onchange = e => { S.profile.club = e.target.value; saveProfile(); };
+$('voice').onclick = () => { voiceOn = !voiceOn; $('voice').setAttribute('aria-pressed', String(voiceOn)); if (!voiceOn && speaking) speaking.pause(); toast(voiceOn ? 'Commentary will be read out as the lines appear.' : 'Voice off.'); };
 $('lang').innerHTML = LANGS.map(l => `<option${l === S.profile.language ? ' selected' : ''}>${l}</option>`).join('');
 $('lang').onchange = e => { S.profile.language = e.target.value; saveProfile(); $('lt-line').dataset.id = ''; render(true); };
 $('panel-body').addEventListener('input', e => {

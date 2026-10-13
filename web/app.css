@@ -233,3 +233,4 @@ table.stats td.lead { color: var(--text); font-weight: 600; }
 .wi-scale { display: flex; justify-content: space-between; margin: -6px 0 6px 52px; font-size: 10px; }
 .winbar { display: flex; gap: 2px; height: 10px; border-radius: 3px; overflow: hidden; }
 .winbar i { display: block; }
+#voice[aria-pressed="true"] { border-color: var(--accent); color: var(--text); background: rgba(79, 156, 249, .12); }

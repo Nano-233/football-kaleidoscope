@@ -15,7 +15,8 @@ function Ok { if ($LASTEXITCODE) { Write-Host "Failed (see the error above); fix
 
 foreach ($ns in "Microsoft.App", "Microsoft.OperationalInsights", "Microsoft.ContainerRegistry") { az provider register --namespace $ns --wait; Ok }
 $endpoint = "https://$Account.services.ai.azure.com/api/projects/$Project"
-az containerapp up -n $App -g $Rg -l $Location --source . --ingress external --target-port 8080 --env-vars "FOUNDRY_PROJECT_ENDPOINT=$endpoint" "FOUNDRY_MODEL=$Model" "ASK_SLOTS=2"; Ok
+$resId = az cognitiveservices account show -n $Account -g $Rg --query id -o tsv; Ok
+az containerapp up -n $App -g $Rg -l $Location --source . --ingress external --target-port 8080 --env-vars "FOUNDRY_PROJECT_ENDPOINT=$endpoint" "FOUNDRY_MODEL=$Model" "ASK_SLOTS=2" "SPEECH_ENDPOINT=https://$Account.cognitiveservices.azure.com" "SPEECH_RESOURCE_ID=$resId"; Ok
 az containerapp update -n $App -g $Rg --min-replicas 0 --max-replicas 1 -o none; Ok  # scales to zero when nobody is watching
 $principal = az containerapp identity assign -n $App -g $Rg --system-assigned --query principalId -o tsv; Ok
 $scope = az cognitiveservices account show -n $Account -g $Rg --query id -o tsv; Ok

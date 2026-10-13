@@ -13,7 +13,9 @@ import json
 import os
 import pathlib
 
+import aiohttp
 from aiohttp import web
+from xml.sax.saxutils import escape
 
 from newsroom.clients import make_client
 from newsroom.desk import Desk
@@ -133,6 +135,47 @@ async def whatif(request):
     return web.json_response(dict(out, replay_matches=abs(stored - out["at"]["events"]) <= 2, team_name=m["meta"][("home", "away")[team]]["name"]))
 
 
+# spoken commentary: Azure AI Speech on the same Foundry resource, signed in with the same identity (no keys)
+VOICES = {"English": ("en-GB", "en-GB-RyanNeural", "en-GB-SoniaNeural"), "Español": ("es-ES", "es-ES-AlvaroNeural", "es-ES-ElviraNeural"),
+          "Français": ("fr-FR", "fr-FR-HenriNeural", "fr-FR-DeniseNeural"), "Deutsch": ("de-DE", "de-DE-ConradNeural", "de-DE-KatjaNeural"),
+          "Português": ("pt-BR", "pt-BR-AntonioNeural", "pt-BR-FranciscaNeural"), "Italiano": ("it-IT", "it-IT-DiegoNeural", "it-IT-ElsaNeural"),
+          "中文": ("zh-CN", "zh-CN-YunxiNeural", "zh-CN-XiaoxiaoNeural"), "日本語": ("ja-JP", "ja-JP-KeitaNeural", "ja-JP-NanamiNeural"),
+          "العربية": ("ar-SA", "ar-SA-HamedNeural", "ar-SA-ZariyahNeural")}
+_cred = None
+
+
+async def speak(request):
+    """POST {"text": "...", "language": "English", "persona": "fan"} -> audio/mpeg. The fan's voice is quicker and brighter, the analyst's calm."""
+    global _cred
+    body = await request.json()
+    text = str(body.get("text", ""))[:600]
+    lang, persona = str(body.get("language", "English")), str(body.get("persona", "fan"))
+    loc, male, female = VOICES.get(lang, VOICES["English"])
+    voice = male if persona != "analyst" else female
+    key = hashlib.sha1(json.dumps([text, voice, persona]).encode()).hexdigest()
+    hit = CACHE / f"tts-{key}.mp3"
+    if not hit.exists():
+        rid, host = os.environ.get("SPEECH_RESOURCE_ID", ""), os.environ.get("SPEECH_ENDPOINT", "")
+        if not (text and rid and host):
+            raise web.HTTPNotImplemented(text="speech is not configured (SPEECH_RESOURCE_ID, SPEECH_ENDPOINT)")
+        if _cred is None:
+            from azure.identity import DefaultAzureCredential
+            _cred = DefaultAzureCredential()
+        tok = await asyncio.get_running_loop().run_in_executor(None, lambda: _cred.get_token("https://cognitiveservices.azure.com/.default").token)
+        prosody = 'rate="+12%" pitch="+6%"' if persona == "fan" else 'rate="-4%"'
+        ssml = f'<speak version="1.0" xml:lang="{loc}"><voice name="{voice}"><prosody {prosody}>{escape(text)}</prosody></voice></speak>'
+        async with aiohttp.ClientSession() as http:
+            async with http.post(f"{host.rstrip('/')}/tts/cognitiveservices/v1", data=ssml.encode(), headers={
+                    "Authorization": f"Bearer aad#{rid}#{tok}", "Content-Type": "application/ssml+xml",
+                    "X-Microsoft-OutputFormat": "audio-24khz-48kbitrate-mono-mp3", "User-Agent": "matchday-newsroom"}) as r:
+                if r.status != 200:
+                    raise web.HTTPBadGateway(text=f"speech service {r.status}")
+                audio = await r.read()
+        CACHE.mkdir(parents=True, exist_ok=True)
+        hit.write_bytes(audio)
+    return web.FileResponse(hit, headers={"Content-Type": "audio/mpeg"})
+
+
 async def index(request):
     return web.FileResponse(WEB / "index.html")
 
@@ -142,6 +185,7 @@ def app():
     a.router.add_post("/api/ask", ask)
     a.router.add_post("/api/translate", tr)
     a.router.add_post("/api/whatif", whatif)
+    a.router.add_post("/api/speak", speak)
     a.router.add_get("/", index)
     a.router.add_static("/", WEB)
     return a
