@@ -885,6 +885,43 @@ writer never converts and the fact-checker's number checks still hold. Drawings 
 are formatted in the chosen units and published text (commentary, recaps, breakdown captions) is converted before it is
 translated.
 
+### What a shooter faces, and where the excess shots come from (2026-10-13)
+Hypothesis from the last entry: real shooters at good spots more often have a defender in the lane. Measured with
+`scripts/shot_lane.py` (Euro 2020 360 freeze frames vs sim, by clean-look xG band, defenders in the ball-post triangle and the
+nearest opponent): wrong. The sim's situations are as crowded as the real ones. Two things differ:
+- Counting: real data logs a carry before almost every shot, so counting carries as decisions halves the real shot share.
+  Counting only the action that ends a touch (`release=1`), with a clear lane the sim decides like real players (0.59 vs 0.52 in
+  the 0.07-0.12 band).
+- With defenders in the lane real players still shoot (0.6-0.85) and the sim backed off (0.03-0.35): the decision multiplied the
+  clean-look xG by (1 - p_lane), against the code's own comment that willingness follows the spot, not the bodies in the way.
+  Removed (`shot_lane_k`): through-traffic shooting moves to 0.42 / 0.24 for 1 / 2+ in the lane, loss 157.4 -> 148.6 (48 matches,
+  noise about 10). Still too eager at clean 0.12-0.20 spots (0.9 vs 0.5): the clear-chance rule, next.
+The bigger cause of the shot excess is volume: releases at clean-look xG >= 0.12 are 5.8 vs 2.5 per team-match.
+`scripts/zone_entry.py` splits them by how the player got the ball (sim | real): forward pass from in front of the box 1.9 | 0.5,
+won it himself in the zone 1.2 | 0.3, a defender's mistake 0.5 | 0.02, carried in 0.8 | 0.3, cross 0.9 | 0.8, cutback 0.1 | 0.45.
+(Two measurement bugs found on the way: the sim logs a carry after the pass or shot that ends it, and its many pressure events
+pushed the pass to him out of a 12-event window.) `scripts/zone_passes.py`: passes aimed at the zone from in front of the box are
+tried 5.7 vs 3.3 per team-match and arrive 0.43 vs 0.29; `scripts/zone_pass_defence.py` shows that with the same defenders in the
+path and near the target they arrive about as often as real ones. So the excess is the choice to play into the zone (and too
+few cutbacks: 0.8 vs 2.1 tried), not the interception.
+
+### The keeper could be tackled with the ball in his hands (2026-10-13)
+Saw: in the "won it in the zone" cases, attackers tackling a keeper who had just saved or claimed the ball (about 0.3 per
+team-match, right in front of goal). Law 12: a keeper holding the ball cannot be challenged. Fixed: a keeper who takes the ball
+in his box from a ball the opponent touched last has it in his hands (`s.hands`) and is not tackled until it leaves him; a ball
+his own side played to him stays at his feet (the back-pass rule). Loss within noise; the case is gone.
+
+### Corners, and two changes that did nothing (2026-10-13)
+`scripts/corner_source.py`, corners per match by the last action before the ball went behind (sim | real): after a shot 3.0 | 4.9,
+clearance 0.9 | 2.5, duel 0.25 | 1.0. Blocked shots go behind 0.14 of the time vs 0.27; saves are tipped behind as often as real
+(0.19 vs 0.22) but the sim has about twice the saves per match, so its on-target share is too high.
+Tried, not kept: a loss cost that mirrors the attackers' position value (losing the ball costs what the opponent then holds,
+`loss_mirror`): the box losses did not fall. A clearance limited by the way the defender faces (no time to turn: only behind or
+out): clearance corners 0.92 -> 0.83, since defenders rarely reach that branch; the clearance corners must come from headed
+and first-time clearances of crosses. Both removed.
+Next: why passers choose the zone (and not the cutback) so often; the clear-chance rule at clean 0.12-0.20 spots; blocks that
+kill the ball instead of deflecting it on; the on-target share.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
