@@ -976,6 +976,25 @@ Tried, not kept: approach gain without the work-rate factor (work rate should ca
 13 km per player, loss 174.7. The rest of the gap is still open: the tracking at the moment of a pass is a moving situation, and
 the marker lags his man however the spot is set; next is how real markers hold a moving man (body to body, matching his run).
 
+### The 1.6 m bubble: why nobody could mark tight (2026-10-13)
+`zone_options.py` with the full distribution of the nearest defender to an attacker in the good shooting spots: the sim had none
+under 1.0 m (real 22 %) and 46 % at 1.5-2.0 m (real 16 %). A hard floor, even by chance, means a rule. Two candidates found:
+- Attackers stepped away from any defender within 4.5 m ((4.5 - d) x 0.8 m, every target update, anywhere). Switched off inside
+  the box (`show_box`): no change to the floor, so not kept.
+- After every step, any two players closer than 1.6 m were pushed apart: a personal-space bubble. The closest pair of opponents
+  in a whole match was never under 1 m (1 % quantile 1.22 m). Bodies touch at about 0.7 m. Now `body_sep` 0.7.
+With 0.7 m the nearest-defender distribution matches the real one bin by bin (<0.75 m 0.12 | 0.10, 0.75-1 0.09 | 0.12, 1-1.5
+0.24 | 0.21, 1.5-2 0.16 | 0.16, 2-3 0.18 | 0.24); tight marking 0.45 against 0.43. This, not the marking spot or the reaction
+lags (tried: target every tick, faster speed build-up; no effect), was the floor.
+It uncovered a geometry fault in the ball's flight: a defender within 1 m of the ball's path this tick could intercept, but the
+path is clipped to start at the ball's last position, so a man beside or behind the ball, which was going away from him, counted
+as on the line: a presser at the passer's shoulder got a swipe at every pass (78 % of in-flight deflections were in the first
+fifth of the pass). Now only men the ball comes towards or goes by can block it.
+Effect (48 matches): shots 16.6 -> 15.6, goals 1.26 (1.24), loss 156 -> 164.6. The rise is constants balanced against the bubble:
+blocks 37 (real 20), tackles 24.1 (20.5), more passes counted under pressure (the sim's pressure is "an opponent within 1.75 m",
+not StatsBomb's pressing events). The passer seeing a body on the line (the flight's rule in his estimate) changed nothing; not kept.
+Next: blocks from pressers in front of the passer, then the calibrator for the constants tied to spacing, then the xG refit.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

@@ -15,6 +15,7 @@ from scripts.zone_entry import in_zone
 
 KV = {k: float(v) for k, v in (a.split("=") for a in sys.argv[2:])}
 L, W = 105., 68.
+HIST = (.75, 1., 1.5, 2., 3., 5., 1e9)
 
 
 def front(x, y):
@@ -28,6 +29,10 @@ def tally(c, mates, opp):
     for m in zm:
         d = min((np.hypot(*(o - m)) for o in opp), default=99)
         c[("free", 0 if d < 1.5 else 1 if d < 3 else 2)] += 1
+        c[("hist", next(i for i, e in enumerate(HIST) if d < e))] += 1
+        if opp:
+            o = min(opp, key=lambda o: np.hypot(*(o - m)))
+            c[("side", "goal-side" if o[0] > m[0] + .3 else "level" if o[0] > m[0] - .3 else "behind him")] += 1
     c["opp in zone"] += sum(in_zone(*o) for o in opp)
 
 
@@ -81,4 +86,6 @@ if __name__ == "__main__":
     zs, zr = sum(sim[('mates in zone', k)] * k for k in range(4)), sum(rl[('mates in zone', k)] * k for k in range(4))
     for k, nm in enumerate(("<1.5 m", "1.5-3 m", "3+ m")):
         print(f"  a team-mate there with his nearest marker {nm:8} {sim[('free', k)] / max(zs, 1):.2f} | {rl[('free', k)] / max(zr, 1):.2f}")
+    print("  nearest defender distance, share:  " + "  ".join(f"<{e if e < 1e8 else 'inf'}: {sim[('hist', i)] / max(zs, 1):.2f}|{rl[('hist', i)] / max(zr, 1):.2f}" for i, e in enumerate(HIST)))
+    print("  where he stands:  " + "  ".join(f"{k}: {sim[('side', k)] / max(zs, 1):.2f}|{rl[('side', k)] / max(zr, 1):.2f}" for k in ("goal-side", "level", "behind him")))
     print(f"  defenders in the zone (outfield)  {sim['opp in zone'] / sim['passes']:.2f} | {rl['opp in zone'] / rl['passes']:.2f}")
