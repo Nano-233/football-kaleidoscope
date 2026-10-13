@@ -264,6 +264,7 @@ def defend_assign(m, t, zone, urgent, role, P, O, Ov, C, Cv, ci, tc, tgt1, cover
             lane_open = 1.
         gain = max(xt_a - xt_c, 0.) + TP.get("back_w", .2) * xt_a  # what a pass to him could add to the threat: a man behind the ball only offers a ball back, so he is not worth leaving the goal side of the ball for
         v = TP.get("mark_k", 100.) * gain * (.3 + .7 * lane_open) * (1. + .7 * run) * float(np.exp(-dl / 45.))
+        v *= float(np.exp(-max(abs(o[1] - C[1]) - 10., 0.) / TP.get("mark_lat", 1e9)))  # a man far across from the ball: the block can shift while a switch is in the air, so he is not worth pinning a defender wide for
         near_goal = o[0] <= TP.get("threat_depth", .34) * L and abs(o[1] - W / 2) <= TP.get("threat_wide", 22.)  # he is dangerous to our goal (about 36 m out, and not on the far touchline: the zone has him until the ball comes across) ...
         near_ball = dl <= TP.get("threat_ball", 25.)  # ... or the carrier can find him with his next pass
         if not (near_goal or near_ball):
@@ -669,6 +670,10 @@ def team_targets(m, t):
         gate = np.where(ok, np.maximum(gate, clip((thr - .25) * 1.6, 0, .8)), gate)  # and so is anyone within about 30 m of goal
         dang = clip((TP.get("dang_far", 38.) - nrm(o - GOAL, axis=1)) / 18., 0, 1)  # the closer an attacker is to goal the more he is marked (man first, zone second)
         gate = np.where(ok & (role > GK), np.maximum(gate, TP.get("dang_gate", .85) * dang), gate)
+        # the far side: a man wide on the side away from the ball is left to the zone (the defence tucks in and protects the middle); he is
+        # picked up again when he runs at goal (below) or the ball comes across
+        far = clip((np.abs(o[:, 1] - B[1]) - TP.get("far_dy", 22.)) / 10., 0, 1) * clip((np.abs(o[:, 1] - W / 2) - 12.) / 8., 0, 1)
+        gate = gate * (1 - TP.get("far_free", 0.) * far)
         ovg = (ov * _unit(GOAL - o)).sum(1)  # a man running at goal is tracked goal-side first, the zone second
         gate = np.where(ok & (role > GK) & (nrm(o - GOAL, axis=1) < 45.), np.maximum(gate, TP.get("run_gate", .95) * clip((ovg - 2.5) / 2.5, 0, 1)), gate)
         zone = zone * (1 - gate[:, None]) + man * gate[:, None]
@@ -895,9 +900,12 @@ def team_targets(m, t):
         wthr = float(clip((50. - Bs[0]) / 15., 0, 1))
         if wthr > 0:
             dy = zone[:, 1] - W / 2
-            lim = np.where(np.sign(dy) == np.sign(by), 20.2 + max(abs(by) - 14., 0.) * .8, 20.2)
+            half = TP.get("area_half", 20.2)  # how far from the middle the men away from the ball may stand (real defensive units: about 14 m with the ball central)
+            far_lim = max(half - TP.get("area_slide", 0.) * abs(by), 4.)  # the whole unit slides to the ball: the far side tucks in as the ball goes wide
+            lim = np.where(np.sign(dy) == np.sign(by), max(half, abs(by) * TP.get("area_ball", .8)), far_lim)  # the ball side goes as wide as the ball needs
             keep = out_f & ~m.sprint_hint[sl]
             zone[:, 1] = np.where(keep, W / 2 + dy * (1 - wthr) + np.clip(dy, -lim, lim) * wthr, zone[:, 1])
+            urgent |= keep & (np.abs(P[:, 1] - W / 2) > lim + 3.) * (wthr > .5) * bool(TP.get("area_run", 0.))  # a man left outside the unit's width gets back across at a run
 
     # ---- goalkeeper ---------------------------------------------------------------------
     sw = 1 + 1.2 * m.mod["sweep"][11 * t]  # sweeper keepers play higher
