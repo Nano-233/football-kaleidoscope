@@ -828,6 +828,17 @@ Measured (Euro 2020 360 frames, defenders level with or behind the ball, ball 70
 Fixed (`movement.py`): the unit's width near goal comes from the real data: men away from the ball stay within `area_half` 13.75 m of the middle, less as the ball goes wide (`area_slide` 0.25 per metre: the unit slides to the ball, the far side tucks in), the ball side as wide as the ball needs; a man left outside it gets back across at a run (`area_run`). A man wide on the far side is left to the zone (`far_free`, `far_dy` 14 m) and a mark across from the ball is worth less (`mark_lat` 8 m), since the block can shift while a switch is in the air.
 Effect (48 matches): loss 160.9 -> 153.4, big chances 0.26 -> 0.41 (0.86), goals 1.34 (1.24), xG per shot 0.08 (0.09), final third central 0.36 -> 0.33 (0.15), far-side edge 15 -> 13.4 m (7.5). Still open: the job-holders exempt from the width limit, shots 17 vs 13, central share.
 
+### The shooting decision against real shares (2026-10-12)
+
+Correction to "Why the sim shoots too much": the real side of `shot_choice.py` kept only Regular Play / From Counter possessions, dropping every
+attack that started from a throw-in, goal kick or keeper; counted like the sim's, real teams reach the good spots nearly as often (per team-match,
+0.07-0.12 band 10.0 sim vs 7.2 real, 0.12-0.20 4.5 vs 2.2, above 0.20 1.6 vs 1.2). The real gap is the decision: the sim shoots 0.74 / 0.94 of
+its actions in the two best bands against 0.39 / 0.62, and too rarely from range (0.09 vs 0.16 in the 0.04-0.07 band).
+Tried, not kept (48 matches, loss 153.4 before): a flatter decision (`shoot_slope` 1.5, `shoot_ref` 0.14), no clear-chance rule (`clear_xg` 0), no
+pressure or keeper push (`shoot_press` 0, `gk_shoot` 0.5): range shots match real (0.17 vs 0.16) but the best bands only fall to 0.73 / 0.87 and
+shots rise to 19.2 (loss 161.2). The near-goal excess is not in these terms; the likely cause is that real shooters at those spots more often have a
+defender in the lane, which the clean-look xG ignores and the sim's thinner central defence (above) still allows.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

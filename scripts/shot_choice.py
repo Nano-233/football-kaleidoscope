@@ -30,7 +30,7 @@ def real():
             continue
         for e in json.load(open(f, encoding="utf-8")):
             t = e["type"]["name"]
-            if t not in ("Pass", "Carry", "Dribble", "Shot") or e.get("play_pattern", {}).get("name") not in ("Regular Play", "From Counter"):
+            if t not in ("Pass", "Carry", "Dribble", "Shot"):
                 continue
             if t == "Pass" and "type" in e["pass"] or t == "Shot" and e["shot"]["type"]["name"] != "Open Play" or t == "Shot" and e["shot"].get("body_part", {}).get("name") == "Head":
                 continue
