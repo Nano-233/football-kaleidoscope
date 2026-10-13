@@ -228,7 +228,7 @@ function hud(t) {
   $('overlay').hidden = !item;
   if (item && $('lt-line').dataset.id !== String(item.moment.id)) {
     $('lt-line').dataset.id = item.moment.id; $('lt-line').textContent = tr(item.line);
-    if (S.playing) sayLine(tr(item.line));
+    if (S.playing && !S.reel) sayLine(tr(item.line));
     $('lt-kind').textContent = `${item.moment.type.replace(/_/g, ' ')} · ${item.moment.clock}`;
   }
   $('reel').hidden = !S.reel && !S.view;
@@ -251,7 +251,8 @@ function tick(now) {
     S.t = Math.min(S.D.meta.duration, S.t + (now - S.last) / 1000 * +$('speed').value);
     if (S.clip && S.t >= S.clip.end) S.t = S.clip.start;  // a selected clip loops
     if (S.reel && S.t >= S.reel.segs[S.reel.i].end) {  // a reel plays its moments one after another
-      if (++S.reel.i < S.reel.segs.length) S.t = S.reel.segs[S.reel.i].start; else { S.reel = null; setPlaying(false); toast('End of the reel.'); }
+      if (++S.reel.i < S.reel.segs.length) { S.t = S.reel.segs[S.reel.i].start; if (S.reel.segs[S.reel.i].say) sayLine(tr(S.reel.segs[S.reel.i].say)); }
+      else { S.reel = null; setPlaying(false); toast('End of the reel.'); }
     }
     if (S.t >= S.D.meta.duration) setPlaying(false);
   }
@@ -456,6 +457,15 @@ function reelFor(pid, name) {
     if (last && a <= last.end) last.end = b; else segs.push({ start: a, end: b, clock: e.clock });
   }
   return segs;
+}
+const HL_KINDS = ['goal', 'own_goal', 'big_chance', 'penalty', 'red_card', 'var_overturned'];
+function playHighlights() {
+  const items = feed().filter(it => it.approved && HL_KINDS.includes(it.moment.type) && it.moment.t <= S.t);
+  if (!items.length) return toast('No highlights yet.');
+  S.clip = null; S.view = null;
+  S.reel = { name: 'Highlights', who: S.D.meta.home.code + ' v ' + S.D.meta.away.code, i: 0,
+    segs: items.map(it => ({ start: Math.max(0, it.moment.t - 10), end: it.moment.t + 4, clock: it.moment.clock, say: it.line })) };
+  seek(S.reel.segs[0].start); setPlaying(true); sayLine(tr(S.reel.segs[0].say));
 }
 function playReel(pid, name) {
   const segs = reelFor(pid, name);
@@ -675,8 +685,10 @@ async function runWhatIf() {
 function recapView() {
   const want = S.persona === 'analyst' ? 'analyst' : 'fan';
   const rs = (S.D.recaps || []).filter(r => r.profile.persona === want && r.t <= S.t + .5).reverse();
-  if (!rs.length) return '<div class="empty">The half-time report arrives at the break.</div>';
-  return '<ul class="feed asks">' + rs.map(r => {
+  const hl = `<div class="bar" style="margin-bottom:12px"><button class="btn primary" data-act="highlights">Play highlights</button>
+    <span class="mono" style="margin-left:8px">The key moments so far, back to back${voiceOn ? ', narrated' : '; switch Voice on to hear them narrated'}.</span></div>`;
+  if (!rs.length) return hl + '<div class="empty">The half-time report arrives at the break.</div>';
+  return hl + '<ul class="feed asks">' + rs.map(r => {
     const title = r.kind === 'half_time' ? 'Half-time report' : 'Full-time report';
     const watch = (r.watch || []).map(w => `<button class="link" data-seek="${w.t - 6}">Watch ${esc(w.clock)} ${esc(label(w.type).toLowerCase())}</button>`).join(' ');
     const steps = r.steps.map(st => `<li><b>${esc(st.agent.replace('_', ' '))}</b> → ${esc(st.tool.replace(/_/g, ' '))}</li>`).join('');
@@ -921,6 +933,7 @@ $('panel-body').addEventListener('click', e => {
     shareCard(+st, kind, li.querySelector('p').textContent);
   }
   else if (d.witeam !== undefined) { S.wi = { team: +d.witeam, change: {}, formation: '', busy: false, res: null, err: '' }; render(true); }
+  else if (d.act === 'highlights') playHighlights();
   else if (d.act === 'wi-run') runWhatIf();
   else if (d.act === 'wi-reset') { S.wi = { team: S.wi.team, change: {}, formation: '', busy: false, res: null, err: '' }; render(true); }
   else if (d.act === 'wi-explain') {
