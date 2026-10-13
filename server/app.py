@@ -48,14 +48,42 @@ async def ask(request):
     t = None if t is None else max(60., min(float(t), m["meta"]["duration"]))
     key = hashlib.sha1(json.dumps([body.get("match"), q.lower(), prof, None if t is None else int(t // 60)], sort_keys=True).encode()).hexdigest()
     hit = CACHE / f"{key}.json"
+    stream = request.query.get("stream") == "1"
     if hit.exists():
-        return web.json_response(dict(json.loads(hit.read_text(encoding="utf-8")), cached=True))
+        out = dict(json.loads(hit.read_text(encoding="utf-8")), cached=True)
+        if not stream:
+            return web.json_response(out)
+    else:
+        out = None
+    if not stream:
+        out = await _answer(m, prof, t, q, hit)
+        return web.json_response(out, dumps=lambda o: json.dumps(o, default=str))
+    # server-sent events: each step as it happens, then the answer
+    resp = web.StreamResponse(headers={"Content-Type": "text/event-stream", "Cache-Control": "no-cache"})
+    await resp.prepare(request)
+    send = lambda kind, data: resp.write(f"event: {kind}\ndata: {json.dumps(data, default=str)}\n\n".encode())
+    if out is None:
+        q_ = asyncio.Queue()
+        job = asyncio.create_task(_answer(m, prof, t, q, hit, on_step=q_.put_nowait))
+        while not job.done() or not q_.empty():
+            try:
+                await send("step", await asyncio.wait_for(q_.get(), timeout=.5))
+            except asyncio.TimeoutError:
+                pass
+        out = job.result()
+    await send("answer", out)
+    await resp.write_eof()
+    return resp
+
+
+async def _answer(m, prof, t, q, hit, on_step=None):
+    global _client
     async with _gate:
         _client = _client or make_client()
-        out = await Desk(_client, m, prof, until=t).ask(q)
+        out = await Desk(_client, m, prof, until=t, on_step=on_step).ask(q)
     CACHE.mkdir(parents=True, exist_ok=True)
     hit.write_text(json.dumps(out, default=str), encoding="utf-8")
-    return web.json_response(dict(out, cached=False), dumps=lambda o: json.dumps(o, default=str))
+    return dict(out, cached=False)
 
 
 async def tr(request):

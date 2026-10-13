@@ -74,8 +74,8 @@ def _until(match, t):
 
 
 class Desk:
-    def __init__(self, client, match, profile=None, until=None):
-        self.client, self.profile = client, profile or {}
+    def __init__(self, client, match, profile=None, until=None, on_step=None):
+        self.client, self.profile, self.on_step = client, profile or {}, on_step
         self.mv = MatchView(_until(match, until))
         self.facts, self.trail = [], []
         mv = self.mv
@@ -109,6 +109,7 @@ class Desk:
                     out = {"error": str(ex)}
                 self.facts.append(out)
                 self.trail.append(dict(agent=agent, tool=fn.__name__, args=kw))
+                self._say(agent, fn.__name__, kw)
                 return json.dumps(out, default=str)
             return wrap
 
@@ -192,6 +193,11 @@ class Desk:
         self.writer = Agent(client, _writer_text(self.profile), name="writer")
         self.checker = Agent(client, CHECKER, name="fact_checker")
 
+    def _say(self, agent, what, args=None):
+        """Tell a listener (the streaming endpoint) what the newsroom is doing right now."""
+        if self.on_step:
+            self.on_step(dict(agent=agent, tool=what, args=args or {}))
+
     def _score_pack(self):
         """Who is ahead at the moment of the question, for the deterministic leader check."""
         g = [e for e in self.mv.events if e["type"] in ("goal", "own_goal")]
@@ -225,12 +231,15 @@ class Desk:
         """Answer a reader's question. Returns the answer, whether the fact-checker approved it, the rewrites, the steps each agent took and the
         moments it refers to (for watch links)."""
         n0, f0 = len(self.trail), len(self.facts)
+        self._say("orchestrator", "reading the question")
         found = (await _run(self.orchestrator, f"QUESTION: {question}")).text.strip()
         facts = {"facts": self.facts}
         brief = f"QUESTION: {question}\nFINDINGS:\n{found}\n"
         attempts, ask = [], brief
         for _ in range(1 + MAX_REWRITES):
+            self._say("writer", "drafting" if not attempts else f"rewriting (draft {len(attempts) + 1})")
             answer = (await _run(self.writer, ask)).text.strip()
+            self._say("fact_checker", "checking every number against the tool results")
             v = await _run(self.checker, f"FINDINGS:\n{found}\nANSWER:\n{answer}\n")
             verdict = _verdict(v.text)
             bad = unsupported_numbers(answer, facts)
@@ -240,6 +249,7 @@ class Desk:
             attempts.append(dict(answer=answer, approved=approved, issues=issues))
             if approved:
                 break
+            self._say("fact_checker", "rejected", {"issues": "; ".join(issues)[:200]})
             ask = brief + f"Your previous answer was rejected by the fact-checker.\nPREVIOUS: {answer}\nISSUES: {issues}\nRewrite it, fixing these issues.\n"
         last = attempts[-1]
         moments = {m["clock"]: m for f in self.facts if isinstance(f, dict) for m in f.get("moments", [])}

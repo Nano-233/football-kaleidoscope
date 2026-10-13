@@ -613,7 +613,8 @@ function askView() {
   const sug = SUGGEST[S.persona].map(q => (q === 'How is my player doing?' && P.player ? `How is ${P.player} doing?` : q)).filter(q => q !== 'How is my player doing?');
   const opt = (v, cur, txt) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(txt || v)}</option>`;
   const hist = S.asks.slice().reverse().map(a => {
-    if (a.pending) return `<li><div class="q">${esc(a.q)}</div><div class="thinking">The newsroom is working on it</div></li>`;
+    if (a.pending) return `<li><div class="q">${esc(a.q)}</div><div class="thinking">The newsroom is working on it</div>
+      ${(a.live || []).length ? `<ol class="steps live">${a.live.map(st => `<li><b>${esc(st.agent.replace('_', ' '))}</b> ${esc(st.tool.replace(/_/g, ' '))}${Object.values(st.args || {}).some(Boolean) ? ` <span class="mono">${esc(Object.values(st.args).filter(Boolean).join(', '))}</span>` : ''}</li>`).join('')}</ol>` : ''}</li>`;
     if (a.error) return `<li><div class="q">${esc(a.q)}</div><div class="empty">${esc(a.error)}</div></li>`;
     const r = a.r;
     const badge = r.approved ? `<span class="badge ok">Fact-checked${r.rewrites ? ` · rewritten ${r.rewrites}×` : ''}</span>` : '<span class="badge warn">Held by fact-checker</span>';
@@ -641,10 +642,26 @@ async function askNewsroom(q) {
   const P = S.profile, a = { q, pending: true, clock: clockAt(S.t) };
   S.asks.push(a); S.askDraft = ''; S.askVer++; render(true);
   try {
-    const res = await fetch('api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    const res = await fetch('api/ask?stream=1', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ match: S.id, question: q, t: Math.max(60, S.t), profile: { persona: S.persona, depth: P.depth, language: P.language, club: P.club, player: P.player } }) });
     if (!res.ok) throw new Error(res.status === 404 || res.status === 405 || res.status === 501 ? NO_SERVER : `The newsroom could not answer (${res.status}).`);
-    a.r = await res.json();
+    // server-sent events: each step of the newsroom as it happens, then the answer
+    const reader = res.body.getReader(), dec = new TextDecoder();
+    let buf = '';
+    a.live = [];
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let k;
+      while ((k = buf.indexOf('\n\n')) >= 0) {
+        const block = buf.slice(0, k); buf = buf.slice(k + 2);
+        const kind = (block.match(/^event: (.*)$/m) || [])[1], data = JSON.parse((block.match(/^data: (.*)$/m) || [])[1] || 'null');
+        if (kind === 'step') { a.live.push(data); S.askVer++; render(true); }
+        if (kind === 'answer') a.r = data;
+      }
+    }
+    if (!a.r) throw new Error('The newsroom could not answer.');
   } catch (err) { a.error = err.message.startsWith('The ') ? err.message : NO_SERVER; }
   a.pending = false; S.askVer++; render(true);
 }
