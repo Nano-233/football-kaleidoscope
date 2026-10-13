@@ -817,6 +817,10 @@ Tried, not kept: filling the penalty-spot place too (`of_mask` 14): attackers in
 
 With crosses as imprecise as any lofted ball struck on the move, filling the near-post place of the attack plan again (`of_mask` 13: near post, back post, edge of the area; it was taken out on Oct 9 when crosses were too precise and the place "made shots, not chances") gives loss 180.5 -> 160.9 on 48 matches, goals 1.03 -> 1.17 (1.24), cross completion 0.39 -> 0.36. Shots rise 14.3 -> 17.3 (real 12.9): the shooting gate is the next thing to re-derive (see "Why the simulation has so few big chances").
 
+### Why the sim shoots too much: it gets close too often (2026-10-12)
+
+`scripts/shot_choice.py`: on-ball actions beyond x = 70 m by the clean-look xG of the spot (the engine's own formula, no defenders), and the share that are shots, sim vs Euro 2020 (31 matches, open play, feet): actions per team-match in the 0.07-0.12 band 11.6 vs about 3.1, 0.12-0.20 5.0 vs 1.0, above 0.20 1.8 vs 0.3; shot share in those bands 0.37 vs 0.37, 0.81 vs 0.51, 0.95 vs 0.68, and 0.08 vs 0.15 in the 0.04-0.07 band. The shooting decision is too eager only at the best spots; the larger cause is that the sim gets the ball into close central spots 3-5 times as often as real teams (the central-lane finding of Oct 9: final-third actions 32 % central vs 15 %), and those touches are crowded, which is also why big chances stay at 0.30 vs 0.86. Next: why defences let the ball into the middle near goal (block compactness and the central lane), then the shooting decision against these real shares.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
