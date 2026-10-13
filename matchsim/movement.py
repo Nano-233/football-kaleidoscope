@@ -72,6 +72,14 @@ OPEN_CAP = 6.        # separation (m) that counts as fully open when choosing wh
 OVERLAP_RATE = .5     # per second chance that a full-back with a team-mate wide in front of him overlaps
 BALL_SIDE = .9       # how strongly a marker leans to the ball side of his man when the ball is far away
 MARK_GAP = 1.1       # how far goal-side of his man a marker stands (tighter in the box)
+
+
+def mark_gap(o, tc):
+    """How far goal-side of his man (at o, or rows of o) a marker stands: the room he can give is the time he needs to react, and near
+    goal there is none to give (a man with a yard in the box turns and shoots), so it shrinks to arm's length there (real freeze
+    frames: 43 % of attackers in the good shooting spots have a man within 1.5 m when the ball is in front of the box)."""
+    near = np.clip(nrm(np.asarray(o, float) - GOAL) / TP.get("mark_r", 25.), TP.get("mark_box", .45), 1.)
+    return (TP.get("mark_gap", MARK_GAP) + 1.4 * (1 - tc.marking)) * near
 LINE_STEP = 5.       # metres the back line moves with pressure on the ball (up when pressed, down when the carrier has time)
 LINE_FLAT2 = .35     # the same after marking has been applied
 LINE_FLAT = .25      # how much of its own spread each back-line player keeps (0 = perfectly flat line)
@@ -271,7 +279,7 @@ def defend_assign(m, t, zone, urgent, role, P, O, Ov, C, Cv, ci, tc, tgt1, cover
             continue
         v += TP.get("mark_base", 4.)  # somebody is responsible for every dangerous man: the assignment is made whatever the price, if a defender is within reach
         wb = TP.get("ball_side", BALL_SIDE) * float(clip(dl / 20., 0, 1)) * float(clip(dg / TP.get("lean_r", 24.), TP.get("lean_min", .35), 1.))
-        spot = o + Ov[j] * .5 + _unit(_unit(GOAL - o) + wb * _unit(C - o)) * (TP.get("mark_gap", MARK_GAP) + 1.4 * (1 - tc.marking))
+        spot = o + Ov[j] * .5 + _unit(_unit(GOAL - o) + wb * _unit(C - o)) * mark_gap(o, tc)
         add(spot, v, j, "mark", can_mark & (nrm(P - spot, axis=1) <= TP.get("mark_reach", 19.)))
     # dangerous space nobody covers (pitch-control thinking: a cell is the attackers' if they can get there before any defender; its worth is the expected threat of
     # holding the ball there times the chance the ball gets there). The most valuable uncovered cells become jobs, so the block drops in front of goal and
@@ -333,7 +341,10 @@ def defend_assign(m, t, zone, urgent, role, P, O, Ov, C, Cv, ci, tc, tgt1, cover
         else:
             w = TP.get("jobs_w", .9)
             zone[i] = zone[i] * (1 - w) + jobs[k_] * w
-            if float(nrm(P[i] - jobs[k_])) > 4.:
+            slack = 4.
+            if kinds[k_] == "mark":  # a marker who is off his man by more than the room he can give is late: near goal that is a metre
+                slack = float(np.clip(nrm(jobs[k_] - GOAL) / 25., .25, 1.)) * 4.
+            if float(nrm(P[i] - jobs[k_])) > slack:
                 urgent[i] = True
     return zone, urgent, press_ids, cover_ids
 
@@ -391,7 +402,7 @@ def pick_up_free(zone, urgent, gate, role, P, O, ci, tc):
         if cost[i_, j_] > 20.:
             continue
         o = O[open_[j_]]
-        spot = o + _unit(GOAL - o) * (TP.get("mark_gap", MARK_GAP) + 1.4 * (1 - tc.marking))
+        spot = o + _unit(GOAL - o) * mark_gap(o, tc)
         zone[free[i_]] = zone[free[i_]] * (1 - PICK_UP) + spot * PICK_UP
         if cost[i_, j_] > 5.:
             urgent[free[i_]] = True
@@ -663,7 +674,7 @@ def team_targets(m, t):
         op = o + ov * .5  # stand goal-side of where he is going, not where he is
         wb = TP.get("ball_side", BALL_SIDE) * clip(nrm(B - op) / 20., 0, 1)  # marking is goal-side AND ball-side: the further the ball, the more the marker stands on the pass lane
         wb = wb * clip(nrm(op - GOAL, axis=1) / TP.get("lean_r", 24.), TP.get("lean_min", .35), 1.)  # in the box he is between his man and the goal first: that is the shot lane
-        man = op + _unit(_unit(GOAL - op) + wb[:, None] * _unit(B - op)) * (TP.get("mark_gap", MARK_GAP) + 1.4 * (1 - tc.marking))
+        man = op + _unit(_unit(GOAL - op) + wb[:, None] * _unit(B - op)) * mark_gap(op, tc)[:, None]
         gate = clip(1.4 - nrm(zone - o, axis=1) / 22, 0, 1) * tc.marking * ok
         gate = np.where(ok & (o[:, 0] < 20) & (np.abs(o[:, 1] - W / 2) < 22) & (role > GK), np.maximum(gate, TP.get("box_gate", .85)), gate)  # attackers in the box are marked, not watched
         thr = np.exp(-nrm(o - GOAL) / 22)

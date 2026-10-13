@@ -964,6 +964,18 @@ of close chances. Kept off until the volume is fixed; then switch it on and re-d
 per-band decision shares (`shot_lane.py release=1`).
 The root of the shot excess is therefore the defending near goal (markers who trail their man, above), not the shooting.
 
+### Markers near goal: tighter, and late sooner (2026-10-13)
+Following single marker-attacker pairs tick by tick (a probe wrapping `movement.team_targets`): the marker's spot was about 2 m
+from his man (the marking gap, 1.1 + 1.4 x (1 - marking), plus the lean to the ball), and he counted as late only when more
+than 4 m off it; inside that his approach is 1.1 x gap x work rate, about 0.5 m/s, so he parked 1-2 m short of a spot already
+2 m off his man. Now the gap shrinks near goal to arm's length (`mark_gap`: x clip(distance to goal / 25 m, 0.45, 1)), and a
+marker is late when he is off his spot by more than the room he can give (4 m far out, 1 m near goal). Tight marking (a man
+within 1.5 m of an attacker in the good shooting spots, as a pass is played from in front of the box) 0.08 -> 0.14 (real 0.43),
+shots 16.6 -> 16.0, goals 1.38, loss 156.4 (noise).
+Tried, not kept: approach gain without the work-rate factor (work rate should cap speed, not precision): tight marking 0.15,
+13 km per player, loss 174.7. The rest of the gap is still open: the tracking at the moment of a pass is a moving situation, and
+the marker lags his man however the spot is set; next is how real markers hold a moving man (body to body, matching his run).
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
