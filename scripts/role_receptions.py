@@ -22,6 +22,27 @@ REAL_ROLE = {"Center Back": "CB", "Right Center Back": "CB", "Left Center Back":
 ROLES = ("FB", "DM", "CM", "AM", "WG", "ST")
 
 
+def real_passes():
+    r = collections.defaultdict(list)
+    for f in glob.glob(str(ROOT.parent / "reference_data" / "euro2020" / "[0-9]*.json")):
+        if "_360" in f:
+            continue
+        ev = json.load(open(f, encoding="utf-8"))
+        pos = {}
+        for e in ev:
+            if "player" in e and "position" in e:
+                pos[e["player"]["id"]] = REAL_ROLE.get(e["position"]["name"])
+        for e in ev:
+            if e["type"]["name"] != "Pass" or "type" in e["pass"] or "outcome" in e["pass"] or "recipient" not in e["pass"]:
+                continue
+            ex = e["pass"]["end_location"][0] * L / 120
+            if ex <= L / 2:
+                continue
+            ro = pos.get(e["pass"]["recipient"]["id"])
+            r[ro].append((abs(e["location"][1] * W / 80 - W / 2), e["pass"]["length"] * L / 120, pos.get(e["player"]["id"])))
+    return r
+
+
 def real():
     r = collections.defaultdict(list)
     for f in glob.glob(str(ROOT.parent / "reference_data" / "euro2020" / "[0-9]*.json")):
@@ -46,6 +67,10 @@ def one(seed):
     role = {p["id"]: p["role"] for s in ("home", "away") for p in m["meta"][s]["players"] + m["meta"][s]["bench"]}
     r = collections.defaultdict(list)
     for e in m["events"]:
+        if e["type"] == "pass" and e.get("outcome") == "complete" and e.get("receiver") and e.get("end_x") is not None:
+            ex = e["end_x"] if e["team"] == 0 else L - e["end_x"]
+            if ex > L / 2:
+                r[("passed to", role.get(e["receiver"]))].append((abs(e["y"] - W / 2), e["length"], role.get(e["player"])))
         if e["type"] != "ball_receipt" or "x" not in e:
             continue
         x, y = (e["x"], e["y"]) if e["team"] == 0 else (L - e["x"], W - e["y"])
@@ -63,6 +88,14 @@ if __name__ == "__main__":
         for k, v in r.items():
             sim[k] += v
     rl = real()
+    rp = real_passes()
+    print("completed passes received in the opposition half: passer's median distance off the middle, median length, top passer roles   (sim | real)")
+    for ro in ROLES:
+        a_, b_ = sim.get(("passed to", ro), []), rp.get(ro, [])
+        if not a_ or not b_:
+            continue
+        ca, cb = collections.Counter(x[2] for x in a_), collections.Counter(x[2] for x in b_)
+        print(f"  to {ro}: off middle {np.median([x[0] for x in a_]):4.1f} | {np.median([x[0] for x in b_]):4.1f}   length {np.median([x[1] for x in a_]):4.1f} | {np.median([x[1] for x in b_]):4.1f}   from " + ", ".join(f"{k} {v / len(a_):.2f}" for k, v in ca.most_common(3)) + " | " + ", ".join(f"{k} {v / len(b_):.2f}" for k, v in cb.most_common(3)))
     print("receptions in the opposition half by role: per team-match, median metres from goal, median from the middle, share within 14 m of a touchline   (sim | real)")
     for ro in ROLES:
         s_, r_ = np.array(sim[ro]).reshape(-1, 2), np.array(rl[ro]).reshape(-1, 2)

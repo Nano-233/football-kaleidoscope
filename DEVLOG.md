@@ -1141,6 +1141,13 @@ defensive midfielder, attacking midfielder and striker; the near-box template wi
 So their receptions are not where the shape puts them: likely the ball-near support (checking to feet, the nearest supporting
 player) and the pass choice. Next: where exactly central midfielders are when they receive, relative to the carrier and to their
 target, before changing anything else.
+Then (`role_receptions.py` with the passes): in the opposition half real attacks run through the full-backs, centre-backs and
+defensive midfielder (receptions per team-match FB 50 vs 23, DM 32 vs 10; CM 35 vs 61, ST 29 vs 57; totals alike, about 190); real
+passes to central midfielders come mostly from full-backs (0.28) and centre-backs (0.21), the sim's from wingers, central
+midfielders and strikers. Real teams circulate around the outside of the attack (a U through the back line and full-backs) and the
+sim's front five or six attack through the middle among themselves. That, not the slots, is the central overload. Next: why the sim's
+full-backs and defensive midfielder are so rarely the pass in the opposition half (where they stand, whether they are open, and the
+pass choice towards them).
 
 ## Is the tuner machine learning?
 
