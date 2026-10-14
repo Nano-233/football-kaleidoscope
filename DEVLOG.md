@@ -1108,6 +1108,16 @@ box attack the space towards goal (offside no longer applies after the kick). Cr
 (0.28), goals 1.34 (1.24), shots 16.4, loss 162 -> 145. By source: crosses 0.08 -> 0.23 (0.35), other passes 0.11 (0.10), but
 loose balls and rebounds 0.28 (0.08): runners charging the six-yard box also feed scrambles. Cutbacks still 0.03 (0.25).
 
+### Cut-backs along the ground (2026-10-14)
+`scripts/byline.py`: the sim gets to the byline about as often as real teams (9.8 vs 10.9 actions per team-match) and plays as many
+balls back to 6-18 m (2.6 vs 2.1), but `scripts/cutback_outcome.py` shows they reach a team-mate 0.27 vs 0.44 of the time, cut out
+at the receiving end (clearances), because 79 % went in the air (real 30 %): the cross routine always lofted the ball. From the byline
+a ball pulled back towards the spot now goes along the ground. Reached 0.32, big chances from cut-backs 0.03 -> 0.06 (0.25); the shot
+after one is still weaker (xG 0.099 vs 0.144), likely because the sim's defenders read the ball's destination at once.
+Goals are now high: 96 matches 1.60 (1.24), shots 16.9 (12.9), big chances 0.78 (0.86), loss 151. Big chances with no ball in from a
+team-mate are 0.23 vs 0.08: loose balls near goal picked up by attackers (rebounds off blocks 0.05, 50-50s 0.03, defenders' lost
+balls 0.04). The shot volume is the next target.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

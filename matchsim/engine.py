@@ -1242,7 +1242,8 @@ class Match:
             s._pass(c, None, f(x), True, 20., .5, kind="clearance")
         elif kind == "cross":
             j, aim, pc = x
-            s._pass(c, j, f(aim), True, 20., pc, kind="cross", source="free_kick" if rk == "free_kick" else "open_play", why=why, sigma_scale=TUNE["cross_sigma"])
+            low = rk is None and C[0] > L - 8. and aim[0] < C[0] - 3.  # from the byline a ball pulled back towards the spot goes along the ground: the defenders are running at their own goal and cannot head it
+            s._pass(c, j, f(aim), not low, 16. if low else 20., pc, kind="cross", source="free_kick" if rk == "free_kick" else "open_play", why=why, sigma_scale=1. if low else TUNE["cross_sigma"])
         else:
             cpos, o, p_beat = x[:3]
             if o >= 0:

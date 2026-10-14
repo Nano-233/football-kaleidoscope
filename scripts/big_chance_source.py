@@ -77,6 +77,11 @@ def one(seed):
         kp = next((b for b in reversed(ev[max(0, i - 40):i]) if b["type"] in ("pass", "cross") and b.get("team") == e["team"] and b.get("player") != e["player"] and e["t"] - b["t"] < 4), None)  # the last ball in by a team-mate (a header off a cross has no completed pass to him)
         if kp is None or any(b["type"] == "possession_change" for b in ev[ev.index(kp):i]):
             c["no pass"] += 1
+            prev = next((b for b in reversed(ev[max(0, i - 12):i]) if b.get("player") and b["type"] not in ("pressure", "ball_receipt", "carry")), None)
+            c[("no pass after", prev["type"] if prev else "?", "same side" if prev and prev.get("team") == e["team"] else "other side")] += 1
+            if prev is not None and prev["type"] == "ball_recovery":
+                pp = next((b for b in reversed(ev[max(0, ev.index(prev) - 10):ev.index(prev)]) if b.get("player") and b["type"] not in ("pressure", "ball_receipt", "carry", "ball_recovery")), None)
+                c[("recovery after", (pp["type"] + ("/" + pp.get("body_part", "") if pp["type"] == "clearance" else "")) if pp else "?", "attackers'" if pp and pp.get("team") == e["team"] else "defenders'")] += 1
             continue
         fl = (lambda x, y: (L - x, W - y)) if kp["team"] == 1 else (lambda x, y: (x, y))
         ox, oy = fl(kp["x"], kp["y"])
@@ -92,4 +97,8 @@ if __name__ == "__main__":
     print(f"big chances (open play, xG >= 0.25 by the sim's formula) per team-match:   sim | real   (all open-play shots {sim['shots'] / n / 2:.1f} | {rl['shots'] / files / 2:.1f})")
     for k in KINDS:
         print(f"  {k:13} {sim[k] / n / 2:5.2f} | {rl[k] / files / 2:5.2f}")
+    for k, v in sorted(((k, v) for k, v in sim.items() if isinstance(k, tuple) and k[0] == "no pass after"), key=lambda kv: -kv[1])[:6]:
+        print(f"    sim no-pass, after {k[1]} ({k[2]}): {v / n / 2:.2f}")
+    for k, v in sorted(((k, v) for k, v in sim.items() if isinstance(k, tuple) and k[0] == "recovery after"), key=lambda kv: -kv[1])[:6]:
+        print(f"      the loose ball came off: {k[1]} ({k[2]}): {v / n / 2:.2f}")
     print(f"  {'all':13} {sum(sim[k] for k in KINDS) / n / 2:5.2f} | {sum(rl[k] for k in KINDS) / files / 2:5.2f}")
