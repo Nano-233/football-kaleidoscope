@@ -1127,6 +1127,21 @@ way: its chance of arriving (to the power the passer weighs risk with) times the
 Balls into the box from wide 16.9 -> 13.0 per team-match (11.2), cross rate 0.28 (0.28), goals 1.49, shots 16.1, loss 152 (48).
 `cross_v` is gone. Down the line is still 12 % (23 %): a question of who is there to receive it.
 
+### Where the shot excess comes from now, and the central overload (2026-10-14, open)
+The shooting decision against real decision shares (`shot_lane.py release=1`, now printing the share per band): the sim's is too
+steep (0.07-0.12 spots 0.42 vs 0.61, 0.12-0.20 0.79 vs 0.60, 0.20+ 0.99 vs 0.81; real players' willingness hardly rises with the
+chance), but refitting it would not cut shots: the sim reaches every band about twice as often (7.6 / 3.8 / 2.1 vs 4.3 / 1.5 / 1.0
+releases per team-match), so the excess is getting there. `scripts/lateral_panel.py`: final-third passes start central 0.25 vs 0.11
+and wide 0.39 vs 0.52; `scripts/role_receptions.py`: in the opposition half real central midfielders receive a median 19.9 m off
+the middle (0.49 within 14 m of a touchline), strikers 15.2 m, defensive midfielders 15.1 m; the sim's 9.3 / 8.6 / 8.7 (0.15 /
+0.14 / 0.10). The sim attacks through a crowded middle; real teams stretch the pitch.
+Tried, none moved the medians (so not kept): the midfielders' late run to the edge of the box off; standing where real passers
+would pass (`pol_space`, loss 177); wider in-possession slots for central midfielders with a stronger ball-side drift for the
+defensive midfielder, attacking midfielder and striker; the near-box template with central midfielders 20 m off the middle.
+So their receptions are not where the shape puts them: likely the ball-near support (checking to feet, the nearest supporting
+player) and the pass choice. Next: where exactly central midfielders are when they receive, relative to the carrier and to their
+target, before changing anything else.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

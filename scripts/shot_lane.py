@@ -100,7 +100,8 @@ if __name__ == "__main__":
     for bd in (3, 4, 5):
         a, b = BANDS[bd]
         S = sum(sim[k] for k in sim if k[0] == bd and k[3] == "all"); R = sum(rl[k] for k in rl if k[0] == bd and k[3] == "all")
-        print(f"\nclean-look xG {a:.2f}-{b:.2f}: actions per team-match sim {S / n / 2:.1f} | real {R / nr / 2:.1f}")
+        Ss = sum(sim[k] for k in sim if k[0] == bd and k[3] == "shot"); Rs = sum(rl[k] for k in rl if k[0] == bd and k[3] == "shot")
+        print(f"\nclean-look xG {a:.2f}-{b:.2f}: actions per team-match sim {S / n / 2:.1f} | real {R / nr / 2:.1f};  shot share sim {Ss / max(S, 1):.2f} | real {Rs / max(R, 1):.2f}")
         print("  in lane  nearest    share of actions sim | real    shot share sim | real   (n sim, real)")
         for lane in (0, 1, 2):
             for pr, pn in enumerate(("<2 m", "2-4 m", "4+ m")):
