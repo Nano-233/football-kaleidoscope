@@ -13,6 +13,8 @@ from matchsim.engine import Match, TUNE
 from matchsim.teams import make_team, Tactics
 
 KV = {k: float(v) for k, v in (a.split("=") for a in sys.argv[2:])}
+CAM = bool(KV.pop("camera", 1))  # count simulated players only inside a real broadcast view, as the 360 frames do (scripts/camera.py)
+_cam = None
 L, W = 105., 68.
 in_box = lambda x, y: x > L - 16.5 and abs(y - W / 2) < 20.16
 
@@ -96,7 +98,16 @@ def one(seed):
                 break
             if b["type"] == "possession_change" or b["t"] - e["t"] > 4:
                 break
-        tally(c, [pos(s) for s in own if s not in gk and f[6 + 2 * s] > -5], [pos(s) for s in opp if s not in gk and f[6 + 2 * s] > -5],
+        mates = [pos(s) for s in own if s not in gk and f[6 + 2 * s] > -5]
+        oppl = [pos(s) for s in opp if s not in gk and f[6 + 2 * s] > -5]
+        if CAM:
+            global _cam
+            if _cam is None:
+                from scripts.camera import Camera
+                _cam = Camera()
+            poly = _cam.view(o, rng)
+            mates, oppl = [q for q in mates if _cam.sees(poly, q)], [q for q in oppl if _cam.sees(poly, q)]
+        tally(c, mates, oppl,
               e.get("outcome") == "complete", shot_xg, shot_d, en)
     return c
 

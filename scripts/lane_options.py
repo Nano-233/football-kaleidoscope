@@ -14,6 +14,8 @@ from matchsim.engine import Match, TUNE
 from matchsim.teams import make_team, Tactics
 
 KV = {k: float(v) for k, v in (a.split("=") for a in sys.argv[2:])}
+CAM = bool(KV.pop("camera", 1))  # count simulated players only inside a real broadcast view (scripts/camera.py), as the 360 frames do
+_cam = None
 L, W = 105., 68.
 LANES = ("wide", "half", "centre")
 
@@ -89,9 +91,22 @@ def one(seed):
         own, opp = (range(11, 22), range(11)) if flip else (range(11), range(11, 22))
         pos = lambda s: fl(*f[5 + 2 * s:7 + 2 * s])
         mates = [pos(s) for s in own if s not in gk and f[6 + 2 * s] > -5 and np.hypot(*(pos(s) - C)) > .5]
+        oppl = [pos(s) for s in opp if s not in gk and f[6 + 2 * s] > -5]
+        for q in mates:  # the whole team, no camera: where the sim's players are
+            dq = np.hypot(*(q - C))
+            c[("all mates", 0 if dq < 20 else 1 if dq < 40 else 2)] += 1
+            c[("all mates behind", dq >= 40 and q[0] < C[0])] += 1
+        if CAM:
+            global _cam
+            if _cam is None:
+                from scripts.camera import Camera
+                _cam = Camera()
+            poly = _cam.view(C, rng)
+            mates = [q for q in mates if _cam.sees(poly, q)]
+            oppl = [q for q in oppl if _cam.sees(poly, q)]
         ids = [p["id"] for p in roster]
         rp = pos(ids.index(e["receiver"])) if e.get("receiver") in ids else None
-        tally(c, C, mates, [pos(s) for s in opp if s not in gk and f[6 + 2 * s] > -5], fl(e["end_x"], e["end_y"]), rp, e.get("technique") if e["type"] == "pass" else "cross")
+        tally(c, C, mates, oppl, fl(e["end_x"], e["end_y"]), rp, e.get("technique") if e["type"] == "pass" else "cross")
     return c
 
 
@@ -101,7 +116,8 @@ if __name__ == "__main__":
         sim = sum(p.map(one, range(9700, 9700 + n)), collections.Counter())
     rl = real()
     S, R = sim["n"], rl["n"]
-    print(f"passes from 55-88 m ({S} sim, {R} real):   sim | real")
+    print(f"passes from 55-88 m ({S} sim, {R} real){' (sim seen through real camera views)' if CAM else ''}:   sim | real   [per-pass figures are average counts of team-mates, not shares]")
+    print("  sim, whole team (no camera): outfield team-mates within 20 m / 20-40 m / beyond 40 m of the passer: " + " / ".join(f"{sim[('all mates', k)] / S:.2f}" for k in range(3)) + f"   (beyond 40 m and behind the ball: {sim[('all mates behind', True)] / S:.2f})")
     print("  team-mates per pass in each lane (5-40 m away):  " + "  ".join(f"{k}: {sim[('option', k)] / S:.2f}|{rl[('option', k)] / R:.2f}" for k in LANES))
     print("  mean distance from the passer:                   " + "  ".join(f"{k}: {sim[('dist', k)] / max(sim[('option', k)], 1):.1f}|{rl[('dist', k)] / max(rl[('option', k)], 1):.1f}" for k in LANES))
     print("  options within 12 m per pass:                    " + "  ".join(f"{k}: {sim[('near', k)] / S:.2f}|{rl[('near', k)] / R:.2f}" for k in LANES))

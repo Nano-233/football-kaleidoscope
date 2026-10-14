@@ -13,6 +13,8 @@ from matchsim.engine import Match, TUNE
 from matchsim.teams import make_team, Tactics
 
 KV = {k: float(v) for k, v in (a.split("=") for a in sys.argv[2:])}
+CAM = bool(KV.pop("camera", 1))  # the sim seen through a real broadcast view, with the same "6 defenders in view" rule as the real side
+_cam = None
 L, W = 105., 68.
 BINS = range(10, 45, 5)
 
@@ -51,6 +53,17 @@ def one(seed):
         dfd = 1 - poss  # the defending side; its goal is at x = 0 for team 0, x = L for team 1
         d = bx if dfd == 0 else L - bx
         xs = [f[5 + 2 * s] for s in range(11 * dfd, 11 * dfd + 11) if s not in gk and f[6 + 2 * s] > -5]
+        if CAM and 10 <= d < 45:
+            global _cam
+            if _cam is None:
+                from scripts.camera import Camera
+                _cam = Camera()
+            att = 1 - dfd
+            to_att = (lambda q: np.array(q)) if att == 0 else (lambda q: np.array([L - q[0], W - q[1]]))  # the attacking side's frame, as the real views are stored
+            poly = _cam.view(to_att(f[1:3]), rng)
+            xs = [f[5 + 2 * s] for s in range(11 * dfd, 11 * dfd + 11) if s not in gk and f[6 + 2 * s] > -5 and _cam.sees(poly, to_att(f[5 + 2 * s:7 + 2 * s]))]
+            if len(xs) < 6:
+                continue
         if 10 <= d < 45 and xs:
             r[int(d // 5) * 5].append(min(xs) if dfd == 0 else L - max(xs))
     return r

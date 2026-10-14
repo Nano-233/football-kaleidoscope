@@ -14,6 +14,8 @@ from matchsim.teams import make_team, Tactics
 from scripts.zone_entry import in_zone
 
 KV = {k: float(v) for k, v in (a.split("=") for a in sys.argv[2:])}
+CAM = bool(KV.pop("camera", 1))  # count simulated players only inside a real broadcast view, as the 360 frames do (scripts/camera.py)
+_cam = None
 L, W = 105., 68.
 HIST = (.75, 1., 1.5, 2., 3., 5., 1e9)
 
@@ -75,7 +77,16 @@ def one(seed):
         f = F[min(int(round(e["t"] / dt)), len(F) - 1)]
         own, opp = (range(11, 22), range(11)) if flip else (range(11), range(11, 22))
         pos = lambda s: fl(*f[5 + 2 * s:7 + 2 * s])
-        tally(c, [pos(s) for s in own if s not in gk and f[6 + 2 * s] > -5 and ids[s] != e["player"]], [pos(s) for s in opp if s not in gk and f[6 + 2 * s] > -5])
+        mates = [pos(s) for s in own if s not in gk and f[6 + 2 * s] > -5 and ids[s] != e["player"]]
+        oppl = [pos(s) for s in opp if s not in gk and f[6 + 2 * s] > -5]
+        if CAM:
+            global _cam
+            if _cam is None:
+                from scripts.camera import Camera
+                _cam = Camera()
+            poly = _cam.view(fl(e["x"], e["y"]), rng)
+            mates, oppl = [q for q in mates if _cam.sees(poly, q)], [q for q in oppl if _cam.sees(poly, q)]
+        tally(c, mates, oppl)
     return c
 
 

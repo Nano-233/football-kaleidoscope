@@ -1169,6 +1169,28 @@ Next: the space-finding routine re-places most attackers every second (open / la
 rewards central spots near goal. The fix is likely there or in an explicit ball-side flank structure (full-back, winger, near
 central midfielder within 8-15 m of a wide carrier), measured with `lane_options.py`.
 
+### Audit: the 360 camera window (2026-10-14)
+StatsBomb 360 frames hold only the players inside the broadcast view. For real passes from 55-88 m the view covers 93 % of the circle
+around the passer at 8 m, 81 % at 12 m, 57 % at 20 m, 35 % at 30 m (fully covered in 67 / 28 / 3 / 0 % of frames). Every comparison
+that counted real players more than about 10 m from the ball under-counted the real side. `scripts/camera.py` lends the sim the same
+window: for a sim moment, the visible area of a real frame with the ball within 4 m of the same spot, shifted onto it; sim players
+count only inside it. Re-checked with it:
+- `lane_options.py` (per-pass figures are average counts of team-mates, not shares): within 5-40 m of the passer, wide / half / centre,
+  sim 0.99 / 1.16 / 1.01 against real 1.48 / 2.63 / 1.86; within 12 m 0.23 / 0.27 / 0.23 against 0.54 / 0.62 / 0.26; open 0.32 / 0.31 /
+  0.22 against 0.66 / 0.79 / 0.45. Correction to the entry above: the sim gives the carrier about half the support of a real team in
+  every lane, not only on the flank; an option, once there, is open about as often as a real one (centre 0.22 vs 0.24), so the
+  defending is not the fault. The sim's whole team (no window): 3.6 outfield team-mates within 20 m of the passer, 4.5 at 20-40 m,
+  1.8 beyond (1.4 of them behind the ball).
+- `zone_options.py`: tight marking holds (0.42 vs 0.43); defenders in the good spots 0.40 vs 0.36. Correction: the earlier
+  "0.68 vs 0.36, twice the defenders" was the window; nothing was kept on it.
+- `line_depth.py` (sim through the window, the same at-least-6-defenders-in-view rule): 15-20 m 9.8 vs 12.2, 20-25 m 12.5 vs 14.5;
+  the line is still deeper than real near goal, by about 2 m.
+- `cross_outcome.py`: attackers in the box when a cross is hit 1.26 vs 2.30 (it read 1.73 without the window), free ones 0.77 vs
+  1.33; defenders 3.91 vs 4.12.
+Not affected (they look only within a few metres of a player): crowding within 5 m, the nearest-defender distances, where passes and
+shots went, shot and cross outcomes.
+Tried for the support (no window change in the result; not kept): a block led 8 m ahead of the ball instead of 16, and 0.7 of its width.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
