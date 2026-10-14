@@ -1149,6 +1149,26 @@ sim's front five or six attack through the middle among themselves. That, not th
 full-backs and defensive midfielder are so rarely the pass in the opposition half (where they stand, whether they are open, and the
 pass choice towards them).
 
+### Is the central overload the defence or the passer? (2026-10-14, open)
+Tactics or logic: with both sides told to play at width 0.95 instead of 0.5, central midfielders still receive 9.7 m off the middle
+(real 19.9) and full-backs 22 times per team-match in the opposition half (50): the width instruction only scales the formation
+slots, which the in-game routines override. Engine logic.
+Defence or passer (`scripts/lane_options.py`, passes from 55-88 m, options 5-40 m away, open = 3 m free and a 2 m-clear lane):
+central options are open 0.25 of the time against 0.24 real, open team-mates per pass by lane wide / half / centre 0.76 / 0.73 / 0.48
+against 0.66 / 0.79 / 0.45; the defence closes the middle as real defences do. Yet the pass goes central 0.31 vs 0.16 (the intended
+receiver stands central 0.29, so it is the choice, not the aim). The pass policy on the real frames predicts the centre 0.20 (actual
+0.16), so it is not biased much. The difference is distance: options within 12 m per pass, wide / half / centre, 0.28 / 0.32 / 0.27
+against 0.54 / 0.62 / 0.26 (mean distance to wide options 24.4 vs 16.5 m). Real attacks give the carrier close support on the flank
+and in the half-spaces (the full-back, winger and central midfielder near the ball), so the short safe pass is there; the sim's
+nearest good option is central.
+Tried, none moved the close wide support (not kept): the support ring (`ring_min` 6, `ring_pref` 12, `support_min` 6); the support
+triangle at 10 m (it never runs: the Open Football attacking plan `of_plan` skips it); the plan's short outlet (`of_slots`: more
+central, shots 18.5); the block sliding further to the ball side (`slide_c` 0.6 / 0.8, with `slide_w` 0.6): more central. Removing
+the plan's own hover wobble (the forwards' cap) raised offsides to 2.51 and goals to 1.67: kept as it is.
+Next: the space-finding routine re-places most attackers every second (open / lane / threat / distance terms); the threat term
+rewards central spots near goal. The fix is likely there or in an explicit ball-side flank structure (full-back, winger, near
+central midfielder within 8-15 m of a wide carrier), measured with `lane_options.py`.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

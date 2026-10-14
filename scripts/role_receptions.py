@@ -13,6 +13,7 @@ from matchsim.engine import Match, TUNE
 from matchsim.teams import make_team, Tactics
 
 KV = {k: float(v) for k, v in (a.split("=") for a in sys.argv[2:])}
+WIDTH = KV.pop("tac_width", .5)  # both sides' width instruction (0-1), to tell tactics from logic
 L, W = 105., 68.
 REAL_ROLE = {"Center Back": "CB", "Right Center Back": "CB", "Left Center Back": "CB", "Right Back": "FB", "Left Back": "FB", "Right Wing Back": "FB",
              "Left Wing Back": "FB", "Center Defensive Midfield": "DM", "Right Defensive Midfield": "DM", "Left Defensive Midfield": "DM",
@@ -61,8 +62,8 @@ def real():
 def one(seed):
     TUNE.update(KV)
     rng = np.random.default_rng(seed)
-    h = make_team("KES", "4-3-3", Tactics(press=.6, line_height=.6, directness=.45), rng=rng)
-    a = make_team("NBR", "4-4-2", Tactics(press=.4, line_height=.4, directness=.55, marking=.5), rng=rng)
+    h = make_team("KES", "4-3-3", Tactics(press=.6, line_height=.6, directness=.45, width=WIDTH), rng=rng)
+    a = make_team("NBR", "4-4-2", Tactics(press=.4, line_height=.4, directness=.55, marking=.5, width=WIDTH), rng=rng)
     m = Match(h, a, seed=seed).run()
     role = {p["id"]: p["role"] for s in ("home", "away") for p in m["meta"][s]["players"] + m["meta"][s]["bench"]}
     r = collections.defaultdict(list)
