@@ -34,6 +34,10 @@ def tally(c, mates, opp):
             o = min(opp, key=lambda o: np.hypot(*(o - m)))
             c[("side", "goal-side" if o[0] > m[0] + .3 else "level" if o[0] > m[0] - .3 else "behind him")] += 1
     c["opp in zone"] += sum(in_zone(*o) for o in opp)
+    xs = sorted((o[0] for o in opp), reverse=True)
+    if len(xs) >= 1:
+        c["line"] += L - xs[0]  # the last outfield defender's distance from his goal line: the offside line (the keeper aside)
+        c[("line bin", min(int((L - xs[0]) / 4), 6))] += 1
 
 
 def real():
@@ -88,4 +92,5 @@ if __name__ == "__main__":
         print(f"  a team-mate there with his nearest marker {nm:8} {sim[('free', k)] / max(zs, 1):.2f} | {rl[('free', k)] / max(zr, 1):.2f}")
     print("  nearest defender distance, share:  " + "  ".join(f"<{e if e < 1e8 else 'inf'}: {sim[('hist', i)] / max(zs, 1):.2f}|{rl[('hist', i)] / max(zr, 1):.2f}" for i, e in enumerate(HIST)))
     print("  where he stands:  " + "  ".join(f"{k}: {sim[('side', k)] / max(zs, 1):.2f}|{rl[('side', k)] / max(zr, 1):.2f}" for k in ("goal-side", "level", "behind him")))
+    print(f"  last outfield defender from his goal line: mean {sim['line'] / sim['passes']:.1f} m | {rl['line'] / rl['passes']:.1f} m;  by 4 m: " + " ".join(f"{sim[('line bin', i)] / sim['passes']:.2f}|{rl[('line bin', i)] / rl['passes']:.2f}" for i in range(7)))
     print(f"  defenders in the zone (outfield)  {sim['opp in zone'] / sim['passes']:.2f} | {rl['opp in zone'] / rl['passes']:.2f}")

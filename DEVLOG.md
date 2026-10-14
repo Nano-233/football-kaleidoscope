@@ -1019,6 +1019,22 @@ U(0, 0.35)); a header is directed only as far as the defender faces out and is n
 clearances behind 0.02 -> 0.04, goals 1.17 (1.24), corners still about 4.8: the rest is in the volume of kicked clearances and in
 more 3-D deflections (crosses blocked, tackles). Loss 165 (noise about 10).
 
+### The back line near goal sits too deep (2026-10-13, open)
+With marking now real (tight marking 0.39 vs 0.43, the nearest-defender distribution matching bin by bin), passes into the good
+spots are still tried 5.3 vs 3.3 per team-match: more attackers stand there (0.14 vs 0.08 per pass) and twice the defenders
+(0.68 vs 0.36). The last outfield defender is within 8 m of his goal line 25 % of the time when the ball is 15-35 m out, against
+2 % in the real frames. Real back lines follow a simple law: the last defender stands at half the ball's distance from goal plus
+3 m (9.0 / 12.2 / 14.5 / 17.0 / 18.6 m with the ball 12 / 17 / 22 / 27 / 32 m out); the sim's line keeps a fixed 10 m behind the
+ball down to 6 m from the line.
+A probe of the deep defenders (team_targets wrapped): unassigned full-backs and centre-backs, the open-play 'post' job (a man on
+the near post once the ball is within 26 m, a set-piece habit), and markers following a forward who stands on the last line (a
+ratchet: the forward stays on the shoulder, the marker goes goal-side, both drop). Tried together: the half-distance line
+(`half_line`), no post job in open play, a marker held level with the line when the ball is outside the box (`hold_line`), and the
+line stepping up at once when left 3 m deep (`squeeze`): deep defenders per moment 0.51 -> 0.28, nearly all of the rest on their
+way back up; chance volume 5.6 -> 5.2, goals 1.21, but offsides 3.4 (real 2.0) and loss 171.7. Not kept: a higher line exposes the
+forwards' run timing. Next: the forwards' timing against a line that holds, then these four together again; and why urgent
+recovery is jog pace (the need term reaches flat out only far from the target) while total running is already 11.7 km (10.8).
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
