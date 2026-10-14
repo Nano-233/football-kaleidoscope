@@ -306,8 +306,6 @@ def defend_assign(m, t, zone, urgent, role, P, O, Ov, C, Cv, ci, tc, tgt1, cover
     # lane, post, space
     if dgc < 30.:
         add(C + _unit(GOAL - C) * max(4., .45 * dgc), TP.get("lane_job_k", 35.) * float(np.exp(-dgc / 12.)) * .4, 100, "lane", can_mark)
-    if dgc < 26.:
-        add(np.array([1.6, W / 2 + side * 2.8]), TP.get("post_v", 5.) * float(clip((28. - dgc) / 12., 0, 1)), 101, "post", can_mark)
     if dgc < 30. and abs(C[1] - W / 2) > 14.:
         add(np.array([11., W / 2 + .3 * (C[1] - W / 2)]), TP.get("space_v", 3.), 102, "space", can_mark)
     if not jobs:
@@ -554,7 +552,10 @@ def team_targets(m, t):
     tx = np.maximum(tx, MIN_X[role])
     if not has:  # defending: near our goal the block follows the ball, each line a fixed distance behind it
         wn = float(clip((TP.get("wn_end", WN_END) - Bs[0]) / 12., 0, 1)) * COMPRESS[role]  # how far this role is pulled onto the ball: the back line fully, forwards hardly (they are the outlet)
-        tx = np.where(out_f, tx * (1 - wn) + np.maximum(Bs[0] - LAG[role] * TP.get("lag_k", 1.) * (1.25 - .5 * tc.press), MIN_X[role]) * wn, tx)
+        follow_x = np.maximum(Bs[0] - LAG[role] * TP.get("lag_k", 1.) * (1.25 - .5 * tc.press), MIN_X[role])
+        # the back line splits the distance between the ball and the goal (real freeze frames: last defender at 9 / 12 / 14.5 / 17 / 18.6 m with the ball 12 / 17 / 22 / 27 / 32 m out)
+        follow_x = np.where((role == CB) | (role == FB), np.maximum(.5 * Bs[0] + 3., MIN_X[role]), follow_x)
+        tx = np.where(out_f, tx * (1 - wn) + follow_x * wn, tx)
         tx = np.where(out_f, np.minimum(tx, np.maximum(Bs[0] + GS_CAP[role] * (.6 + .8 * tc.press), MIN_X[role]) + ALLOW[role]), tx)
     if not has:
         bl = (role == CB) | (role == FB)
@@ -808,6 +809,9 @@ def team_targets(m, t):
             if bl.sum() >= 2 and float(nrm(Bs - GOAL)) > 26.:  # marking must not pull defenders out of the line: re-flatten it (outside the box)
                 mx = zone[bl, 0].mean()
                 zone[bl, 0] = mx + LINE_FLAT2 * (zone[bl, 0] - mx)
+            # a defender left deep behind his line's spot steps up at once ('out!'), not at a stroll
+            bl_ = out_f & ~urgent & (gate < TP.get("flat_gate", .6))
+            urgent |= bl_ & (zone[:, 0] - P[:, 0] > 3.)
             if m.poss == 1 - t and carrier >= 0:
                 if not TP.get("assign_on", 1.):
                     zone, urgent = pick_up_free(zone, urgent, gate, role, P, O, carrier - 11 * (1 - t), tc)

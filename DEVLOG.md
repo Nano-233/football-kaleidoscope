@@ -1045,6 +1045,18 @@ The four back-line changes of the last entry, re-tried with this in place on 96 
 12.9-13.5 m (real 16.2) and holding the line raised offsides to 2.7: they do not move the line, so not kept. The deep line has
 another cause; the probe showed almost all deep defenders with higher targets, i.e. coming back up slowly after defending the box.
 
+### The back line near goal, found (2026-10-13)
+`scripts/line_depth.py` (the last outfield defender's depth by the ball's distance from goal, every central on-ball frame vs real
+on-ball freeze frames): beyond 25 m the sim matches (30-35 m: 18.8 vs 18.6); inside it collapses (15-20 m: 8.1 vs 12.2, lower
+quartile 3.6 m). A probe of the last defender at those moments: a fifth of the time he had the open-play near-post job (target
+2.4 m from goal), and the unassigned full-backs aimed at the shape's fixed 10 m behind the ball; with those fixed, the targets were
+right (14.1 m) but he stood at 7.4 m, stepping up at a stroll. Now: no near-post job in open play (the keeper has the goal; a man
+on the post is a set-piece habit), the back line at half the ball's distance plus 3 m (the real relation), and a defender left
+more than 3 m behind his spot steps up urgently. Line depth 15-20 m: 8.1 -> 10.2 (12.2), 10-15 m 4.9 -> 7.8 (9.0), 20-25 m
+10.9 -> 12.4 (14.5); offsides 1.97 (1.98). The chances do not fall (releases in the good spots 5.6 either way), shots 16.5,
+goals 1.34, loss 172 (96 matches; 166 before): the line was not what makes the extra chances. The biggest route left is the
+attacker winning the ball in the zone himself, 1.5 vs 0.28 per team-match.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
