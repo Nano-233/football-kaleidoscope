@@ -25,7 +25,7 @@ TUNE = dict(xg_z0=-2.08, xg_d=-.07, xg_a=1.89, xg_h=-.2, xg_b=.72, xg_c=.25, cle
             carry_base=0.22, carry_prog=.2, carry_streak=.3, dwell_base=0.9, dwell_shape=2.4, dwell_scale=1.61,
             tackle_rate=1.2, wide_error=3.2, off_miss=.2, off_mult=.02, off_lag=.25, head_keep=.7, safe_out_x=.12, card_thr=.85, adv_sev=.14, clear_dir_sd=1.2, rec_sprint=3., fk_xg=2.2, fk_over0=.45, fk_over_d=.02, fk_shot_k=.5, fk_shot_d=27.2, foul_risk=6., box_avoid=.2, tackle_risk=2.2, tackle_danger=.7)
 TUNE.update(burst_gain=-1e9, block_v=.8, push_k=1., pol_space=0., follow_poss=.2, pin_from=.35, recover_on=1., cover_margin=3., threat_depth=.34, threat_ball=25., mark_base=4., mark_reach=19., layer_bias=.9, space_cover=0., space_k=100., n_space=3, assign_on=1., press_v=7., cover_v=3.5, mark_k=100., lane_job_k=35., post_v=5., space_v=3., job_hyst=1.5, press_hyst=2.0, templ_w=.9, busy_gate=.6, flat_gate=.6, run_gate=.95, mark_sprint_d=3.0, box_start=38., wn_end=42., lag_k=1., drop_k=1., mark_gap=1.1, box_gate=.85, dang_far=38., dang_gate=.85, react_def=.35, close_gap=1.5, jock_k=1., press_k=1., open_w=1., lane_w=1., slot_gate=.5, lean_r=24., lean_min=.35, shoot_close=28., shot_gap=.7, jobs_on=1., jobs_d=38., jobs_att=40., jobs_w=.9, job_mark=3., job_lane=12., job_post=1.4, job_wv=4., way_pen=0., way_r=2.2, run_k=1., ball_side=.9, hover=.3)  # block shape (read by movement.py through TP)
-TUNE.update( body_sep=.7, area_run=1., area_slide=.25, mark_lat=8., area_half=13.75, area_ball=.8, far_free=1., far_dy=14., of_mask=13., cross_sigma=1.6, threat_xg=.15, tackle_floor=.5, cover_k=.04, behind_k=1.5, foul_miss=.35, duel_reach=1.4, gk_reach=1.6, stop_a=15., touch_sd=.9, pin_d=4., pin_p=.6, pin_r=1.5, slide_c=1., lat_def_c=1., fb_up=6., far_tuck=1., tackle_dir_sd=.5, tackle_v0=2.5, tackle_v1=6., body_r=.5, contact_mu=.35, contact_e=.3, loose_k=.07, loose_v0=5., touch_r=.9, take_tau=.35, take_k=.04, take_v0=10.)  # a player's body as the ball meets it: radius with a leg out (m), friction that takes pace off a glancing ball, how much a head-on ball comes back
+TUNE.update(body_sep=.7, area_run=1., area_slide=.25, mark_lat=8., area_half=13.75, area_ball=.8, far_free=1., far_dy=14., of_mask=13., cross_sigma=1.6, threat_xg=.15, tackle_floor=.5, cover_k=.04, behind_k=1.5, foul_miss=.35, duel_reach=1.4, gk_reach=1.6, stop_a=15., touch_sd=.9, pin_d=4., pin_p=.6, pin_r=1.5, slide_c=1., lat_def_c=1., fb_up=6., far_tuck=1., tackle_dir_sd=.5, tackle_v0=2.5, tackle_v1=6., body_r=.5, contact_mu=.35, contact_e=.3, loose_k=.07, loose_v0=5., touch_r=.9, take_tau=.35, take_k=.04, take_v0=10.)  # a player's body as the ball meets it: radius with a leg out (m), friction that takes pace off a glancing ball, how much a head-on ball comes back
 movement.TP = TUNE
 sig = lambda x: 1 / (1 + np.exp(-x))
 
@@ -1942,6 +1942,13 @@ class Match:
                 rival = [j for j in close if j // 11 != i // 11]
                 if rival:
                     s.emit("fifty_fifty", player=i, pos=b, target=s.ids[rival[0]], outcome="won")
+                t_ = i // 11
+                own_ = np.array([0. if t_ == 0 else L, W / 2])
+                if s.role[i] > 0 and nrm(b - own_) < 20. and float(nrm(s.pos[s._opp(t_)] - b, axis=1).min()) < 3.5:
+                    # a loose ball in front of his own goal with a man on him: no time to take it down, he clears it first time (the clearance option's own 3.5 m)
+                    s._gain_control(i, b)
+                    away = _unit(_unit(b - own_) + .8 * np.array([0., 1. if b[1] > W / 2 else -1.]))
+                    return s._pass(i, None, clip(b + away * 35., [1., 1.], [L - 1., W - 1.]), True, 20., .5, kind="clearance")
                 return s._gain_control(i, b)
             s.block_until[i] = s.t + .4
             if d[i] < TUNE["touch_r"]:  # he got something on it without taking it down: the ball goes on off his foot or body

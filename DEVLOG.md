@@ -1057,6 +1057,19 @@ more than 3 m behind his spot steps up urgently. Line depth 15-20 m: 8.1 -> 10.2
 goals 1.34, loss 172 (96 matches; 166 before): the line was not what makes the extra chances. The biggest route left is the
 attacker winning the ball in the zone himself, 1.5 vs 0.28 per team-match.
 
+### First-time clearances in your own box (2026-10-13)
+`scripts/clear_after.py`: after a clearance from his own box the clearing side keeps the ball 0.65 vs 0.28, and it goes out 0.08 vs
+0.24; `scripts/box_play.py`: outfield players in their own box make 80 passes a match against 17.5 (37 of them to a team-mate also in
+the box, 5.5 real) and 17 clearances against 27; `scripts/box_shape.py`: with the ball there, 4+ team-mates are in the box 61 % of
+the time (real 24 %), almost all within 8 s of winning it. Where those possessions start: 50 of the 80 passes follow a defender
+picking up a loose ball in his own box and taking it under control. Real defenders clear a loose ball there first time when a man
+is on them: there is no half-second to take it down. Now an outfield player who reaches a loose ball within 20 m of his own goal
+with an opponent inside 3.5 m (the clearance option's own distance) clears it first time. Box passes 80 -> 57, clearances 17 -> 37.5
+(real 27, now over), corners 4.8 -> 7.7 (11.6), loss 157.8.
+Tried, not kept: a faster switch to the attacking shape after a regain (`fade_up` 0.8 / 0.5 instead of 2.2 s) and the loss cost as
+the opponent's position value (`loss_mirror`): box passes unchanged at 80. The volume of chances near goal (5.6 per team-match vs
+2.5) did not move with any of this; its biggest single route stays the attacker winning the ball in the zone.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
