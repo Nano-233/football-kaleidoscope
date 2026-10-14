@@ -1035,6 +1035,16 @@ way back up; chance volume 5.6 -> 5.2, goals 1.21, but offsides 3.4 (real 2.0) a
 forwards' run timing. Next: the forwards' timing against a line that holds, then these four together again; and why urgent
 recovery is jog pace (the need term reaches flat out only far from the target) while total running is already 11.7 km (10.8).
 
+### Forwards: no planned mistiming; runs timed to the passer (2026-10-13)
+Offsides were produced by design: a forward on the last defender's shoulder had a sine wobble of up to 2 m added ("now and then
+mistimed"), and runs in behind started at random moments whatever the man on the ball was doing. Now a forward stands just onside
+and is caught only when the line moves faster than he reacts (movement lag, and the passer seeing him a quarter-second late), and a
+run starts only when the carrier can play it (facing up the pitch, nobody within 2.5 m). 96 matches: offsides 1.99 (real 1.98),
+goals 1.18 (1.24), shots 15.2 (from about 16), loss 166 (noise about 10).
+The four back-line changes of the last entry, re-tried with this in place on 96 matches, still left the last defender's mean depth at
+12.9-13.5 m (real 16.2) and holding the line raised offsides to 2.7: they do not move the line, so not kept. The deep line has
+another cause; the probe showed almost all deep defenders with higher targets, i.e. coming back up slowly after defending the box.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

@@ -572,13 +572,13 @@ def team_targets(m, t):
     if has and Bs[0] > .62 * L:  # midfielders arrive late at the edge of the box; wingers tuck in when the ball is on the far side
         late = (role == CM) | (role == AM)
         tx = np.where(late, np.maximum(tx, np.minimum(Bs[0] - 3, L - 20)), tx)
-    if has:  # forwards hover around the last defender's shoulder: well timed they stay onside, mistimed they are flagged
+    if has:  # forwards hover on the last defender's shoulder, just onside; they are caught when the line moves faster than they react, not by a planned wobble
         line = max(np.sort(O[:, 0])[-2], L / 2)
         att = (role == ST) | (role == WG) | (role == AM)
         if Bs[0] > TP.get("pin_from", .35) * L:
-            tx = np.where(att, np.maximum(tx, line + SHOULDER[role] - TP.get("hover", .3) + .3 + 2. * np.sin(.5 * m.t + m.phase[sl])), tx)
+            tx = np.where(att, np.maximum(tx, line + SHOULDER[role] - TP.get("hover", .3) + .3), tx)
         fw = att | (role == CM)  # nobody up front waits beyond the last defender and the ball (a timed run is a separate thing)
-        tx = np.where(fw, np.minimum(tx, max(line, Bs[0]) - TP.get("hover", .3) + 1.0 * np.sin(.5 * m.t + m.phase[sl])), tx)
+        tx = np.where(fw, np.minimum(tx, max(line, Bs[0]) - TP.get("hover", .3)), tx)
     if has and Bs[0] > .55 * L:
         far = (role == WG) & (np.abs(Bs[1] - A[:, 1]) > 25)
         ty = np.where(far, W / 2 + np.sign(A[:, 1] - W / 2) * 21, ty)  # the far-side winger stays wide: he is the switch outlet
@@ -621,7 +621,7 @@ def team_targets(m, t):
             rr, cc = linear_sum_assignment(cost)
             for a_, b_ in zip(rr, cc):
                 i, (r_, sp_) = cand_i[a_], slots[b_]
-                tgt_ = np.array([min(sp_[0], line_t - 1.4 + 1.6 * np.sin(.5 * m.t + m.phase[11 * t + i])), sp_[1]])  # on the shoulder of the last defender, now and then mistimed
+                tgt_ = np.array([min(sp_[0], line_t - .5), sp_[1]])  # on the shoulder of the last defender, just onside
                 zone[i] = zone[i] * (1 - w) + tgt_ * w
 
     mine = 11 * t <= carrier < 11 * t + 11
@@ -837,6 +837,9 @@ def team_targets(m, t):
             C = P[carrier - 11 * t]
             elig = ((role == ST) | (role == WG) | (role == AM)) & (m.t >= m.run_cool[sl]) & (C[0] > .3 * L)
             start = elig & (m.rng.random(11) < (.07 + .15 * tc.directness) * m.mod["runs"][sl] * m.dt * TP.get("run_k", 1.))
+            gdir = np.array([1., 0.]) if t == 0 else np.array([-1., 0.])
+            free_c = float(nrm(m.pos[11 * (1 - t):11 * (1 - t) + 11] - m.pos[carrier], axis=1).min()) > 2.5
+            start &= bool(free_c and float(m.head[carrier] @ gdir) > .3)  # a run is made when the man on the ball can play it: facing up the pitch with nobody on him
             for i in np.nonzero(start)[0]:
                 line = max(np.sort(O[:, 0])[-2], L / 2)
                 lead = TP.get("run_lead", 1.) * float(clip(.8 * m.vmax[11 * t + i] * 1.5, 5., 22.))  # a run in behind goes where the ball will be put: as far as he covers while it travels (Open Football's through-ball lead, 5-22 m)
