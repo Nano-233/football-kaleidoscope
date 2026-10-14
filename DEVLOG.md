@@ -1092,6 +1092,22 @@ shape is right once a possession settles. The excess short passing at the back i
 frames are within 3 s of a change), i.e. the ball bouncing between the sides; next is why contested balls change hands so often
 (loose balls, 50-50s, deflections), measured on a possession definition that matches StatsBomb's.
 
+### Big chances: crosses into space (2026-10-14)
+Big chances 0.23 vs 0.86 per team-match while goals matched: goals follow xG, so 30 % more shots at about 22 % less xG each give the
+same total, from many scrappy chances instead of fewer clean ones. Scored with the same formula on both sides (our xG on the real
+freeze frames), real teams have 0.82 big chances per team-match (0.99 with StatsBomb's own xG), so the gap is the sim, not the
+model. `scripts/big_chance_source.py` (the ball that set the shooter up, the last ball in by a team-mate within 4 s; a header off
+a cross has no completed pass to him, which first hid those): real 0.35 from crosses and 0.25 from cutbacks, the sim 0.08 and 0.02.
+`scripts/cross_outcome.py`: crosses reach a team-mate and lead to a shot about as often as real ones, but 54 % of real crosses end
+within 9 m of the goal line against 20 %, and the shots after them come from the penalty spot rather than the six-yard area
+(inside 6 m 0.04 vs 0.12, 11-16 m 0.45 vs 0.25). The crosser aimed at where the runner stood and only the intended man moved during
+the flight. Now a ball in from wide (the cross and any lofted pass from wide into the box) is aimed where the runner will arrive,
+his position carried towards goal by up to 5 m and no closer than 6 m; and while it is in the air the attackers in and around the
+box attack the space towards goal (offside no longer applies after the kick). Cross shots by distance now 0.10 / 0.48 / 0.30 / 0.12
+(real 0.12 / 0.48 / 0.25 / 0.15). 96 matches: big chances 0.23 -> 0.74 (0.86), xG per shot 0.07 -> 0.09 (0.09), cross rate 0.27
+(0.28), goals 1.34 (1.24), shots 16.4, loss 162 -> 145. By source: crosses 0.08 -> 0.23 (0.35), other passes 0.11 (0.10), but
+loose balls and rebounds 0.28 (0.08): runners charging the six-yard box also feed scrambles. Cutbacks still 0.03 (0.25).
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

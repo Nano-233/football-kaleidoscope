@@ -912,6 +912,14 @@ def team_targets(m, t):
         near = D[idx, j]
         push = (near < 4.5) & out_f
         zone[push] += _unit(P[push] - O[j[push]]) * ((4.5 - near[push]) * .8)[:, None]
+        if m.state == "flight" and m.flight["team"] == t and m.flight["kind"] == "lofted":
+            fe = f(m.flight["end"])
+            if fe[0] > L - 16.5 and abs(fe[1] - W / 2) < 20.:  # a ball into the box: the men in and around it attack the space towards goal while it is in the air (offside no longer applies)
+                for i in idx:
+                    if role[i] in (ST, WG, AM, CM) and P[i][0] > L - 22 and 11 * t + i != m.flight["rcv"]:
+                        gd = float(np.hypot(L - P[i][0], W / 2 - P[i][1]))
+                        zone[i], urgent[i] = P[i] + _unit(np.array([L, W / 2]) - P[i]) * float(clip(gd - 6., 0., 6.)), True
+                        m.sprint_hint[11 * t + i] = True
         if m.state == "flight":  # intended receiver goes to where the ball is going
             r = m.flight["rcv"] - 11 * t
             if 0 <= r < 11:

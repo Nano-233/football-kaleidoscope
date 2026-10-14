@@ -1019,6 +1019,10 @@ class Match:
             tgt = clip(Pm + Vm * (np.minimum(dist / spd, 1.5) * np.where(runner, 1.3, .8))[:, None], [1, 1], [L - 1, W - 1])
             gdir = _unit(_unit(np.array([L, W / 2]) - Pm) + .6 * _unit(Vm + 1e-6))
             tgt = np.where(through[:, None], clip(Pm + gdir * (5. + 5. * runner)[:, None], [1, 1], [L - 1, W - 1]), tgt)  # into space: he must run onto it
+            if abs(C[1] - W / 2) > 20.:  # a ball in from wide is put where the man will arrive: he attacks the space towards goal while it is in the air, up to the six-yard line
+                gd_ = np.hypot(L - tgt[:, 0], W / 2 - tgt[:, 1])
+                into = lofted & (tgt[:, 0] > L - 16.5) & (np.abs(tgt[:, 1] - W / 2) < 20.)
+                tgt = np.where(into[:, None], tgt + (np.array([L, W / 2]) - tgt) / np.maximum(gd_, 1e-6)[:, None] * np.clip(gd_ - 6., 0., 5.)[:, None], tgt)
             ab = tgt - C
             d2 = nrm(ab, axis=1)
             ap = O[None] - C
@@ -1128,6 +1132,9 @@ class Match:
                 pw = np.exp((sc - sc.max()) / 3.0)
                 tgt_i = int(boxm[s.rng.choice(len(boxm), p=pw / pw.sum())])
                 aim = clip(P[tgt_i] + Vp[tgt_i] * .6, [1, 1], [L - 1, W - 1])
+                # a cross is put where the runner will arrive, not where he stands: he attacks the space towards goal while it is in the air, up to the six-yard line
+                gd = float(np.hypot(L - aim[0], W / 2 - aim[1]))
+                aim = aim + _unit(np.array([L, W / 2]) - aim) * float(clip(gd - 6., 0., 5.))
                 d_c = float(nrm(aim - C))
                 p_acc = 1 - np.exp(-(3.0 ** 2) / (2 * (2.0 + .07 * d_c) ** 2 * (1.9 - .06 * a["passing"][c]) ** 2))
                 p_air = float(clip(.5 + .02 * (a["aerial"][11 * t + tgt_i] - gk_a), .2, .8))
