@@ -40,13 +40,13 @@ PARAMS = {
     "react": (1.0, 2.6), "patience": (0., .6), "carry_base": (0., .4), "drive": (0., 1.), "shoot_ref": (.05, .5), "shoot_slope": (1., 4.), "shoot_press": (0., 1.6),
     "shoot_hold": (0., 1.6), "ft_shot": (.1, 1.), "pot": (0., 2.2), "relief": (0., 2.), "risk_pow": (1., 3.), "prog_base": (.5, 2.), "cong_k": (0., 1.),
     "ctrl_marked": (.15, .8), "first_touch": (0., 6.), "tackle_rate": (.4, 3.6), "press_len": (2., 5.), "exec_k": (1., 3.5), "exec_floor": (0., .4), "dec_noise": (0., .5), "contact_r": (1., 2.5), "surv_k": (0., 2.), "gk_shoot": (0., 3.), "hurry_k": (0., 1.), "press_v": (3., 12.), "cover_v": (0., 7.), "mark_k": (40., 250.), "lane_job_k": (10., 80.), "post_v": (0., 10.), "space_v": (0., 6.), "job_hyst": (0., 3.), "jobs_w": (.5, 1.), "box_start": (30., 50.), "mark_gap": (.5, 2.5), "dang_far": (28., 50.), "dang_gate": (.3, 1.), "react_def": (.1, .6), "close_gap": (.8, 3.), "jock_k": (.6, 1.5), "press_k": (.6, 1.6), "box_gate": (.6, 1.), "wn_end": (35., 65.), "lag_k": (.6, 1.8), "drop_k": (.5, 1.8), "wide_error": (1., 4.), "pass_sigma": (.6, 1.5), "intercept": (.3, .7),
-    "xt_k": (30., 250.), "xt_opp": (.2, 1.5), "loss": (.5, 2.), "carry_prog_xt": (.1, 1.2), "clear_keep": (.1, .8), "follow_poss": (0., 1.), "gk_long": (0., 1.2), "usage": (0., 1.2), "keep": (.2, .8), "long_bonus": (0., 1.2), "cross_v": (.8, 2.2), "wide_v": (0., 1.3), "turn_cost": (0., 1.), "face_k": (0., 3.), "block_base": (.05, .3), "block_nb": (0., .25), "cruise_k": (.35, 1.), "run_frac": (.5, .95), "burst_hold": (.1, .9), "air_base": (0., 1.2), "air_k": (0., 1.5), "gk_air": (0., 4.), "head_on": (.05, .5), "head_clear": (.2, .8),
+    "xt_k": (30., 250.), "xt_opp": (.2, 1.5), "loss": (.5, 2.), "carry_prog_xt": (.1, 1.2), "clear_keep": (.1, .8), "follow_poss": (0., 1.), "gk_long": (0., 1.2), "usage": (0., 1.2), "keep": (.2, .8), "long_bonus": (0., 1.2), "wide_v": (0., 1.3), "turn_cost": (0., 1.), "face_k": (0., 3.), "block_base": (.05, .3), "block_nb": (0., .25), "cruise_k": (.35, 1.), "run_frac": (.5, .95), "burst_hold": (.1, .9), "air_base": (0., 1.2), "air_k": (0., 1.5), "gk_air": (0., 4.), "head_on": (.05, .5), "head_clear": (.2, .8),
 }
 
 
 # the parameters that decide the funnel (defensive closing and shape, duel odds, risk appetite, shot appetite) go first: a round takes an hour
 PRIORITY = ["press_v", "mark_k", "cover_v", "lane_job_k", "post_v", "space_v", "job_hyst", "jobs_w", "press_k", "jock_k", "close_gap", "react_def", "mark_gap", "box_gate", "dang_far", "dang_gate", "box_start", "lag_k", "wn_end", "drop_k", "tackle_rate", "tackle_sel", "contact_r",
-            "ctrl_marked", "intercept", "risk_pow", "shoot_ref", "shoot_slope", "prog_base", "exec_k", "press_len", "dec_noise", "surv_k", "gk_shoot", "cross_v", "pot", "relief", "keep"]
+            "ctrl_marked", "intercept", "risk_pow", "shoot_ref", "shoot_slope", "prog_base", "exec_k", "press_len", "dec_noise", "surv_k", "gk_shoot", "pot", "relief", "keep"]
 ORDER = [n for n in PRIORITY if n in PARAMS] + [n for n in PARAMS if n not in PRIORITY]
 
 

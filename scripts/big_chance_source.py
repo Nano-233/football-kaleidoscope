@@ -48,14 +48,11 @@ def real():
             opp = [np.array([p["location"][0] * L / 120, p["location"][1] * W / 80]) for p in ff[e["id"]] if not p["teammate"] and not p["keeper"]]
             xg = Match._xg(None, np.array([x, y]), opp, header=e["shot"].get("body_part", {}).get("name") == "Head")[0]
             c["shots"] += 1
-            if xg < .25:
-                continue
             kp = by_id.get(e["shot"].get("key_pass_id"))
-            if kp is None:
-                c[how(None, None, False)] += 1
-                continue
-            ox, oy = kp["location"][0] * L / 120, kp["location"][1] * W / 80
-            c[how(ox, oy, kp["pass"].get("technique", {}).get("name") == "Through Ball" or kp["pass"].get("through_ball"))] += 1
+            k = how(None, None, False) if kp is None else how(kp["location"][0] * L / 120, kp["location"][1] * W / 80, kp["pass"].get("technique", {}).get("name") == "Through Ball" or kp["pass"].get("through_ball"))
+            c[("all", k)] += 1
+            if xg >= .25:
+                c[k] += 1
     return c, files
 
 
@@ -71,11 +68,13 @@ def one(seed):
         if e["type"] != "shot" or e.get("kind") not in ("shot", "header") or e.get("source") not in (None, "open_play"):
             continue
         c["shots"] += 1
-        if e.get("xg", 0) < .25:
-            continue
+        big = e.get("xg", 0) >= .25
         # the pass that set him up: the last completed pass to him in this move
         kp = next((b for b in reversed(ev[max(0, i - 40):i]) if b["type"] in ("pass", "cross") and b.get("team") == e["team"] and b.get("player") != e["player"] and e["t"] - b["t"] < 4), None)  # the last ball in by a team-mate (a header off a cross has no completed pass to him)
         if kp is None or any(b["type"] == "possession_change" for b in ev[ev.index(kp):i]):
+            c[("all", "no pass")] += 1
+            if not big:
+                continue
             c["no pass"] += 1
             prev = next((b for b in reversed(ev[max(0, i - 12):i]) if b.get("player") and b["type"] not in ("pressure", "ball_receipt", "carry")), None)
             c[("no pass after", prev["type"] if prev else "?", "same side" if prev and prev.get("team") == e["team"] else "other side")] += 1
@@ -85,7 +84,10 @@ def one(seed):
             continue
         fl = (lambda x, y: (L - x, W - y)) if kp["team"] == 1 else (lambda x, y: (x, y))
         ox, oy = fl(kp["x"], kp["y"])
-        c[how(ox, oy, kp.get("technique") == "through_ball")] += 1
+        k = how(ox, oy, kp.get("technique") == "through_ball")
+        c[("all", k)] += 1
+        if big:
+            c[k] += 1
     return c
 
 
@@ -101,4 +103,5 @@ if __name__ == "__main__":
         print(f"    sim no-pass, after {k[1]} ({k[2]}): {v / n / 2:.2f}")
     for k, v in sorted(((k, v) for k, v in sim.items() if isinstance(k, tuple) and k[0] == "recovery after"), key=lambda kv: -kv[1])[:6]:
         print(f"      the loose ball came off: {k[1]} ({k[2]}): {v / n / 2:.2f}")
+    print("  all open-play shots by source, per team-match:   " + "  ".join(f"{k}: {sim[('all', k)] / n / 2:.1f}|{rl[('all', k)] / files / 2:.1f}" for k in KINDS))
     print(f"  {'all':13} {sum(sim[k] for k in KINDS) / n / 2:5.2f} | {sum(rl[k] for k in KINDS) / files / 2:5.2f}")

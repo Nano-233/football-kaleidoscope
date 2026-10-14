@@ -1118,6 +1118,15 @@ Goals are now high: 96 matches 1.60 (1.24), shots 16.9 (12.9), big chances 0.78 
 team-mate are 0.23 vs 0.08: loose balls near goal picked up by attackers (rebounds off blocks 0.05, 50-50s 0.03, defenders' lost
 balls 0.04). The shot volume is the next target.
 
+### A cross valued like a pass (2026-10-14)
+Shots by what set them up, all open-play shots per team-match (`big_chance_source.py`, sim | real): after a cross 5.7 | 3.2, after
+another pass 6.7 | 4.5, no pass 3.4 | 2.6, cut-back 0.5 | 0.8. `scripts/wide_choice.py`: on the ball wide in the final third the
+sim puts it into the box 31 % of the time (real 17 %) and down the line 10 % (23 %). The cross option was a fixed bonus (`cross_v`)
+times its chance of arriving, whatever the spot; every pass is valued by the territory it gains. Now the cross is valued the same
+way: its chance of arriving (to the power the passer weighs risk with) times the spot's worth, against the cost of losing it there.
+Balls into the box from wide 16.9 -> 13.0 per team-match (11.2), cross rate 0.28 (0.28), goals 1.49, shots 16.1, loss 152 (48).
+`cross_v` is gone. Down the line is still 12 % (23 %): a question of who is there to receive it.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
