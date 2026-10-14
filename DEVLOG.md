@@ -1070,6 +1070,20 @@ Tried, not kept: a faster switch to the attacking shape after a regain (`fade_up
 the opponent's position value (`loss_mirror`): box passes unchanged at 80. The volume of chances near goal (5.6 per team-match vs
 2.5) did not move with any of this; its biggest single route stays the attacker winning the ball in the zone.
 
+### The ping-pong: too many turnovers (2026-10-13, open)
+Passes 604 vs 484 per team-match; by third (`norms`) the excess is the own third, 177 vs 101, at 84 % vs 73 % accuracy.
+`scripts/own_third_passes.py` by length: under 10 m 41 vs 14 per team-match, 10-20 m 61 vs 35; long balls from there arrive 0.69 vs
+0.49 (real long balls from the back are contests). `scripts/own_third_options.py`: the forward options are there about as often
+as in real play, and the pass policy reproduces the real direction on the real frames (forward 0.51 predicted, 0.52 actual), so the
+target choice is not the fault; but the carrier's nearest team-mate is within 5 m 46 % of the time (real 11 %) and a man is on him
+48 % (34 %). `scripts/own_third_timing.py`: own-third passes by seconds since the side won the ball, per team-match (sim | real, all
+possessions): 0-3 s 63 | 16, 3-8 s 49 | 21, 8-20 s 31 | 24, 20 s+ 9 | 19. Possession changes hands 267 times a match against 170.
+A loop: a regain in a compact defending shape, a quick short ball to a team-mate a few metres away, lost again. It feeds the extra
+chances near goal (the attacker winning the ball in the zone), the passes around the own box and the short possessions. Next: what
+happens in the first seconds after a regain (who is near, what the new carrier chooses, and how real players use those seconds:
+carry out, go long, clear) before changing anything. `scripts/poss_end.py` compares how possessions end; the two event models label
+endings differently (real logs a failed receipt, the sim a carry after the pass), so read it by group.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
