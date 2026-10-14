@@ -1083,6 +1083,14 @@ chances near goal (the attacker winning the ball in the zone), the passes around
 happens in the first seconds after a regain (who is near, what the new carrier chooses, and how real players use those seconds:
 carry out, go long, clear) before changing anything. `scripts/poss_end.py` compares how possessions end; the two event models label
 endings differently (real logs a failed receipt, the sim a carry after the pass), so read it by group.
+Correction (same day): the possession counts are not comparable. StatsBomb starts a possession only when the other side
+establishes control; the sim logs a change on any touch it gains, so a ball cut out and lost again at once is two changes.
+Interceptions (11.9 vs 10.9) and pass accuracy (0.75 vs 0.75) match. `scripts/regain_first.py`: the first action after a regain in
+the own half is real in kind (short pass 0.39 | 0.46, 15-30 m 0.28 | 0.24, long 0.06 | 0.07). `scripts/crowding.py`: the carrier's
+nearest team-mate within 5 m, real 0.16 on all on-ball frames; sim 0.38 in the first 3 s after a regain and 0.15-0.19 after, so the
+shape is right once a possession settles. The excess short passing at the back is the many brief possessions (24 % of on-ball
+frames are within 3 s of a change), i.e. the ball bouncing between the sides; next is why contested balls change hands so often
+(loose balls, 50-50s, deflections), measured on a possession definition that matches StatsBomb's.
 
 ## Is the tuner machine learning?
 
