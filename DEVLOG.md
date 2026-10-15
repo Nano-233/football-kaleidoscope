@@ -1218,6 +1218,24 @@ close support alone is not the missing piece.
 Also checked: ball in play 55.7 min of 97.8 (real about 55-58), restarts 20-38 s; so the across-the-board excess (passes +24 %, shots
 +25 %, carries +45 %) is not more playing time. It is more actions per minute of play.
 
+### Tempo: twice the passing moves, broken by balls in the air (2026-10-14, open)
+`scripts/tempo.py`: the time from a completed pass to the team's next pass is about real (median 2.40 vs 2.69 s); the sim has 145
+passing moves per team-match against 80, of 4.1 passes against 6.4 (145 x 4.1 ~ 594 passes, 80 x 6.4 ~ 510). `scripts/move_end.py`
+(moves with at least one pass on both sides, so a touch lost at once is not a move on either): they end by a pass cut out or misplaced
+35.4 vs 12.5 and by a ball in the air lost 33.8 vs 10.0; shots, out of play, tackles and miscontrols are near real. Pass accuracy is
+the same (0.75), so it is what follows a failed pass and how many balls go in the air. `scripts/second_ball.py`: after a header the
+winners' side has the ball next 0.80 vs 0.73 (losers 0.19 vs 0.20), so header outcomes are real; but there are 59.6 aerial
+contests a match against 30.7. `scripts/lofted.py`: open-play passes in the air, not into the box, per team-match: under 25 m 37.2 vs
+11.3, 25-40 m 37.9 vs 12.4, over 40 m 14.6 vs 19.3; they end in a contest 0.17-0.30 vs 0.10-0.20. All with the foot, from every role,
+backward and sideways too, 62 % unpressed.
+The pass choice model chooses the mode too, and on the real frames it predicts 19.6 % of foot passes under 40 m in the air against 7.2 %
+actual (Premier League foot passes: 10.9 %). Cause: its prior-shift correction (`fit_pass_policy.py`, `pl_shares`) targets the
+Premier League shares of all passes, headers included (15.5 % in the air under 40 m), while it is only used for passes with the feet.
+Refit with foot passes as the target: short-range air offsets go from +0.22 / -0.05 to -0.74 / -0.92, held-out checks hold (forward
+share 0.390 vs 0.389); prediction on the real frames 15.3 %; in the sim short balls in the air 37 -> 23 (11), 25-40 m unchanged
+(39.5 vs 12.4: the sim's options stand further away, see the support entries). On 96 unseen matches loss 132.3 -> 137.6 and big chances
+0.73 -> 0.61, moves 139.8: reverted. The refit is right in kind; it needs the weights recalibrated with it (one tuning round, about 3 h).
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
