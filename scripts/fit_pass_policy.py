@@ -86,6 +86,8 @@ def pl_shares():
             p = e["pass"]
             if p.get("type", {}).get("name", "") in SET_PIECES:
                 continue
+            if p.get("body_part", {}).get("name") not in ("Right Foot", "Left Foot"):  # the choice model is used for passes with the feet (headers are the aerial rule's); headers are nearly all in the air, and counting them taught it that short balls in the air are common
+                continue
             mode = 2 if p.get("through_ball") else 1 if p.get("height", {}).get("name") == "High Pass" else 0
             cnt[mode, np.searchsorted(policy.EDGES, p["length"] * 105 / 120)] += 1
     return cnt / cnt.sum()

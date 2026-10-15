@@ -1235,6 +1235,9 @@ Refit with foot passes as the target: short-range air offsets go from +0.22 / -0
 share 0.390 vs 0.389); prediction on the real frames 15.3 %; in the sim short balls in the air 37 -> 23 (11), 25-40 m unchanged
 (39.5 vs 12.4: the sim's options stand further away, see the support entries). On 96 unseen matches loss 132.3 -> 137.6 and big chances
 0.73 -> 0.61, moves 139.8: reverted. The refit is right in kind; it needs the weights recalibrated with it (one tuning round, about 3 h).
+Then kept after all, on a rule agreed with the user: a logic fix that is demonstrably right against real data stays even if the loss
+dips, since the dip means numeric weights were tuned around the fault; the weights are recalibrated afterwards. A change is only rejected
+when it makes the behaviour it targets less like real football (as the support group did: more sideways passing, more passes).
 
 ## Is the tuner machine learning?
 
