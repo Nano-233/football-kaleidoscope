@@ -1204,6 +1204,20 @@ Changed: patience 0.02 -> 0.2, ft_shot 0.315 -> 0.1, pot 2.2 -> 1.54, ctrl_marke
 The logic checks hold: tight marking 0.42 (0.43); big chances by source cross 0.33 (0.35), cut-back 0.09 (0.25), loose balls 0.27
 (0.08), all 0.84 (0.80).
 
+### A support group around the carrier (2026-10-14, tried, not kept)
+New behaviour (not the 15 m triangle, the Open Football short outlet or the ring distances, all tried before): the three nearest free
+men take short options 8-12 m from the ball at different angles (positional play's triangles; with the carrier wide: down the line,
+inside in the half-space, back and inside; with him inside: out to the near touchline, into the other half-space, behind), stepped
+off any opponent on the spot (Open Football's presser-shadow idea), onside, kept from the space-finding routine. A probe: it ran
+(2.3 men placed per update, targets 10.8 m from the ball) but they stood a median 18 m away: support moves were a jog (urgent only
+means "as fast as the gap needs"), so they were made urgent with the sprint hint, and the job made sticky (a man who started keeps
+it). Through the camera window: options within 12 m wide / half 0.23 / 0.27 -> 0.29 / 0.35 (real 0.54 / 0.62), passes into the
+centre 0.31 -> 0.28 (0.16). But on 96 unseen matches loss 132.3 -> 150.7: more short sideways passing (forward passes in the final
+third and lofted passes down), more running (12.3 km), passes 614. Real teams have twice the close support AND fewer passes, so
+close support alone is not the missing piece.
+Also checked: ball in play 55.7 min of 97.8 (real about 55-58), restarts 20-38 s; so the across-the-board excess (passes +24 %, shots
++25 %, carries +45 %) is not more playing time. It is more actions per minute of play.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
