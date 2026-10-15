@@ -1249,6 +1249,17 @@ only step off a defender standing on them, so they land inside the defence's cov
 the passing lanes). The next design should pick support positions by space (pitch control: a spot belongs to whoever reaches it
 first), not by fixed shapes.
 
+### Calibration with the corrected pass model (2026-10-15)
+One round (`tune_norms.py 32 1`, paused after 22 weights and resumed with `only=` the rest from the saved best): 138.1 -> 122.6 on its own
+matches. On 96 unseen matches (`seed0=6000`): 132.3 (before the pass-model fix) -> 128.9. Changed: dec_noise 0.3 -> 0.45, contact_r
+1.6 -> 2.05, surv_k 1 -> 0.4, space_v 3 -> 4.8, dang_gate 0.85 -> 1, wide_error 3.2 -> 4, block_base 0.05 -> 0.125. Unseen: offsides
+2.03 (1.98), passes 567 (484, from 596), corners 7.35 (11.6), tackles 23.4 (20.5), blocks 23.5 (20.1), goals 1.39 (1.24), shots 16.4
+(12.9), 11.5 km, big chances 0.59 (0.86, from 0.73). Ablation: without the tackle reach 138.1 with big chances 0.57, without the
+decision noise big chances 0.38; the drop comes from the pass-model fix itself. `big_chance_source.py`: crosses 0.33 -> 0.14 (0.35),
+because crosses into the box are now 11.1 per team-match (9.6, from about 17): the over-crossing is gone, the quality per cross is not
+(a big chance from 0.01 of crosses against 0.03; a shot after 0.23 vs 0.16). Tight marking holds (0.44 vs 0.43). Moves per team-match
+138.6 (79.7). Open: the quality of the chance a cross makes, cut-backs (0.03 vs 0.25), and the support in the gaps.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
