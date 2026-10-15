@@ -1191,6 +1191,19 @@ Not affected (they look only within a few metres of a player): crowding within 5
 shots went, shot and cross outcomes.
 Tried for the support (no window change in the result; not kept): a block led 8 m ahead of the ball instead of 16, and 0.7 of its width.
 
+### Calibration after the logic changes (2026-10-14)
+With the logic changed under it (the per-tick shot dice, the 1.6 m bubble, the crosses), the TUNE weights were out of balance. One
+coordinate-search round of `scripts/tune_norms.py` (71 weights, 32 matches per evaluation, on a snapshot copy): 158.7 -> 111.8 on its
+own matches. Checked on 96 matches it never saw (`eval ... seed0=6000`, new option): 154.0 -> 121.6, real; but big chances 0.66 ->
+0.47 and tackles 24 -> 27.5 (real 20.5). Ablation (the tuned set with one change undone, 64 unseen matches): the tackle rate
+(1.2 -> 2.16) costs the most big chances (0.84 without it, tackles 18.4), then the cover value (3.5 -> 5.6, 0.74) and filling the box
+lanes from 32 m (0.72). Kept: the tuned set without those three (unseen 96: loss 132.3, big chances 0.73 (0.86), tackles 18.5
+(20.5), blocks 23.7 (20.1), goals 1.40 (1.24), shots 16.1 (12.9), offsides 2.64 (1.98), corners 7.3 (11.6), xG per shot 0.09).
+Changed: patience 0.02 -> 0.2, ft_shot 0.315 -> 0.1, pot 2.2 -> 1.54, ctrl_marked 0.5 -> 0.305, press_len 3.2 -> 4.1, dec_noise
+0.15 -> 0.3, press_v 7 -> 4.3, intercept 0.429 -> 0.309, follow_poss 0.2 -> 0.5, wide_v 0.35 -> 0, block_base 0.12 -> 0.05.
+The logic checks hold: tight marking 0.42 (0.43); big chances by source cross 0.33 (0.35), cut-back 0.09 (0.25), loose balls 0.27
+(0.08), all 0.84 (0.80).
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

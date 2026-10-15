@@ -105,7 +105,8 @@ def main():
     kv = {k: float(v) for k, v in (a.split("=") for a in argv if "=" in a)}
     if args and args[0] == "eval":
         n = int(args[1]) if len(args) > 1 else 16
-        loss, parts, agg, cnt = evaluate(kv, list(range(5000, 5000 + n)))
+        s0 = int(kv.pop("seed0", 5000))  # seed0=6000: matches the tuning never saw (it uses 5000 onwards)
+        loss, parts, agg, cnt = evaluate(kv, list(range(s0, s0 + n)))
         print(f"loss {loss:.1f}")
         for k, e in sorted(parts.items(), key=lambda kv_: -abs(kv_[1]))[:14]:
             print(f"  {k:16s} gap {e:+.2f}")
