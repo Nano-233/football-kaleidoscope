@@ -1239,6 +1239,16 @@ Then kept after all, on a rule agreed with the user: a logic fix that is demonst
 dips, since the dip means numeric weights were tuned around the fault; the weights are recalibrated afterwards. A change is only rejected
 when it makes the behaviour it targets less like real football (as the support group did: more sideways passing, more passes).
 
+### The support group again, on the corrected pass model (2026-10-15, not kept)
+Re-tested because the first test ran on the pass model that over-chose balls in the air. 96 unseen matches and the camera-window
+measures, without | with: options within 12 m wide 0.20 | 0.30, half 0.28 | 0.34 (real 0.54 / 0.62); OPEN options wide 0.34 | 0.35,
+half 0.32 | 0.34 (0.66 / 0.79); passes into the centre 0.29 | 0.27 (0.16); balls in the air 25-40 m 39.5 | 35.2 (12.4); big chances
+0.61 | 0.68; but moves 145 | 152 (80), passes per move 4.1 | 4.0 (6.4), 11.8 | 12.3 km, loss 137.6 | 166.8. Wrong in kind: support
+exists to keep the ball, and the moves got neither longer nor fewer, because the extra men are not open: fixed spots around the ball
+only step off a defender standing on them, so they land inside the defence's cover. Real support stands in the gaps (free and out of
+the passing lanes). The next design should pick support positions by space (pitch control: a spot belongs to whoever reaches it
+first), not by fixed shapes.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
