@@ -93,10 +93,9 @@ def cached_what_if(recipe, t, team, change, runs=12):
     return _cached(json.dumps(recipe, sort_keys=True), round(float(t), 1), int(team), json.dumps(change, sort_keys=True), runs)
 
 
-def t_at_minute(events, minute):
-    """Match time (seconds) when the clock first shows `minute` (45+2 counts as 47)."""
-    for e in events:
-        a, _, b = e.get("clock", "1'").rstrip("'").partition("+")
-        if int(a) + int(b or 0) >= minute:
-            return e["t"]
-    return events[-1]["t"]
+def t_at_minute(events, minute, half_time):
+    """Match time (seconds) when the clock starts `minute`, by the engine's own rule: in the first half minute m runs from (m - 1) * 60 s
+    (its stoppage time continues the count), in the second half from half_time (meta["half_time"], the first half's scheduled end)
+    plus (m - 46) * 60 s. Events are too sparse to mark the boundary themselves. Clipped to the events there are."""
+    t = (minute - 1) * 60. if minute <= 45 else half_time + (minute - 46) * 60.
+    return min(max(t, 0.), events[-1]["t"])

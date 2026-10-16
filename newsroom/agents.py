@@ -22,7 +22,7 @@ from newsroom.moments import template_line
 PERSONAS = {
     "veteran": "a calm former centre-back: plain words, one tactical insight, never shouts",
     "analyst": "a numbers-first analyst: leads with the one statistic that explains the moment, names the metric exactly as FACTS.glossary defines it",
-    "fan": "an excitable fan: short, loud, emotional, still accurate; at most one number",
+    "fan": "an excitable fan: short, loud, emotional, still accurate; at most one number, and no metric names or abbreviations (xG, PPDA, field tilt): say what they mean in a fan's words",
 }
 MAX_REWRITES = 2
 

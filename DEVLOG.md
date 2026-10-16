@@ -1307,6 +1307,28 @@ and 10. Fixed: above 8 and below 4 the scale eases off (tanh), so the ends are a
 the same way). That match is now 9.5; a hat-trick with little else 8.8. The player report notes that the terms can add to more than
 the rating shows.
 
+### Persona walkthrough fixes (2026-10-15)
+Walked the fan and analyst views on the rebuilt matches.
+- Header overflowed at 1024 px (the units menu pushed it to 1231 px): it now wraps. Static code files are served with
+  `Cache-Control: no-cache` (revalidated each load) so a deploy is seen at once; the stale stylesheet hid the fix at first.
+- Win probability lagged goals: the series was per minute and the panel showed the last full minute, so straight after a goal it
+  read 1-0 beside the 0-0 chances (HAR 17 % while leading). The series now also has a row at each goal and the panel picks the
+  latest row by time.
+- Fan commentary quoted "ppda 9.09": the fan voice now says what a metric means instead of naming it (takes effect at the next build).
+- "Why did they concede?" gave general trends after 10-20 tool calls. Causes, in order of finding:
+  1. find_moments filtered by the scoring team and did not say which team a moment belonged to, so "Stonebay, goal" found nothing
+     for Stonebay's goals conceded and the agent reported the details "not available". Moments now carry their team, and the tool
+     says a goal belongs to the scorer's side.
+  2. Minute filters compared seconds / 60 with the clock: 33' runs from 32:00, and the second half restarts at 46' after the first
+     half's stoppage (4 minutes here), so a 33-33 filter missed the 33' goal and second-half windows were minutes off.
+     `t_at_minute` now uses the engine's clock rule (first half (m - 1) * 60 s; second half meta.half_time + (m - 46) * 60 s;
+     events are too sparse to mark minutes, the first event of 60' came 56 s into it). All the desk's minute arguments go through it.
+  3. The orchestrator sent the scout as well (player reports for every defender) and the scout broke down guessed event ids
+     ("The move: 1' match info"). Team "why" questions now go to the tactics analyst alone, which breaks down each goal; replay
+     views are only offered for moves ending in a shot or goal.
+  Result: 7 steps, 31 s, and the answer names the move (the passes, the free scorer) instead of PPDA trends.
+- The server's answer cache was keyed without the match data, so answers survived a rebuild; the key now includes it.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

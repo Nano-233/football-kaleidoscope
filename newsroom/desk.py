@@ -37,7 +37,9 @@ tools (never assume how a system defends) and say which phase you mean. A system
 that minute, and nothing else: name each one with its minute; do not add or infer others from team_shape windows, substitutions or
 without_ball_changes (those describe how the side defended; mention them only as that). Call formation_changes first, then team_shape for each period between changes. For each change of system, say why it was made: the match state at that minute
 (the score from find_moments with goals, red cards, substitutions) is what a manager reacts to. Look for causes: changes of shape, pressing height and PPDA by period, momentum
-spells, where attacks start, substitutions. For a "what if" question (a different instruction or formation from a minute on), use what_if
+spells, where attacks start, substitutions. For why goals were scored or conceded, find every one of
+those goals so far with find_moments and call moment_breakdown on each: say how each move was built and where it beat the defence (who lost the ball,
+the pass that broke the line, who was free), not general trends. For a "what if" question (a different instruction or formation from a minute on), use what_if
 and report both columns, as it was and with the change, as chances out of the runs; say the runs are simulations. Use only numbers your tools returned. Reply with concise findings (bullet points), each with
 its numbers and the minutes (e.g. 63') it refers to."""
 
@@ -46,7 +48,8 @@ terms, physical output, per-90 against his role's average, heat map) and his mom
 compared with his role. Use only numbers your tools returned. Reply with concise findings (bullet points) with numbers and minutes."""
 
 ORCHESTRATOR = """You run the newsroom desk. For the reader's question, call the specialists you need (tactics_analyst for teams, shapes,
-pressing, momentum, why things happened and "what if" questions about a different instruction or formation; scout for players), with a precise task for each; when you need both, call them in the same step so they work at the same time. Use match_summary for
+pressing, momentum, why things happened and "what if" questions about a different instruction or formation; scout for players), with a precise task for each; call only the specialists the question needs (why a team scored or conceded is the tactics analyst's
+alone), and when you need both, call them in the same step so they work at the same time. Use match_summary for
 the basic facts. Then reply with the combined findings exactly as the specialists gave them (bullet points, numbers and minutes kept).
 Do not add numbers of your own. If a specialist returns an error or no evidence, call it again; if it still has none, say the
 data could not be read rather than answering without it."""
@@ -153,6 +156,10 @@ class Desk:
                 return json.dumps(out, default=str)
             return wrap
 
+        # minutes as the clock shows them (33' runs from 32:00; the second half restarts at 46' after the first half's stoppage time)
+        t_from = lambda m: t_at_minute(mv.events, m, mv.meta["half_time"]) if m and mv.events else 0.
+        t_to = lambda m: t_at_minute(mv.events, m + 1, mv.meta["half_time"]) if mv.events else 0.
+
         def match_summary() -> dict:
             """Score, goals (minute, scorer, team), cards, substitutions and the starting formations so far."""
             ev = mv.events
@@ -181,8 +188,8 @@ class Desk:
 
         def team_shape(team: Annotated[str, "home, away or the team name"], from_minute: Annotated[int, "first minute"] = 0, to_minute: Annotated[int, "last minute; omit for now"] = 0) -> dict:
             """Average positions and the formation the team's shape reads as, in possession and out of possession (they differ at the same time), with the defensive line height and the block's length and width."""
-            t, t0 = team_ix(team), from_minute * 60.
-            t1 = to_minute * 60. if to_minute else None
+            t, t0 = team_ix(team), t_from(from_minute)
+            t1 = t_to(to_minute) if to_minute else None
             out = dict(in_possession=mv.shape(t, t0, t1, "in"), out_of_possession=mv.shape(t, t0, t1, "out"))
             inside = [c for c in mv.formation_timeline(t)["changes"] if t0 < c["t"] < (t1 or 1e9)]
             if inside:  # an average across a change of system describes a shape nobody played
@@ -216,7 +223,7 @@ class Desk:
 
         def passing_network(team: Annotated[str, "home, away or the team name"], from_minute: Annotated[int, "first minute"] = 0, to_minute: Annotated[int, "last minute; omit for now"] = 0) -> dict:
             """Pass links between players, average pass positions, the main connectors and which side entries into the final third favour."""
-            return mv.passing_network(team_ix(team), from_minute * 60., to_minute * 60. if to_minute else None)
+            return mv.passing_network(team_ix(team), t_from(from_minute), t_to(to_minute) if to_minute else None)
 
         def moment_breakdown(event_id: Annotated[int, "the id of the event (a goal, shot, etc.) from find_moments"]) -> dict:
             """The possession that led to a moment, step by step, with the alternatives each player had and the pressure he was under."""
@@ -232,10 +239,11 @@ class Desk:
                          outcome: Annotated[str, "e.g. complete, won, lost, saved, goal; empty for any"] = "",
                          third: Annotated[str, "own, middle or final (in the acting team's direction); empty for any"] = "",
                          from_minute: Annotated[int, "first minute"] = 0, to_minute: Annotated[int, "last minute; 0 for now"] = 0) -> dict:
-            """Events matching a filter, each with its id, minute and a clip range; use the id with moment_breakdown."""
+            """Events matching a filter, each with its id, minute, team and a clip range; use the id with moment_breakdown. An event belongs to
+            the team that made it: a goal to the scoring team, so the goals a team conceded are the other team's goals (or leave team empty)."""
             return mv.find_moments(player=player_id(player) if player else None, team=team_ix(team) if team else None,
                                    types=[event_type] if event_type else None, group=action_group or None, outcome=outcome or None, third=third or None,
-                                   minutes=(from_minute, to_minute or 999) if (from_minute or to_minute) else None)
+                                   minutes=(t_from(from_minute), t_to(to_minute) if to_minute else 1e9) if (from_minute or to_minute) else None)
 
         async def what_if(team: Annotated[str, "home, away or the team name"], from_minute: Annotated[int, "the minute the change is made"],
                           press: Annotated[float, "pressing intensity 0-1; -1 to leave as it was"] = -1., line_height: Annotated[float, "defensive line 0 deep - 1 high; -1 to leave"] = -1.,
@@ -252,7 +260,7 @@ class Desk:
             kw = dict(team=team, from_minute=from_minute, **change)
             self._say("tactics_analyst", "what_if", kw)
             try:
-                t = t_at_minute(self.full["events"], int(from_minute))
+                t = t_at_minute(self.full["events"], int(from_minute), self.full["meta"]["half_time"])
                 out = await asyncio.get_running_loop().run_in_executor(None, cached_what_if, recipe, t, team_ix(team), change)
                 out = dict(out, team=mv.team_names[team_ix(team)], from_minute=from_minute)
             except Exception as ex:
@@ -303,7 +311,7 @@ class Desk:
                 ids = {p["name"]: pid for pid, p in self.mv.players.items()}
                 views.append(dict(kind="network", team=names.index(f["team"]), title=f"{f['team']} passing network {f['window'][0]}-{f['window'][1]}",
                                   links=[[ids[l["from"]], ids[l["to"]], l["passes"]] for l in f["links"]], nodes={ids[n]: xy for n, xy in f["avg_positions"].items()}))
-            elif st["tool"] == "moment_breakdown" and f.get("steps"):
+            elif st["tool"] == "moment_breakdown" and f.get("steps") and f["moment"]["type"] in ("goal", "own_goal", "shot", "penalty"):
                 views.append(dict(kind="move", title=f"The move: {f['moment']['clock']} {f['moment']['type'].replace('_', ' ')}", start=f["steps"][0]["t"], end=f["steps"][-1]["t"]))
         return views[:5]
 

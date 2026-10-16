@@ -383,7 +383,9 @@ function fmtStat(row, v) { return v == null ? '–' : row[2] ? row[2](v) : v; }
 function winNow() {
   const W_ = S.D.board && S.D.board.winprob;
   if (!W_) return null;
-  return W_.series[Math.min(W_.series.length - 1, Math.floor(S.t / 60))];
+  let r = W_.series[0];
+  for (const x of W_.series) { if (x.t > S.t) break; r = x; }
+  return r;
 }
 function winBar() {
   const w = winNow(), M = S.D.meta;
@@ -754,8 +756,8 @@ function liveStrip() {  // the fan's glance at the game: who is on top, five min
   return `${winBar()}<div class="label" style="margin-top:10px">Momentum · xG by five minutes</div>${momentumSvg(90)}`;
 }
 function winSvg() {
-  const W_ = S.D.board.winprob, n = Math.max(1, Math.floor(S.t / 60) + 1), rows = W_.series.slice(0, n), w = 368, h = 110, dx = w / Math.max(W_.series.length - 1, 1);
-  const line = k => rows.map((r, i) => `${(i * dx).toFixed(1)},${(h - r[k] * h).toFixed(1)}`).join(' ');
+  const W_ = S.D.board.winprob, rows = W_.series.filter(r => r.t <= S.t), w = 368, h = 110, dx = w / Math.max(W_.series[W_.series.length - 1].t / 60, 1);
+  const line = k => rows.map(r => `${(r.t / 60 * dx).toFixed(1)},${(h - r[k] * h).toFixed(1)}`).join(' ');
   const tps = W_.turning_points.filter(tp => tp.t <= S.t).map(tp => `<line x1="${(tp.t / 60 * dx).toFixed(1)}" x2="${(tp.t / 60 * dx).toFixed(1)}" y1="0" y2="${h}" stroke="var(--line-strong)" stroke-dasharray="3 3"/>`).join('');
   return `<svg viewBox="0 0 ${w} ${h}" width="100%" role="img" aria-label="Win probability for each side over the match; dashed lines mark turning points">${tps}
     <polyline points="${line('home')}" fill="none" stroke="var(--home)" stroke-width="2"/><polyline points="${line('away')}" fill="none" stroke="var(--away)" stroke-width="2"/>

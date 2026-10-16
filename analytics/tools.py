@@ -378,9 +378,10 @@ class MatchView:
             elif e["type"] == "shot" and e.get("team") in (0, 1):
                 shots.append((e["t"], e["team"], e["xg"]))
         pois = lambda lam, k: exp(-lam) * lam ** k / factorial(k)
-        out, t = [], 0.
-        while t <= dur + 1e-6:
-            sc = next(((h, a) for tt, h, a in reversed(goals) if tt <= t), (0, 0))
+        out = []
+        grid = sorted(set(np.arange(0., dur + 1e-6, step).tolist()) | {round(g[0], 1) for g in goals})  # every minute, and the moment each goal goes in
+        for t in grid:
+            sc = next(((h, a) for tt, h, a in reversed(goals) if tt <= t + .05), (0, 0))
             played = max(t / 60., 1.)
             left = max(dur - t, 0.) / 60.
             xg = [sum(x for tt, tm, x in shots if tt <= t and tm == s_) for s_ in (0, 1)]
@@ -394,7 +395,6 @@ class MatchView:
                     hw, dr, aw = hw + x * y * (d > 0), dr + x * y * (d == 0), aw + x * y * (d < 0)
             tot = hw + dr + aw
             out.append(dict(at=self._clock(t), t=round(t, 1), home=round(hw / tot, 3), draw=round(dr / tot, 3), away=round(aw / tot, 3)))
-            t += step
         swings = sorted(((abs(b["home"] - a["home"]) + abs(b["away"] - a["away"]), b) for a, b in zip(out, out[1:])), key=lambda x: -x[0])[:4]
         swings = [x for x in swings if x[0] / 2 >= .1]  # a turning point moves the chances by 10 points or more
         return dict(teams=self.team_names, series=out, turning_points=[dict(at=b["at"], t=b["t"], swing=round(sw / 2, 2)) for sw, b in sorted(swings, key=lambda x: x[1]["t"])],
@@ -613,7 +613,7 @@ class MatchView:
     # ---------------------------------------------------------------- moments
     def find_moments(self, player=None, team=None, types=None, group=None, outcome=None, third=None, minutes=None, limit=40):
         """Events matching a filter: player id, team index, event types or an action group (passing, shooting, carrying, defending,
-        keeping, discipline), outcome, third of the pitch in the acting team's frame (own/middle/final), minute range [a, b]."""
+        keeping, discipline), outcome, third of the pitch in the acting team's frame (own/middle/final), time range [a, b) in seconds."""
         want = set(types or ()) | set(GROUPS.get(group, ()))
         out = []
         for e in self.events:
@@ -625,13 +625,14 @@ class MatchView:
                 continue
             if outcome and e.get("outcome") != outcome:
                 continue
-            if minutes and not (minutes[0] <= e["t"] / 60 <= minutes[1]):
+            if minutes and not (minutes[0] <= e["t"] < minutes[1]):
                 continue
             if third:
                 xy = self._ev_xy(e)
                 if xy is None or ["own", "middle", "final"][min(int(xy[0] / 35), 2)] != third:
                     continue
-            out.append(dict(id=e["id"], clock=e["clock"], t=e["t"], type=e["type"], player=self.names.get(e.get("player")), outcome=e.get("outcome"),
+            out.append(dict(id=e["id"], clock=e["clock"], t=e["t"], type=e["type"], team=self.team_names[e["team"]] if e.get("team") in (0, 1) else None,
+                            player=self.names.get(e.get("player")), outcome=e.get("outcome"),
                             xg=e.get("xg"), clip=[round(max(0., e["t"] - 6), 1), round(e["t"] + 4, 1)]))
         return dict(count=len(out), moments=out[:limit])
 

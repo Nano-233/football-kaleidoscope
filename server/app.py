@@ -49,7 +49,8 @@ async def ask(request):
     m = match(str(body.get("match", "")))
     t = body.get("t")
     t = None if t is None else max(60., min(float(t), m["meta"]["duration"]))
-    key = hashlib.sha1(json.dumps([body.get("match"), q.lower(), prof, None if t is None else int(t // 60)], sort_keys=True).encode()).hexdigest()
+    data = [m["meta"]["duration"], len(m["events"])]  # a rebuilt match is a new match: its old answers do not apply
+    key = hashlib.sha1(json.dumps([body.get("match"), data, q.lower(), prof, None if t is None else int(t // 60)], sort_keys=True).encode()).hexdigest()
     hit = CACHE / f"{key}.json"
     stream = request.query.get("stream") == "1"
     if hit.exists():
@@ -180,8 +181,15 @@ async def index(request):
     return web.FileResponse(WEB / "index.html")
 
 
+async def _revalidate(request, response):
+    """The page's own code is checked with the server on every load (a 304 when unchanged), so a deploy is seen at once."""
+    if request.path == "/" or request.path.endswith((".html", ".css", ".js", ".json")):
+        response.headers["Cache-Control"] = "no-cache"
+
+
 def app():
     a = web.Application(client_max_size=64 * 1024)
+    a.on_response_prepare.append(_revalidate)
     a.router.add_post("/api/ask", ask)
     a.router.add_post("/api/translate", tr)
     a.router.add_post("/api/whatif", whatif)
