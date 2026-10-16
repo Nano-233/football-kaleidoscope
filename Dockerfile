@@ -4,6 +4,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY analytics analytics
 COPY matchsim matchsim
+COPY reference reference
 COPY newsroom newsroom
 COPY server server
 COPY web web
