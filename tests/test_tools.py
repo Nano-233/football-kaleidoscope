@@ -12,6 +12,7 @@ match = json.load(open(ROOT / "out" / "match_7.json", encoding="utf-8"))
 mv = MatchView(match)
 teams = match_stats(match)["teams"]
 assert mv.momentum()["cumulative_xg"] == [round(teams[0]["xg"], 2), round(teams[1]["xg"], 2)]
+assert [mv.pressing(t)["match_ppda"] for t in (0, 1)] == [round(t["ppda"], 1) for t in teams]
 for tm in (0, 1):
     assert mv.formation_timeline(tm)["starting"]["in_possession"] == mv.truth(tm)["starting"]
     assert "out_of_possession" in mv.formation_timeline(tm)["by_window"][0]

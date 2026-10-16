@@ -2,6 +2,7 @@
 engine's own record of formations and changes, the goals, the ratings and the pressing numbers.
 
     python scripts/eval_newsroom.py out/match_1.json out/match_7.json ...     # writes web/data/eval.json and prints a summary
+    python scripts/eval_newsroom.py --only=formation out/...                    # one kind of question; prints only, eval.json is left alone
 
 Questions (asked at full time, analyst profile, standard depth), and how each is marked:
   formation  "What system did <team> start in, did they change it, and why?"  the true starting system named (same layout counts), and
@@ -56,9 +57,9 @@ async def one(client, path):
     async def ask(kind, q):
         t0 = time.time()
         r = await Desk(client, match, PROFILE).ask(q)
-        return r, dict(kind=kind, question=q, approved=r["approved"], rewrites=r["rewrites"], tool_calls=len(r["steps"]), seconds=round(time.time() - t0, 1))
+        return r, dict(kind=kind, question=q, answer=r["answer"] or r["held"] or "", approved=r["approved"], rewrites=r["rewrites"], tool_calls=len(r["steps"]), seconds=round(time.time() - t0, 1))
 
-    for tm in (0, 1):
+    for tm in (0, 1) if ONLY in (None, "formation") else ():
         tr = mv.truth(tm)
         r, row = await ask("formation", f"What system did {mv.team_names[tm]} start the match in, and did they change their system during it? When, to what, and why?")
         text = r["answer"] or r["held"] or ""
@@ -79,6 +80,8 @@ async def one(client, path):
         row.update(correct=bool(ok_start and all(found)), detail=dict(starting_named=ok_start, changes_found=f"{sum(found)}/{len(found)}"),
                    changes=len(found), found=sum(found), reasons_right=sum(right), minute_errors=lag)
         rows.append(row)
+    if ONLY not in (None, "goals", "best", "pressing"):
+        return dict(match=pathlib.Path(path).stem, rows=rows)
     goals = [e for e in match["events"] if e["type"] in ("goal", "own_goal")]
     r, row = await ask("goals", "Who scored the goals in this match, and at which minutes?")
     text = r["answer"] or r["held"] or ""
@@ -102,7 +105,7 @@ async def one(client, path):
 
 async def main(paths):
     client = make_client()
-    gate = asyncio.Semaphore(3)  # three matches at a time keeps inside the deployment's request rate
+    gate = asyncio.Semaphore(2)  # two matches at a time keeps inside the deployment's request rate (three hit 429s)
 
     async def run(p):
         async with gate:
@@ -117,12 +120,17 @@ async def main(paths):
                                 reasons_right=sum(r.get("reasons_right", 0) for r in rows),
                                 mean_minute_error=round(sum(sum(r.get("minute_errors", [])) for r in rows) / max(1, sum(len(r.get("minute_errors", [])) for r in rows)), 1)),
                    avg_tool_calls=round(sum(r["tool_calls"] for r in rows) / len(rows), 1), avg_seconds=round(sum(r["seconds"] for r in rows) / len(rows), 1))
-    (ROOT / "web" / "data" / "eval.json").write_text(json.dumps(dict(summary=summary, matches=res), indent=1), encoding="utf-8")
+    if ONLY is None:
+        (ROOT / "web" / "data" / "eval.json").write_text(json.dumps(dict(summary=summary, matches=res), indent=1), encoding="utf-8")
     print(json.dumps(summary, indent=1))
     for m in res:
         for r in m["rows"]:
             print(m["match"], r["kind"], "OK " if r["correct"] else "MISS", r["detail"])
+            if ONLY and not r["correct"]:
+                print("   ", r["answer"].replace(chr(10), " "))
 
+
+ONLY = next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--only=")), None)
 
 if __name__ == "__main__":
-    asyncio.run(main(sys.argv[1:]))
+    asyncio.run(main([a for a in sys.argv[1:] if not a.startswith("--")]))

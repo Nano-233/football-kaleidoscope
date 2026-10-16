@@ -1260,6 +1260,47 @@ because crosses into the box are now 11.1 per team-match (9.6, from about 17): t
 (a big chance from 0.01 of crosses against 0.03; a shot after 0.23 vs 0.16). Tight marking holds (0.44 vs 0.43). Moves per team-match
 138.6 (79.7). Open: the quality of the chance a cross makes, cut-backs (0.03 vs 0.25), and the support in the gaps.
 
+### Formation reader: late changes and drift (2026-10-15)
+Saw: the tactics agent finds few system changes (in-possession changes found 25/57 on 24 fresh matches, `formation_eval.py 24`,
+false alarms 33). The engine makes its changes from the 65th minute on, and the reader needed two 7-minute windows in a row
+(stepped 3.5 minutes), so a change after about the 80th minute could never be confirmed.
+Fixed: the starting shape is still read from the first 7 minutes; after that a 5-minute window slides forward a minute at a time
+and a change is the first window that fits another layout better by the same margin, confirmed by the window 2 minutes later.
+Windows are cut short at the final whistle (at least 2.5 minutes), so a change near the end can still be seen. Each change now
+carries `confirmed_t` (when a viewer could know), which the live moments use instead of a fixed delay.
+Drift is not a system: shorter windows see wingers dropping for a spell (4-3-3 to 4-1-4-1 and back) as two changes. A shape that
+returns to the one before within 20 minutes is dropped with its return, and two names for one layout (same_shape) are never a change.
+Effect (24 fresh matches): found 25 -> 33 of 57, false alarms 33 -> 37, median delay 3.0 -> -0.5 min (the window starts before the
+change). Tried: 7-minute sliding windows (28 found, 51 false alarms), 6 min with margin 2.5 (21, 34), 8 min (25, 58); a
+15-minute revert hold (33, 45).
+Open: most remaining false alarms are 4-3-3 <-> 4-1-4-1 spells longer than 20 minutes and 4-3-3 read as 5-4-1. Not yet checked:
+whether the first follows tactic changes (line height, press) that the engine does not log as formation changes, in which case the
+shape on the pitch did move and the label, not the reading, is wrong.
+
+### Newsroom accuracy: what the eval was really measuring (2026-10-15)
+Eval on the five rebuilt matches (`eval_newsroom.py`): overall 0.76, formation 0.6, pressing 0.6, changes found 8/13, 39 s an answer.
+- Unseeable changes were scored. Two of the 13 could not be seen in any data: one at 90+5' (no play left to show it) and one from 3-5-2
+  to 5-3-2 (the same layout, 0.003 apart in the reader's fit). `MatchView.truth` now keeps only changes to a different layout with at
+  least 2.5 minutes left (the reader's shortest window); the others are listed as `unseeable_changes`.
+- Pressing misses on clear cases (PPDA 10.9 against 24.9). Two causes: the pressing tool gave PPDA only per 15 minutes, so the agent
+  had to combine windows (an average of ratios is not the match ratio), and the tool counted recoveries and blocks as pressing actions
+  while the stats layer (and the standard definition) counts tackles, interceptions and fouls. The tool now uses the standard actions
+  and returns `match_ppda`, which a test holds equal to the stats layer's. Pressing 0.6 -> 1.0.
+- The agent told every reading as a system change, including without-ball flips (4-3-3 / 4-1-4-1) and window readings. The
+  formation tool now returns `system_changes` (shape with the ball) apart from `without_ball_changes`, without the window list, and
+  each change carries the match state then (score from the team's side, players on the pitch). Formation 0.5 -> 0.6-0.7 (10
+  questions; one answer is the run-to-run noise), changes found 5 -> 6-7 of 11.
+- The 39 s was mostly rate limiting: the deployment allows 50 requests and 50K tokens a minute, and the site build (which writes the
+  coverage with the same model) was running at the same time. Alone the eval averages 16-20 s. The eval runs two matches at a time.
+Open: the remaining misses are the reader's: the engine's 4-3-3 is played with the wingers level with the midfield (reads 4-1-4-1),
+and its 3-4-3 with ten men defends and attacks as 5-4-1.
+
+### Ratings stopped at 10.0 (2026-10-15)
+Saw: two goals and an assist rated 10.0, the same as any bigger match. Cause: the rating is 6.0 plus additive terms, clipped at 1
+and 10. Fixed: above 8 and below 4 the scale eases off (tanh), so the ends are approached, not hit (published 1-10 scales flatten
+the same way). That match is now 9.5; a hat-trick with little else 8.8. The player report notes that the terms can add to more than
+the rating shows.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

@@ -215,10 +215,16 @@ class StatsAccumulator:
 
     @classmethod
     def rating(cls, c, role, minutes, result=0):
-        """1-10 match rating: 6.0 plus the terms of rating_terms."""
+        """1-10 match rating: 6.0 plus the terms of rating_terms, eased above 8 and below 4 so the ends are approached, not hit: a
+        clip made two goals and an assist a 10.0, the same as any bigger match (published 1-10 scales flatten at the top the same way)."""
         if minutes < 1:
             return None
-        return round(max(1., min(10., 6. + sum(cls.rating_terms(c, role, minutes, result).values()))), 1)
+        r = 6. + sum(cls.rating_terms(c, role, minutes, result).values())
+        if r > 8.:
+            r = 8. + 2. * np.tanh((r - 8.) / 2.)
+        elif r < 4.:
+            r = 4. + 3. * np.tanh((r - 4.) / 3.)
+        return round(float(r), 1)
 
 
 def match_stats(match):

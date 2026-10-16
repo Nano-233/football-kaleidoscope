@@ -211,28 +211,53 @@ class MatchView:
             P.append(self._team_xy(team, xy[on].mean(0)))
         return dict(self._read_formation(np.array(P)))
 
-    def formation_timeline(self, team, window=420., step=210., margin=2.):
-        """The shape in possession and the shape out of possession, each read from the data window by window (overlapping windows) and
-        tracked on its own: the two can differ, and which shape a team defends in is whatever its players do, not assumed from the system.
-        A change in a phase is reported when another shape fits better than the current one by `margin` in two windows running."""
-        reads, t = [], 0.
-        while t < self.meta["duration"] - 120:
-            reads.append((t, self._window_costs(team, t, t + window, "in"), self._window_costs(team, t, t + window, "out")))
-            t += step
+    def formation_timeline(self, team, window=420., step=210., margin=2., scan=300., every=60., confirm=120., hold=1200.):
+        """The shape in possession and the shape out of possession, each read from the data and tracked on its own: the two can differ,
+        and which shape a team defends in is whatever its players do, not assumed from the system. The starting shape is read from the
+        first `window` seconds; then a `scan`-second window slides forward `every` seconds, and a change is reported where the window
+        starting there fits another layout better than the current one by `margin`, and so does the window starting `confirm` seconds
+        later (cut short at the final whistle, so a change in the last minutes can still be seen). Two names for one layout
+        (4-5-1 / 4-1-4-1, see same_shape) are not a change. `confirmed_t` is when the second window ends: when a viewer could know."""
+        end = self.meta["duration"]
         best = lambda c: min(c, key=c.get) if c else None
+        reads = {}
+
+        def costs(t0, ph):
+            if (t0, ph) not in reads:
+                reads[t0, ph] = self._window_costs(team, t0, min(t0 + scan, end), ph) if end - t0 >= scan / 2 else {}
+            return reads[t0, ph]
         start, changes = {}, []
-        for k, phase in ((1, "in_possession"), (2, "out_of_possession")):
-            cur = next((best(r[k]) for r in reads if r[k]), None)
+        for ph, phase in (("in", "in_possession"), ("out", "out_of_possession")):
+            cur = best(self._window_costs(team, 0., window, ph))
             start[phase] = cur
-            for ra, rb in zip(reads, reads[1:]):
-                ca, cb = ra[k], rb[k]
-                na, nb = best(ca), best(cb)
-                if na and na == nb and na != cur and ca.get(cur, 9) > margin * ca[na] and cb.get(cur, 9) > margin * cb[nb]:
-                    changes.append(dict(phase=phase, at=self._clock(ra[0] + window / 2), t=ra[0] + window / 2, formation=na, previous=cur))
+            t = window - scan / 2
+            while cur and t + confirm < end - scan / 2:
+                ca, cb = costs(t, ph), costs(t + confirm, ph)
+                na = best(ca)
+                if na and na == best(cb) and not self.same_shape(na, cur) and ca.get(cur, 9) > margin * ca[na] and cb.get(cur, 9) > margin * cb[na]:
+                    changes.append(dict(phase=phase, at=self._clock(t), t=t, formation=na, previous=cur, confirmed_t=min(t + confirm + scan, end)))
                     cur = na
+                    t += confirm
+                t += every
+        changes = [c for c in changes if c["phase"] == "in_possession"] + [c for c in changes if c["phase"] != "in_possession"]  # grouped by phase, each in time order
+        changes = self._drop_reverts(changes, hold)
         changes.sort(key=lambda c: c["t"])
+        wins = np.arange(0., end - 120, 2 * step)
         return dict(team=self.team_names[team], starting=start, changes=changes,
-                    by_window=[dict(at=self._clock(t), t=t, in_possession=best(ci), out_of_possession=best(co)) for t, ci, co in reads[::2]])
+                    by_window=[dict(at=self._clock(t), t=t, in_possession=best(self._window_costs(team, t, t + window, "in")),
+                                    out_of_possession=best(self._window_costs(team, t, t + window, "out"))) for t in wins])
+
+    def _drop_reverts(self, changes, hold):
+        """A shape that goes back to the one before within `hold` seconds was drift (wingers dropping for a spell), not a new system:
+        drop both readings. Changes come grouped by phase, in time order."""
+        out = []
+        for c in changes:
+            p = out[-1] if out and out[-1]["phase"] == c["phase"] else None
+            if p and c["t"] - p["t"] < hold and self.same_shape(c["formation"], p["previous"]):
+                out.pop()
+            else:
+                out.append(c)
+        return out
 
     def same_shape(self, a, b):
         """Two formation names for the same layout: their templates are within 0.01 of each other in the reader's own normalised fit
@@ -275,6 +300,7 @@ class MatchView:
         team's defensive actions (metres from its own goal), balls won by third, and counter-press wins (won back within 5 s of losing it)."""
         out, lost_at = [], None
         acts = ("tackle", "interception", "foul", "ball_recovery", "block")
+        ppda_acts = ("tackle", "interception", "foul")  # the standard PPDA actions, as analytics.stats counts them
         rows = {}
         for e in self.events:
             w = int(e["t"] // window)
@@ -295,14 +321,16 @@ class MatchView:
                 r["opp_passes"] += 1
             if e["type"] in acts and e["team"] == team:
                 r["heights"].append(float(xy[0]))
-                if xy[0] > .4 * L:
-                    r["def_actions"] += 1
+            if e["type"] in ppda_acts and e["team"] == team and xy[0] > .4 * L:
+                r["def_actions"] += 1
         for w in sorted(rows):
             r = rows[w]
             out.append(dict(window=[self._clock(w * window), self._clock((w + 1) * window)], ppda=round(r["opp_passes"] / r["def_actions"], 1) if r["def_actions"] else None,
                             action_height_m=round(float(np.mean(r["heights"])), 1) if r["heights"] else None,
                             balls_won_own_mid_final_third=r["won"], counterpress_wins=r["counter"]))
-        return dict(team=self.team_names[team], by_window=out, note="PPDA: lower means a more intense press")
+        passes, actions = sum(r["opp_passes"] for r in rows.values()), sum(r["def_actions"] for r in rows.values())
+        return dict(team=self.team_names[team], match_ppda=round(passes / actions, 1) if actions else None, by_window=out,
+                    note="PPDA: lower means a more intense press; match_ppda is the whole match (not an average of the windows)")
 
     # ---------------------------------------------------------------- momentum
     def momentum(self, window=300.):
@@ -578,7 +606,8 @@ class MatchView:
         norms = json.loads(ROLE_NORMS.read_text()).get(p["role"], {}) if ROLE_NORMS.exists() else {}
         vs = {k: dict(him=v, role_avg=norms[k]) for k, v in per90.items() if k in norms}
         return dict(player=p["name"], id=pid, number=p["number"], team=self.team_names[team], role=p["role"], traits=p.get("traits", []), star=p.get("star", False),
-                    minutes=mins, rating=st.get("rating"), rating_terms=terms, stats={k: st.get(k) for k in keys + ("goals", "assists", "goals_conceded", "pass_accuracy")},
+                    minutes=mins, rating=st.get("rating"), rating_terms=terms, rating_note="6.0 plus the terms; above 8 and below 4 the scale eases off, so the terms can add to more than the rating shows",
+                    stats={k: st.get(k) for k in keys + ("goals", "assists", "goals_conceded", "pass_accuracy")},
                     physical=phys, heat_map_6x4=heat, per90_vs_role=vs)
 
     # ---------------------------------------------------------------- moments
@@ -611,6 +640,9 @@ class MatchView:
         """What the engine actually did: starting formation, formation changes, tactic changes, with reasons."""
         ev = [e for e in self.events if e.get("team") == team]
         start = next((e["formation"] for e in ev if e["type"] == "lineup"), self.meta[("home", "away")[team]]["formation"])
+        ch = [dict(at=e["clock"], t=e["t"], formation=e["formation"], previous=e["previous"], reason=e["reason"]) for e in ev if e["type"] == "formation_change"]
+        # a change nobody could see is not scored: one to the same layout (3-5-2 to 5-3-2), or with under 2.5 minutes left to show it
+        seen = lambda c: not self.same_shape(c["formation"], c["previous"]) and self.meta["duration"] - c["t"] >= 150
         return dict(team=self.team_names[team], starting=start,
-                    formation_changes=[dict(at=e["clock"], t=e["t"], formation=e["formation"], previous=e["previous"], reason=e["reason"]) for e in ev if e["type"] == "formation_change"],
+                    formation_changes=[c for c in ch if seen(c)], unseeable_changes=[c for c in ch if not seen(c)],
                     tactic_changes=[dict(at=e["clock"], t=e["t"], reason=e["reason"], changes=e["changes"]) for e in ev if e["type"] == "tactic_change"])

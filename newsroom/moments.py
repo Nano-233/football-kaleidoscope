@@ -62,8 +62,7 @@ def _observed(match, names, team):
     mv, out = MatchView(match), []
     for tm in (0, 1):
         for c in mv.formation_timeline(tm)["changes"]:
-            t = c["t"] + 210.  # the change is confirmed when its second window ends (formation_timeline: 7-minute windows, 3.5-minute steps)
-            out.append((t, "shape_change", dict(team=team[tm], shift=dict(phase=c["phase"].replace("_", " "), previous=c["previous"], now=c["formation"], since=c["at"]))))
+            out.append((c["confirmed_t"], "shape_change", dict(team=team[tm], shift=dict(phase=c["phase"].replace("_", " "), previous=c["previous"], now=c["formation"], since=c["at"]))))
     for sp in mv.momentum()["dominant_spells"]:
         out.append((sp["end_t"], "spell", dict(team=sp["team"], spell=dict(start=sp["start"], end=sp["end"], xg=sp["xg"], opponent_xg=sp["opponent_xg"]))))
     seen = set()

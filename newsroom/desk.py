@@ -33,8 +33,9 @@ PERSONA = {"fan": "a football fan who wants the story and why it matters", "anal
 
 TACTICS = """You are the tactics analyst of a football newsroom. Investigate the question with your tools before answering; never guess.
 Formations: a team has a shape in possession and a shape out of possession at the same time, and they may differ; read both from the
-tools (never assume how a system defends) and say which phase you mean. A system change is what formation_changes lists under "changes"; single
-windows that read differently are noise, not changes. Call formation_changes first, then team_shape for each period between changes. For each change of system, say why it was made: the match state at that minute
+tools (never assume how a system defends) and say which phase you mean. A system change is what formation_changes lists under system_changes, at
+that minute, and nothing else: name each one with its minute; do not add or infer others from team_shape windows, substitutions or
+without_ball_changes (those describe how the side defended; mention them only as that). Call formation_changes first, then team_shape for each period between changes. For each change of system, say why it was made: the match state at that minute
 (the score from find_moments with goals, red cards, substitutions) is what a manager reacts to. Look for causes: changes of shape, pressing height and PPDA by period, momentum
 spells, where attacks start, substitutions. For a "what if" question (a different instruction or formation from a minute on), use what_if
 and report both columns, as it was and with the change, as chances out of the runs; say the runs are simulations. Use only numbers your tools returned. Reply with concise findings (bullet points), each with
@@ -188,11 +189,24 @@ class Desk:
             return out
 
         def formation_changes(team: Annotated[str, "home, away or the team name"]) -> dict:
-            """The team's formation over the match, window by window, in and out of possession, and the changes of system."""
-            return mv.formation_timeline(team_ix(team))
+            """The team's system over the match: the shape it started in with and without the ball, the changes of system (read from its shape
+            with the ball) and the changes in how it defended (its shape without the ball)."""
+            tl = mv.formation_timeline(team_ix(team))
+            t = team_ix(team)
+
+            def state(at):  # the match state the bench saw at that moment: score from this team's side, players on the pitch
+                ev = [e for e in mv.events if e["t"] <= at]
+                g = [e for e in ev if e["type"] in ("goal", "own_goal")]
+                h, a = (g[-1]["home"], g[-1]["away"]) if g else (0, 0)
+                us, them = (h, a) if t == 0 else (a, h)
+                reds = [sum(1 for e in ev if e["type"] == "card" and e.get("card") != "yellow" and e.get("team") == s) for s in (t, 1 - t)]
+                return dict(score_for_against=f"{us}-{them}", state="leading" if us > them else "trailing" if us < them else "level", players=[11 - reds[0], 11 - reds[1]])
+            ch = lambda ph: [dict(minute=c["at"], formation=c["formation"], previous=c["previous"], match_state_then=state(c["t"])) for c in tl["changes"] if c["phase"] == ph]
+            return dict(team=tl["team"], starting=tl["starting"], system_changes=ch("in_possession"), without_ball_changes=ch("out_of_possession"),
+                        note="a system change is a change in system_changes; without_ball_changes say how the team defended and are not changes of system on their own")
 
         def pressing(team: Annotated[str, "home, away or the team name"]) -> dict:
-            """PPDA (lower = harder press), height of the defensive actions, where balls were won and counter-press wins, by 15 minutes."""
+            """PPDA for the whole match and by 15 minutes (lower = harder press), height of the defensive actions, where balls were won and counter-press wins."""
             return mv.pressing(team_ix(team))
 
         def momentum() -> dict:
