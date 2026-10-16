@@ -1295,7 +1295,7 @@ Eval on the five rebuilt matches (`eval_newsroom.py`): overall 0.76, formation 0
 - Under load the deployment also returns 500s, which `_run` did not retry (only 429), so a site build died; and when a specialist's
   call failed, the orchestrator answered without data ("pressing data unavailable", then a guess from the goals) and the checker,
   comparing with the same empty findings, approved it. `_run` now retries 5xx as well, and the orchestrator calls a failing specialist
-  again or says the data could not be read.
+  again or says the data could not be read. Request timeouts are retried the same way (a build died on one).
 Result on the rebuilt demo matches (engine-v4): overall 0.76 -> 0.84, pressing 0.6 -> 1.0, formation 0.6, best player and goals 1.0,
 22 s an answer.
 Open: the remaining misses are the reader's: the engine's 4-3-3 is played with the wingers level with the midfield (reads 4-1-4-1),
