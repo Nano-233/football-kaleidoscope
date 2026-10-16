@@ -1,0 +1,87 @@
+# Handoff: Matchday Newsroom (state as of 2026-10-15)
+
+Read this first in a new session, then DEVLOG.md (newest entries just above "Is the tuner machine learning?") for detail.
+
+## What it is
+
+Entry for the Microsoft "Inside the Game" hackathon (build closes **Oct 27 2026, 11:59pm PT**; registration done). A synthetic
+football match engine (`matchsim/`) feeds deterministic analytics (`analytics/`) and a multi-agent newsroom on **Azure AI Foundry
++ Microsoft Agent Framework** (`newsroom/`), shown in a static match centre (`web/`) served by an aiohttp server (`server/`).
+Personas: Fan, Analyst, Scout. Features: live feed with fact-checked commentary, Ask (Q&A with the agent desk), Board (shapes,
+networks, press, momentum), What-if (paired simulations from any minute), Recap (half/full-time reports), Breakdowns (pause and
+draw on key moments), Clips + JSON/broadcast-pack export, units (metric/imperial) passed to the agents, languages, voice.
+Team of two: the user (technical) and a partner (football knowledge, no coding). Repo: github.com/Nano-233/matchday-newsroom (main).
+
+## Status
+
+| Area | State |
+|---|---|
+| Engine | Frozen at tag `engine-v4`. Realism work done; open gaps listed in DEVLOG (shots 16.4 vs 12.9, cut-backs, support in the gaps). Do not reopen unless asked. |
+| Demo data | 5 matches rebuilt on engine-v4 and committed (`web/data`, `server/data`): match_1, match_7, RED-ASH, HAR-STB, WMW-OAK. What-if replays reproduce each exactly. |
+| Newsroom accuracy | `web/data/eval.json`: overall 0.84 (25 answers), goals 1.0, best player 1.0, pressing 1.0, formation 0.6; changes found 6/11; 100 % fact-checker approved; ~15 s an answer. |
+| Walkthrough | Fan / Analyst / Scout walked; fixes in DEVLOG "Persona walkthrough fixes" and "A red card given to the wrong team". Scout ratings are full-match by design (labelled). |
+| Deploy | **Ready, not done.** `infra/deploy.ps1` (Azure Container Apps, managed identity, scale to zero). Image verified locally by a copy of exactly what the Dockerfile ships (server loads, replay matches). Needs the user's explicit go-ahead: it creates paid resources. |
+| README / pitch / video | Last. Video < 2 min, public repo, free working test link required by the rules. |
+
+## Azure
+
+- Subscription a3c0eba6..., resource group `rg-matchday-newsroom`, Foundry account `matchday-newsroom-a3c0eb` (eastus2), project
+  `newsroom`, deployment `gpt-4.1-mini` (GlobalStandard, capacity 50 = 50 requests and 50K tokens a minute). App Insights
+  `matchday-newsroom-a3c0eb-insights` (tracing on via `newsroom/clients.py`).
+- Env: `FOUNDRY_PROJECT_ENDPOINT`, `FOUNDRY_MODEL` (set in the user's env; also in `../.claude/launch.json`).
+- `az` lives at `C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin` (use PowerShell; not on the Bash PATH).
+- The app's identity needs the **Foundry User** role (deploy.ps1 assigns it).
+- Rate limit is the main cause of slow answers and errors when a site build and an eval run at the same time. Raising the
+  deployment capacity was proposed; it is the user's decision (not done).
+
+## Run things
+
+```
+.venv/Scripts/python.exe -m server.app                      # match centre + API on :8080 (launch.json "newsroom-server" uses :8090)
+.venv/Scripts/python.exe scripts/run_match.py 7             # simulate a match -> out/match_7.json
+.venv/Scripts/python.exe scripts/matchday.py                # the three club demo matches -> out/RED-ASH.json etc.
+.venv/Scripts/python.exe scripts/build_site.py out/X.json   # web/data/X + server/data/X.json.gz (calls the model: ~8 min a match)
+.venv/Scripts/python.exe scripts/eval_newsroom.py out/match_1.json out/match_7.json out/RED-ASH.json out/HAR-STB.json out/WMW-OAK.json
+.venv/Scripts/python.exe scripts/eval_newsroom.py --only=formation ...   # one question kind, prints answers, leaves eval.json alone
+.venv/Scripts/python.exe scripts/formation_eval.py 24       # formation reader against engine truth on fresh matches (no model)
+.venv/Scripts/python.exe tests/test_tools.py ; tests/test_newsroom.py ; tests/test_stats.py ; tests/test_sim.py   # plain scripts, no pytest
+```
+Never run a site build and an eval at the same time (429s). Builds and evals retry 429/5xx/timeouts in `newsroom/agents._run`.
+Server answer cache: `server/cache` (git-ignored), keyed by match data, question, profile and minute.
+
+## Architecture rules (keep)
+
+- Engine = facts only; analytics = every displayed number (deterministic); agents = insight, wording, personalisation, fact-check.
+- Agents only quote tool numbers. Deterministic checks back the LLM fact-checker: `unsupported_numbers`, `wrong_leader`,
+  `wrong_team` (newsroom/agents.py). Add a deterministic check whenever the LLM checker lets a factual slip through.
+- Minutes: always convert with `matchsim.whatif.t_at_minute(events, minute, meta["half_time"])` (clock rule; second half restarts
+  after first-half stoppage). Never `minute * 60`.
+- Formation reader: `MatchView.formation_timeline` (5-min sliding window, confirm 2 min later, reverts within 20 min dropped,
+  `confirmed_t`). Scoring ignores changes nobody could see (`truth()["unseeable_changes"]`).
+- Desk flow (`newsroom/desk.py`): orchestrator -> tactics_analyst / scout (as tools) -> writer -> fact-checker (up to 2 rewrites).
+
+## User's standing rules
+
+- Terse replies (caveman + ponytail modes): short, decisions stated, minimal code, no unrequested features or extras.
+- Engine work must be logic-driven (football cause), never stat-fitting; a logic fix that is right against real data stays even if
+  the loss gets worse; recalibrate numbers afterwards. Check DEVLOG before trying anything, so no attempt is repeated.
+- Keep DEVLOG.md updated (what was seen, measured, fixed, tried and not kept).
+- Commit messages end with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Push to main.
+- Never use real clubs, players or badges. Data must be synthetic (rule 4.7).
+- Ask before anything that costs money or is outward-facing (deploy, quota change).
+
+## Open items, in order
+
+1. Deploy (on go-ahead): `./infra/deploy.ps1` in PowerShell from the repo root; then open the URL, check Ask, What-if, Recap.
+2. Optional: raise the gpt-4.1-mini capacity (user's call).
+3. Accuracy left: formation 0.6. The ceiling is the reader: the engine's 4-3-3 plays as 4-1-4-1 (wingers level with midfield) and
+   its 3-4-3 with ten men as 5-4-1. "Why did they concede?" covers only the latest goal (orchestrator narrows the task).
+4. README (status table, quick start, architecture, Microsoft tech used), pitch, < 2 min video. Last.
+
+## Key files
+
+`matchsim/engine.py` (engine), `matchsim/whatif.py` (paired what-if, t_at_minute), `analytics/tools.py` (MatchView: shapes,
+formation reader, pressing, momentum, win probability, breakdowns, find_moments, truth), `analytics/stats.py` (stats, ratings),
+`newsroom/desk.py` (Ask desk + prompts), `newsroom/agents.py` (live commentary, checks, `_run`), `newsroom/moments.py`,
+`newsroom/clients.py` (Foundry client, tracing), `server/app.py`, `web/app.js` / `index.html` / `app.css`,
+`scripts/build_site.py`, `scripts/eval_newsroom.py`, `infra/setup.ps1` / `deploy.ps1`, `DEVLOG.md`, `DESIGN.md`, `EVENTS.md`.
