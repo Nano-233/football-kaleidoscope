@@ -1292,6 +1292,12 @@ Eval on the five rebuilt matches (`eval_newsroom.py`): overall 0.76, formation 0
   questions; one answer is the run-to-run noise), changes found 5 -> 6-7 of 11.
 - The 39 s was mostly rate limiting: the deployment allows 50 requests and 50K tokens a minute, and the site build (which writes the
   coverage with the same model) was running at the same time. Alone the eval averages 16-20 s. The eval runs two matches at a time.
+- Under load the deployment also returns 500s, which `_run` did not retry (only 429), so a site build died; and when a specialist's
+  call failed, the orchestrator answered without data ("pressing data unavailable", then a guess from the goals) and the checker,
+  comparing with the same empty findings, approved it. `_run` now retries 5xx as well, and the orchestrator calls a failing specialist
+  again or says the data could not be read.
+Result on the rebuilt demo matches (engine-v4): overall 0.76 -> 0.84, pressing 0.6 -> 1.0, formation 0.6, best player and goals 1.0,
+22 s an answer.
 Open: the remaining misses are the reader's: the engine's 4-3-3 is played with the wingers level with the midfield (reads 4-1-4-1),
 and its 3-4-3 with ten men defends and attacks as 5-4-1.
 

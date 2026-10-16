@@ -48,7 +48,8 @@ compared with his role. Use only numbers your tools returned. Reply with concise
 ORCHESTRATOR = """You run the newsroom desk. For the reader's question, call the specialists you need (tactics_analyst for teams, shapes,
 pressing, momentum, why things happened and "what if" questions about a different instruction or formation; scout for players), with a precise task for each; when you need both, call them in the same step so they work at the same time. Use match_summary for
 the basic facts. Then reply with the combined findings exactly as the specialists gave them (bullet points, numbers and minutes kept).
-Do not add numbers of your own."""
+Do not add numbers of your own. If a specialist returns an error or no evidence, call it again; if it still has none, say the
+data could not be read rather than answering without it."""
 
 CHECKER = """You are the fact-checker. Compare the ANSWER with the FINDINGS the analysts produced from their tools. Reject it if a number is
 attached to the wrong player, team, metric or minute, a metric is described wrongly (PPDA: lower means a harder press), or a claim is not

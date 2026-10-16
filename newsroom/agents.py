@@ -94,12 +94,12 @@ def wrong_minutes(line, pack):
 
 
 async def _run(agent, prompt, tries=6):
-    """agent.run with back-off when the deployment is rate limited (429); other errors propagate."""
+    """agent.run with back-off when the deployment is rate limited (429) or has a passing server error (5xx); other errors propagate."""
     for i in range(tries):
         try:
             return await agent.run(prompt)
         except Exception as ex:  # the framework wraps the HTTP error in its own exception type
-            if "429" not in str(ex) or i == tries - 1:
+            if not re.search(r"Error code: (429|5\d\d)", str(ex)) or i == tries - 1:
                 raise
             await asyncio.sleep(3 * 2 ** i)
 
