@@ -88,8 +88,8 @@ def clips(events, names, duration):
 
 
 RECAPS = {  # (when, question); each is written for every profile in RECAP_PROFILES, from what had happened by then
-    "half_time": "Write the half-time report: the story of the half, why the score is what it is, and what to watch in the second half.",
-    "full_time": "Write the full-time report: the story of the match, the turning points and why the result happened.",
+    "half_time": "Write the half-time report: the story of the half (every goal, red card and change of system in it), why the score is what it is, and what to watch in the second half.",
+    "full_time": "Write the full-time report: the story of the match (every goal, red card and change of system in it), the turning points and why the result happened.",
 }
 RECAP_PROFILES = ({"persona": "fan", "depth": "quick"}, {"persona": "analyst", "depth": "deep"})
 
@@ -101,7 +101,7 @@ async def recaps(match):
         t = ht if kind == "half_time" else match["meta"]["duration"]
         for prof in RECAP_PROFILES:
             r = await Desk(client, match, prof, until=t).ask(q)
-            out.append(dict(kind=kind, t=t, profile=prof, **{k: r[k] for k in ("answer", "held", "approved", "rewrites", "findings", "steps", "watch")}))
+            out.append(dict(kind=kind, t=t, profile=prof, issues=[a["issues"] for a in r["attempts"]], **{k: r[k] for k in ("answer", "held", "approved", "rewrites", "findings", "steps", "watch")}))
     return out
 
 

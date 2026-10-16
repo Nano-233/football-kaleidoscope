@@ -21,7 +21,7 @@ from agent_framework import Agent
 
 from analytics.tools import MatchView
 from matchsim.whatif import cached_what_if, t_at_minute
-from newsroom.agents import _run, _verdict, unsupported_numbers, wrong_leader
+from newsroom.agents import _run, _verdict, unsupported_numbers, wrong_leader, wrong_team
 from newsroom.clients import traced
 
 MAX_REWRITES = 2
@@ -169,7 +169,7 @@ class Desk:
                 last = [e for e in ev if e["type"] in ("goal", "own_goal")][-1]
                 score = [last["home"], last["away"]]
             return dict(home=mv.team_names[0], away=mv.team_names[1], score=f"{score[0]}-{score[1]}", minute=ev[-1]["clock"] if ev else "1'", goals=goals,
-                        cards=[dict(minute=e["clock"], player=mv.names.get(e.get("player")), card=e["card"]) for e in ev if e["type"] == "card"],
+                        cards=[dict(minute=e["clock"], team=mv.team_names[e["team"]], player=mv.names.get(e.get("player")), card=e["card"]) for e in ev if e["type"] == "card"],
                         substitutions=[dict(minute=e["clock"], team=mv.team_names[e["team"]], off=e["off_name"], on=e["on_name"], reason=e.get("reason")) for e in ev if e["type"] == "substitution"],
                         starting_formations={mv.team_names[t]: mv.meta[s]["formation"] for t, s in enumerate(("home", "away"))},
                         win_probability_now={k: wp[k] for k in ("home", "draw", "away")} if (wp := mv.win_probability()["series"][-1]) else None,
@@ -293,6 +293,10 @@ class Desk:
         names = self.mv.team_names
         return dict(teams=dict(home=names[0], away=names[1]), leader=names[0] if h > a else names[1] if a > h else "level")
 
+    def _squads(self):
+        names = self.mv.team_names
+        return {names[t]: [p["name"] for p in self.mv.players.values() if p["team"] == t] for t in (0, 1)}
+
     def _views(self, steps, facts):
         """Pictures for the answer, from the evidence the agents actually pulled: shapes, passing networks, the moves they broke down."""
         views, seen = [], set()
@@ -332,7 +336,7 @@ class Desk:
             v = await _run(self.checker, f"FINDINGS:\n{found}\nANSWER:\n{answer}\n")
             verdict = _verdict(v.text)
             bad = unsupported_numbers(answer, facts)
-            lead = wrong_leader(answer, self._score_pack())
+            lead = wrong_leader(answer, self._score_pack()) + wrong_team(answer, self._squads())
             approved = bool(verdict["approved"]) and not bad and not lead
             issues = list(verdict.get("issues") or []) + ([f"numbers not in the tool results: {bad}"] if bad else []) + lead
             attempts.append(dict(answer=answer, approved=approved, issues=issues))

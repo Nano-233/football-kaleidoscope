@@ -35,7 +35,7 @@ def build(client, persona="veteran"):
     stats = mk("stats", "You are the stats analyst. From FACTS pick the two or three numbers that best explain this moment. Reply as a JSON list of {metric, value, meaning}.")
     tactics = mk("tactics", "You are the tactics analyst. Explain in one sentence, from FACTS.why, how the moment came about.")
     commentator = mk("commentator", f"You are the commentator, {PERSONAS[persona]}. Write one or two sentences of live commentary using the analysts' points. "
-                                    "First say what this moment is (FACTS.moment.type): for a shape_change the shape before and after from FACTS.shift and which phase; "
+                                    "First say what this moment is (FACTS.moment.type, in plain words: a red card, not red_card): for a shape_change the shape before and after from FACTS.shift and which phase; "
                                     "for a spell who dominated and when from FACTS.spell; for a substitution who came on and off. Use FACTS.scoreline for the score; "
                                     "FACTS.leader is ahead.")
     checker = mk("fact_checker", "You are the fact-checker. Compare the commentary with FACTS line by line. Reject it if any number is attached to the wrong "
@@ -82,6 +82,19 @@ def wrong_leader(line, pack):
             out.append(f"{name} is not ahead")
         if re.search(rf"{n}\s+(?:trail|trails|(?:is|are)\s+behind)", line, flags=re.I) and leader == name:
             out.append(f"{name} is ahead, not behind")
+    return out
+
+
+def wrong_team(line, squads):
+    """A player given to the other side ("Oakhaven's Arstor Vossez" for a Westmoor player). squads: {team name: [player names]};
+    a team is also matched by its first word (Oakhaven for Oakhaven FC)."""
+    out = []
+    for team in squads:
+        said = "|".join(re.escape(v) for v in {team, team.split()[0]})
+        for other, theirs in squads.items():
+            for name in theirs if other != team else ():
+                if re.search(rf"\b(?:{said})(?:'s|’s)\s+(?:\w+\s+){{0,2}}{re.escape(name)}", line):
+                    out.append(f"{name} plays for {other}, not {team}")
     return out
 
 

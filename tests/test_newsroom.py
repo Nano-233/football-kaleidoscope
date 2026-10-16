@@ -26,3 +26,8 @@ assert wrong_leader("Kestrel United trail", pk)
 print("checks ok")
 assert wrong_minutes("the spell from 15' to 30'", {**packs[0], "moment": {**packs[0]["moment"], "clock": "31'"}, "spell": {"start": "15'", "end": "30'"}}) == []
 print("minute check ok")
+from newsroom.agents import wrong_team  # noqa: E402
+sq = {"Oakhaven FC": ["Ridor Novakley"], "Westmoor Wanderers": ["Arstor Vossez"]}
+assert wrong_team("the red card to Oakhaven's Arstor Vossez at 26'", sq) == ["Arstor Vossez plays for Westmoor Wanderers, not Oakhaven FC"]
+assert wrong_team("Westmoor's Arstor Vossez was sent off; Oakhaven FC's striker Ridor Novakley scored", sq) == []
+print("team check ok")

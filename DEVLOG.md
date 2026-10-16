@@ -1329,6 +1329,16 @@ Walked the fan and analyst views on the rebuilt matches.
   Result: 7 steps, 31 s, and the answer names the move (the passes, the free scorer) instead of PPDA trends.
 - The server's answer cache was keyed without the match data, so answers survived a rebuild; the key now includes it.
 
+### A red card given to the wrong team (2026-10-15)
+Saw: the Westmoor-Oakhaven reports said "Oakhaven's Arstor Vossez was sent off"; he plays for Westmoor, and the fact-checker
+approved it. The half-time reports did not mention the red card at all. Causes: match_summary listed cards without the team, so the
+writer guessed; the checker compares the answer with the findings, which carried the same guess. Fixed: cards carry their team; the
+recap questions ask for every goal, red card and change of system; and a deterministic check (`agents.wrong_team`, like
+wrong_leader) fails any line that gives a player to the other side ("<team>'s <player>"), which sends it back for a rewrite. Run on
+the stored reports it found two (match_1 full time, the Westmoor half time); both rebuilt clean. Live commentary also said "this
+red_card moment" (the event type copied as is): the commentator now names the moment in plain words. Recaps keep each draft's
+checker issues, so a held report can be explained (one was held once and passed on the rerun: the LLM checker varies).
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

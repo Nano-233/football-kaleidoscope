@@ -13,11 +13,11 @@
   "changes": {
    "true": 11,
    "found": 6,
-   "reasons_right": 4,
+   "reasons_right": 3,
    "mean_minute_error": 2.5
   },
-  "avg_tool_calls": 2.4,
-  "avg_seconds": 14.1
+  "avg_tool_calls": 2.7,
+  "avg_seconds": 15.6
  },
  "matches": [
   {
@@ -26,11 +26,11 @@
     {
      "kind": "formation",
      "question": "What system did Kestrel United start the match in, and did they change their system during it? When, to what, and why?",
-     "answer": "Kestrel United started the match in a 4-3-3 system while in possession, switching to a 4-1-4-1 shape out of possession. At the 35th minute, with the score still 0-0 and no player changes, they tactically shifted their in-possession system from 4-3-3 to 4-1-4-1. This was a deliberate tactical adjustment rather than a reaction to scoring or player events. Minor defensive shape shifts occurred at 6' and 37', but only the 35' change constitutes a full system change.",
+     "answer": "Kestrel United began the match in a 4-3-3 system, maintaining this both with and without possession. However, at the 35' mark, they shifted to a 4-1-4-1 formation, simultaneously lowering their defensive line. This tactical adjustment was likely intended to enhance midfield control and defensive solidity, reflecting a more cautious and balanced approach while the score remained 0-0.",
      "approved": true,
      "rewrites": 0,
-     "tool_calls": 2,
-     "seconds": 17.4,
+     "tool_calls": 4,
+     "seconds": 19.5,
      "correct": false,
      "detail": {
       "starting_named": true,
@@ -44,11 +44,11 @@
     {
      "kind": "formation",
      "question": "What system did Northbridge Rovers start the match in, and did they change their system during it? When, to what, and why?",
-     "answer": "Northbridge Rovers started the match in a 4-4-2 system. Around the 73rd minute, while trailing 0-2 and chasing the game, they shifted to a 4-3-3 formation in possession. Then, about the 75th minute, they adjusted their defensive shape to a 4-1-4-1, reflecting a change in defensive organization rather than a full system switch.",
+     "answer": "Northbridge Rovers began the match in a 4-4-2 system but changed their formation around the 73rd minute to a 4-3-3 after falling behind 0-2. This shift was intended to increase attacking options and try to reduce the deficit. Shortly after, around the 75th minute, they adjusted to a 4-1-4-1 shape defensively, though this was not considered a full system change.",
      "approved": true,
      "rewrites": 0,
      "tool_calls": 2,
-     "seconds": 11.2,
+     "seconds": 16.5,
      "correct": true,
      "detail": {
       "starting_named": true,
@@ -64,33 +64,33 @@
     {
      "kind": "goals",
      "question": "Who scored the goals in this match, and at which minutes?",
-     "answer": "The goals in the match were all scored by Kestrel United players: Ormel Kellerini opened the scoring at the 46th minute, followed by Velik Ferroez who doubled the lead at 66', and Halin Voss sealed the victory with a goal at 90'.",
+     "answer": "In the match, Kestrel United secured all three goals, with Ormel Kellerini opening the scoring at 46', followed by Velik Ferroez adding a second goal at 66', and Halin Voss sealing the victory with a goal at 90'. These three goals led to a final score of 3-0 in favor of Kestrel United over Northbridge Rovers.",
      "approved": true,
      "rewrites": 0,
      "tool_calls": 1,
-     "seconds": 6.7,
+     "seconds": 6.5,
      "correct": true,
      "detail": "3/3 goals with scorer and minute"
     },
     {
      "kind": "best",
      "question": "Who was the best player in this match by rating?",
-     "answer": "The best player in this match by rating was Masten Lund from Kestrel United, who earned a top rating of 8.2. This stands out clearly as the highest, especially compared to his teammates Fanon Marshson and Benus Mercerez, who both received ratings of 7.8, and to the top player from Northbridge Rovers, Girio Lundova, who had a rating of 6.8. Even Kestrel United's goalkeeper Tanlen Satoson was rated slightly lower at 7.7, further confirming Lund's dominant performance.",
+     "answer": "The best player in the match by rating was Masten Lund from Kestrel United, who earned an 8.2 rating. His performance outshone all others, including his teammates Fanon Marshson and Benus Mercerez, both rated 7.8, and Northbridge Rovers' top player Girio Lundova, who had a 6.8 rating. This clearly establishes Lund's dominance in the game.",
      "approved": true,
      "rewrites": 0,
      "tool_calls": 3,
-     "seconds": 11.4,
+     "seconds": 8.4,
      "correct": true,
      "detail": "truth Masten Lund (8.2)"
     },
     {
      "kind": "pressing",
      "question": "Which team pressed harder over the whole match?",
-     "answer": "Kestrel United pressed substantially harder than Northbridge Rovers across the entire match, demonstrated by their low overall PPDA of 12.8 compared to Northbridge\u2019s much higher 56.1. Kestrel\u2019s pressing intensity even increased toward the end, with their PPDA dropping to 7.0 in the final minutes, while Northbridge\u2019s PPDA remained between 20.0 and 29.0 throughout, indicating a more conservative pressing approach.",
+     "answer": "Kestrel United pressed harder over the whole match compared to Northbridge Rovers, as shown by their much lower overall match PPDA of 12.8 (passes allowed per defensive action) versus Northbridge\u2019s 56.1. This trend persisted across most match periods, with Kestrel United maintaining lower PPDA figures such as 14.2 compared to 20.0 from 15' to 30', and 22.0 versus 28.5 from 45' to 57'. Additionally, from 72' to 87', Kestrel United reduced their PPDA further to 11.5, indicating even greater pressing intensity. Their pressing actions were also generally higher up the pitch (above 30 metres), reinforcing their more aggressive pressing approach.",
      "approved": true,
-     "rewrites": 0,
+     "rewrites": 1,
      "tool_calls": 3,
-     "seconds": 25.1,
+     "seconds": 18.3,
      "correct": true,
      "detail": "truth Kestrel United"
     }
@@ -102,11 +102,11 @@
     {
      "kind": "formation",
      "question": "What system did Kestrel United start the match in, and did they change their system during it? When, to what, and why?",
-     "answer": "Kestrel United began the match in a 4-3-3 formation and made a significant system change at the 80th minute, shifting to a 4-5-1 to adopt a more defensive posture while leading 2-1. This adjustment was aimed at protecting their advantage. Throughout the match, they also varied their defensive shape between a 4-1-4-1 and a 4-3-3, but these were minor variations rather than full system changes.",
+     "answer": "Kestrel United started the match in a 4-3-3 system. Although their defensive shape shifted between 4-3-3 and 4-1-4-1 from the 7th to the 59th minute, these were only adjustments in defensive structure rather than full system changes. The true system change occurred at the 80th minute, when they switched from 4-3-3 to 4-5-1 both in and out of possession. This change was motivated by their 2-1 lead and aimed at adopting a more defensive setup to protect their advantage.",
      "approved": true,
      "rewrites": 0,
-     "tool_calls": 2,
-     "seconds": 16.6,
+     "tool_calls": 8,
+     "seconds": 26.2,
      "correct": true,
      "detail": {
       "starting_named": true,
@@ -122,11 +122,11 @@
     {
      "kind": "formation",
      "question": "What system did Northbridge Rovers start the match in, and did they change their system during it? When, to what, and why?",
-     "answer": "Northbridge Rovers began the match in a 4-4-2 system but changed their formation twice while trailing 1-2. At the 66th minute, they shifted to a 4-1-4-1 formation, and then at the 86th minute, they switched to a 3-4-3 system. Both changes occurred with the full team on the field and were likely made in an attempt to chase the game.",
+     "answer": "Northbridge Rovers started the match in a 4-4-2 system but changed tactics as they trailed 1-2. At 66', they shifted to a 4-1-4-1 system in possession to better control the midfield. Later, at 86', still behind, they switched to a more aggressive 3-4-3 system in possession to increase attacking options. Defensively, they also adjusted from a 4-2-3-1 shape at 69' to 5-4-1 at 86', and finally to 3-4-3 at 90'. These changes were clearly aimed at responding to the scoreline and enhancing their offensive threat.",
      "approved": true,
      "rewrites": 0,
-     "tool_calls": 2,
-     "seconds": 14.1,
+     "tool_calls": 3,
+     "seconds": 15.3,
      "correct": false,
      "detail": {
       "starting_named": true,
@@ -142,33 +142,33 @@
     {
      "kind": "goals",
      "question": "Who scored the goals in this match, and at which minutes?",
-     "answer": "Morvik Kovacini from Kestrel United scored two goals in this match, finding the net at the 27th and 51st minutes. Meanwhile, Zemin Kovacton from Northbridge Rovers scored a single goal at the 46th minute. These three goals mark the key scoring moments of the match.",
+     "answer": "Morvik Kovacini scored two goals for Kestrel United at 27' and 51', putting his team ahead initially and then securing the lead after Northbridge Rovers' Zemin Kovacton equalized at 46'. The match concluded with Kestrel United winning 2-1 after 90+6 minutes.",
      "approved": true,
      "rewrites": 0,
      "tool_calls": 1,
-     "seconds": 5.6,
+     "seconds": 8.0,
      "correct": true,
      "detail": "3/3 goals with scorer and minute"
     },
     {
      "kind": "best",
      "question": "Who was the best player in this match by rating?",
-     "answer": "The best player in this match by rating was Morvik Kovacini from Kestrel United, who achieved a rating of 8.4. This score clearly sets him apart as the standout performer in the game.",
+     "answer": "Morvik Kovacini from Kestrel United was the best player in this match, earning the highest rating of 8.4. This score clearly sets him apart as the standout performer according to the ratings.",
      "approved": true,
      "rewrites": 0,
      "tool_calls": 3,
-     "seconds": 10.1,
+     "seconds": 7.6,
      "correct": true,
      "detail": "truth Morvik Kovacini (8.4)"
     },
     {
      "kind": "pressing",
      "question": "Which team pressed harder over the whole match?",
-     "answer": "Kestrel United pressed harder over the whole match, as evidenced by their lower PPDA of 17.7 compared to Northbridge Rovers' 24.1, indicating more intense pressing throughout. They started with very intense pressing early on and maintained higher pressing heights along with more effective counterpressing, recovering more balls in key pitch areas, while Northbridge Rovers showed lighter and less consistent pressing overall.",
+     "answer": "Kestrel United pressed harder over the whole match, demonstrated by a lower match PPDA of 17.7 compared to Northbridge Rovers' 24.1, reflecting more intense pressing overall. Their pressing was particularly strong between 16' and 30' with a PPDA of 8.2, and again from 73' to 88' at 11.8. Additionally, Kestrel United secured more counterpress wins throughout the game, indicating more effective pressing recoveries. Northbridge Rovers only pressed harder very late in the match from 88' to 90+6' with a PPDA of 11.5, but Kestrel kept the higher pressing intensity for most of the match.",
      "approved": true,
      "rewrites": 0,
      "tool_calls": 3,
-     "seconds": 18.1,
+     "seconds": 26.3,
      "correct": true,
      "detail": "truth Kestrel United"
     }
@@ -180,11 +180,11 @@
     {
      "kind": "formation",
      "question": "What system did Redmere City start the match in, and did they change their system during it? When, to what, and why?",
-     "answer": "Redmere City began the match in a 4-3-3 system but changed early at the 9th minute to a 4-1-4-1, likely aiming for better midfield control or defensive stability while the score was still 0-0. After scoring and leading 1-0, they switched back to the 4-3-3 just after the first half at 45+1 minutes, probably to adopt a more attacking approach. Finally, at the 86th minute with a 4-1 lead, they reverted to the 4-1-4-1 system to reinforce midfield and defense and help preserve the win.",
+     "answer": "Redmere City began the match using a 4-3-3 system in possession and a 4-5-1 out of possession. They shifted to a 4-1-4-1 formation at the 9th minute with the score still 0-0. When leading 1-0 at 45+1 minutes, they reverted to their original 4-3-3 system. Later, at 86 minutes while leading 4-1, they switched back again to the 4-1-4-1 formation, maintaining the same number of players on the field throughout.",
      "approved": true,
      "rewrites": 0,
      "tool_calls": 2,
-     "seconds": 16.4,
+     "seconds": 13.1,
      "correct": true,
      "detail": {
       "starting_named": true,
@@ -192,7 +192,7 @@
      },
      "changes": 1,
      "found": 1,
-     "reasons_right": 1,
+     "reasons_right": 0,
      "minute_errors": [
       3
      ]
@@ -200,11 +200,11 @@
     {
      "kind": "formation",
      "question": "What system did Ashmere Town start the match in, and did they change their system during it? When, to what, and why?",
-     "answer": "Ashmere Town began the match using a 5-3-2 formation and kept this system for the entire game. They did not make any changes to their formation at any point, meaning there was no tactical modification related to system shifts during the match.",
+     "answer": "Ashmere Town began the match using a 5-3-2 system and maintained this formation for the entire game. They did not make any changes to their system during the match, sticking with the 5-3-2 throughout.",
      "approved": true,
      "rewrites": 0,
      "tool_calls": 2,
-     "seconds": 24.0,
+     "seconds": 25.2,
      "correct": true,
      "detail": {
       "starting_named": true,
@@ -218,33 +218,33 @@
     {
      "kind": "goals",
      "question": "Who scored the goals in this match, and at which minutes?",
-     "answer": "The goals in the match were predominantly scored by Redmere City players, with Valan Novakova opening the scoring at 29'. Wistov Reyesova then added two more goals at 62' and 70', followed by Mastin Mercerton's goal at 85' to make it 4-0. Ashmere Town's only goal came from Elstek Okoroson at 86', concluding the match at 4-1.",
+     "answer": "The goals in the match were scored by Valan Novakova for Redmere City at 29', Wistov Reyesova who scored twice at 62' and 70', and Mastin Mercerton at 85'. Ashmere Town's only goal was scored by Elstek Okoroson at 86'. This led to a final score of Redmere City 4, Ashmere Town 1.",
      "approved": true,
      "rewrites": 0,
      "tool_calls": 1,
-     "seconds": 8.5,
+     "seconds": 7.2,
      "correct": true,
      "detail": "5/5 goals with scorer and minute"
     },
     {
      "kind": "best",
      "question": "Who was the best player in this match by rating?",
-     "answer": "The best player in this match by rating was Wistov Reyesova from Redmere City, who achieved an outstanding rating of 9.5. This rating clearly sets him apart from others, marking his performance as the most impactful during the game.",
+     "answer": "The best player in this match by rating was Wistov Reyesova of Redmere City, who achieved a rating of 9.5. This top score clearly indicates his outstanding performance compared to others in the game.",
      "approved": true,
      "rewrites": 0,
      "tool_calls": 3,
-     "seconds": 8.5,
+     "seconds": 9.1,
      "correct": true,
      "detail": "truth Wistov Reyesova (9.5)"
     },
     {
      "kind": "pressing",
      "question": "Which team pressed harder over the whole match?",
-     "answer": "Redmere City pressed significantly harder over the entire match, as shown by their much lower match PPDA of 10.1 compared to Ashmere Town\u2019s 33.1, indicating a more intense pressing style. Their pressing remained consistently strong throughout, whereas Ashmere Town pressed lightly at times and never matched Redmere City\u2019s intensity. Additionally, Redmere City\u2019s superior number of ball recoveries higher up the pitch and more counter-press wins further demonstrate their more effective and sustained pressing effort.",
+     "answer": "Redmere City pressed significantly harder than Ashmere Town throughout the match, with an overall PPDA of 10.1 compared to Ashmere\u2019s 33.1, demonstrating much more intense pressing. Redmere\u2019s pressing was particularly strong in the periods 15' to 31', 45' to 57', and 72' to 86', maintaining PPDA values between 6.5 and 7.1. In contrast, Ashmere began with very light pressing, recording a PPDA of 68.0 in the first 15', and despite some improvement later, they consistently pressed less aggressively. Redmere\u2019s tactical flexibility, switching between 4-3-3 and 4-1-4-1 systems, supported their higher pressing intensity, especially after taking the lead at 29', whereas Ashmere\u2019s defensive 5-3-2 formation favored lighter pressing.",
      "approved": true,
      "rewrites": 0,
-     "tool_calls": 3,
-     "seconds": 16.0,
+     "tool_calls": 6,
+     "seconds": 17.4,
      "correct": true,
      "detail": "truth Redmere City"
     }
@@ -256,11 +256,11 @@
     {
      "kind": "formation",
      "question": "What system did Harlow Athletic start the match in, and did they change their system during it? When, to what, and why?",
-     "answer": "Harlow Athletic started the match in a 3-5-2 system and did not change their formation during the game. They maintained the same system throughout the entire match, showing consistency in their tactical approach.",
+     "answer": "Harlow Athletic began the match in a 3-5-2 formation and maintained this system throughout the entire game. There was no change in their formation at any point during the match.",
      "approved": true,
      "rewrites": 0,
      "tool_calls": 2,
-     "seconds": 12.8,
+     "seconds": 12.0,
      "correct": true,
      "detail": {
       "starting_named": true,
@@ -274,11 +274,11 @@
     {
      "kind": "formation",
      "question": "What system did Stonebay Albion start the match in, and did they change their system during it? When, to what, and why?",
-     "answer": "Stonebay Albion started the match in a 4-4-2 system. Around the 57th minute, they began modifying their shape by shifting from 4-4-2 to 3-4-3 in defense and towards a 3-5-2 in possession, though not a full system change. At the 66th minute, they officially switched to a 4-1-4-1 system both in and out of possession, dropping their defensive line and compressing their block. This change was made to respond to trailing in the match, first 1-3 then 2-4, aiming to enhance midfield control and defensive solidity, and the 4-1-4-1 system continued with slight adjustments from the 70th minute until the end.",
+     "answer": "Stonebay Albion started the match in a 4-4-2 formation and maintained this until the 70th minute, when they switched to a 4-1-4-1 formation. This change occurred as they were trailing 2-4, indicating a tactical adjustment to try to regain control. Prior to this, minor defensive shape adjustments were made at the 57th and 66th minutes, but these did not amount to a full system change.",
      "approved": true,
      "rewrites": 0,
-     "tool_calls": 6,
-     "seconds": 24.9,
+     "tool_calls": 2,
+     "seconds": 60.1,
      "correct": false,
      "detail": {
       "starting_named": true,
@@ -292,33 +292,33 @@
     {
      "kind": "goals",
      "question": "Who scored the goals in this match, and at which minutes?",
-     "answer": "The match saw Nous Mercerley from Harlow Athletic score a hat-trick with goals at 23', 33', and 48', giving his team a strong lead. Stonebay Albion responded quickly at 25' through Keldek Marshton to level the score, but Harlow Athletic extended their advantage again at 59' with Morrel Tammer's goal. Stonebay Albion's Nodan Tammton scored at 66' to reduce the deficit, making the final tally 4-2.",
+     "answer": "The goals in this match were scored by Nous Mercerley of Harlow Athletic at 23', 33', and 48', giving his team a strong lead with three goals. Keldek Marshton of Stonebay Albion scored at 25' to equalize early on, while Morrel Tammer added a fourth goal for Harlow Athletic at 59'. Stonebay Albion's Nodan Tammton scored at 66' to narrow the gap, resulting in a final tally of 4-2. These six goals, scored between 23' and 66', highlight the key offensive players and critical moments.",
      "approved": true,
      "rewrites": 0,
      "tool_calls": 1,
-     "seconds": 7.7,
+     "seconds": 7.8,
      "correct": true,
      "detail": "6/6 goals with scorer and minute"
     },
     {
      "kind": "best",
      "question": "Who was the best player in this match by rating?",
-     "answer": "The best player in this match by rating was Nous Mercerley from Harlow Athletic, who achieved a rating of 8.8. This clearly marks him as the standout performer of the game.",
+     "answer": "The best player in this match by rating was Nous Mercerley from Harlow Athletic, who achieved an impressive rating of 8.8. Playing as a striker (ST), Mercerley made a significant impact by scoring a hat-trick with goals at 23', 33', and 48' minutes, all within his 74 minutes on the pitch. His performance clearly outshone other notable players like Morrel Tammer (7.7) and Haren Okoroton (7.5) from Harlow Athletic, and Keldek Marshton (7.4) from Stonebay Albion.",
      "approved": true,
      "rewrites": 0,
      "tool_calls": 3,
-     "seconds": 8.7,
+     "seconds": 8.3,
      "correct": true,
      "detail": "truth Nous Mercerley (8.8)"
     },
     {
      "kind": "pressing",
      "question": "Which team pressed harder over the whole match?",
-     "answer": "Harlow Athletic pressed harder over the whole match, evidenced by their much lower overall PPDA of 10.9 compared to Stonebay Albion's 24.9, indicating more intense pressing. Early on, between 1' to 15', Harlow's PPDA was 9.1 while Stonebay\u2019s was 32.0, showing an aggressive start. Harlow sustained high pressing intensity with very low PPDA values of 7.6 from 71' to 86' and 7.0 from 86' to full time, whereas Stonebay\u2019s PPDA fluctuated widely, reaching 47.0 (45' to 56') and 55.0 (71' to 86'), reflecting inconsistent effort. Additionally, Harlow pressed higher up the pitch with average action heights above 40 metres and had more counter-press wins, including 9 wins in both the 1' to 15' and 45' to 56' periods, underscoring their harder and more consistent pressing throughout.",
+     "answer": "Harlow Athletic pressed harder over the whole match compared to Stonebay Albion, as evidenced by their overall PPDA of 10.9 versus Stonebay\u2019s 24.9, demonstrating more intense pressing throughout. In the first 15 minutes, Harlow\u2019s pressing was particularly intense with a PPDA of 9.1, while Stonebay pressed much lighter at 32.0. Harlow\u2019s pressing intensity mostly stayed below 20 PPDA, including extremely high pressing phases from 71' to 90+7', whereas Stonebay had several periods where their PPDA exceeded 40. This shows that Harlow maintained consistently harder and higher pressing than Stonebay across the match.",
      "approved": true,
-     "rewrites": 0,
+     "rewrites": 1,
      "tool_calls": 3,
-     "seconds": 16.1,
+     "seconds": 22.4,
      "correct": true,
      "detail": "truth Harlow Athletic"
     }
@@ -330,11 +330,11 @@
     {
      "kind": "formation",
      "question": "What system did Westmoor Wanderers start the match in, and did they change their system during it? When, to what, and why?",
-     "answer": "Westmoor Wanderers started the match in a 3-4-3 system when in possession, switching to a 5-4-1 defensive shape out of possession. They made two notable system changes early on: at 20' they shifted from 3-4-3 to 5-4-1 with the score still 0-0 and both teams at full strength, then around 23' to 25' they evolved their defensive shape from 5-4-1 to 5-3-1, again with no score change or player disadvantage. This indicates a tactical adjustment to strengthen defense without reacting to game or player status.",
+     "answer": "Westmoor Wanderers started the match in a 3-4-3 formation when in possession and shifted to a 5-4-1 shape defensively. At the 20th minute, they switched their system from 3-4-3 to a full 5-4-1, likely to reinforce defensive solidity while the score remained 0-0 and both teams had full squads. Then, at the 25th minute, they adapted again from 5-4-1 to 5-3-1, still with a 0-0 scoreline, as a tactical adjustment to balance defense with midfield and offensive support.",
      "approved": true,
      "rewrites": 0,
      "tool_calls": 2,
-     "seconds": 15.3,
+     "seconds": 13.5,
      "correct": true,
      "detail": {
       "starting_named": true,
@@ -350,11 +350,11 @@
     {
      "kind": "formation",
      "question": "What system did Oakhaven FC start the match in, and did they change their system during it? When, to what, and why?",
-     "answer": "Oakhaven FC started the match in a 4-2-3-1 system but shifted to a 4-3-3 around the 38th minute, likely to gain more midfield control or increase attacking options. Then, just before half-time at the 45th minute, they changed to a 5-4-1 system, probably aiming to strengthen their defense and preserve the 0-0 scoreline.",
+     "answer": "Oakhaven FC began the match using a 4-2-3-1 system in possession and a 4-1-4-1 shape out of possession. They made two tactical adjustments while the score remained 0-0: first at 38', switching to a 4-3-3 with all 11 players on the field, then again at 45', shifting to a 5-4-1 formation without any numerical disadvantage. These changes were made during a goalless phase, indicating strategic tweaks rather than responses to goals or player dismissals.",
      "approved": true,
      "rewrites": 0,
      "tool_calls": 2,
-     "seconds": 17.3,
+     "seconds": 10.8,
      "correct": false,
      "detail": {
       "starting_named": true,
@@ -370,33 +370,33 @@
     {
      "kind": "goals",
      "question": "Who scored the goals in this match, and at which minutes?",
-     "answer": "The goals in the match were scored by Mamen Tammley of Oakhaven FC at 52', followed by Ridor Novakley of the same team at 56', putting Oakhaven FC ahead 0-2. Westmoor Wanderers responded with goals from Belin Kellerini at 66' and Nomay Novakova at 83', leveling the score at 2-2.",
+     "answer": "The match saw four goals scored by four different players. Mamen Tammley opened the scoring for Oakhaven FC at 52', followed closely by Ridor Novakley doubling their lead at 56'. Westmoor Wanderers fought back with Belin Kellerini reducing the deficit at 66', and Nomay Novakova secured the equalizer at 83', resulting in a 2-2 draw.",
      "approved": true,
      "rewrites": 0,
      "tool_calls": 1,
-     "seconds": 9.4,
+     "seconds": 6.4,
      "correct": true,
      "detail": "4/4 goals with scorer and minute"
     },
     {
      "kind": "best",
      "question": "Who was the best player in this match by rating?",
-     "answer": "The best players in this match by rating were Ario Tammson of Westmoor Wanderers and Hanio Vosston of Oakhaven FC, each earning a rating of 8.0. This identical top rating clearly shows they were the standout performers on their respective teams.",
+     "answer": "The best players in this match by rating were Ario Tammson of Westmoor Wanderers and Hanio Vosston of Oakhaven FC, both sharing the highest rating of 8.0. This indicates that their performances were equally impressive throughout the match.",
      "approved": true,
      "rewrites": 0,
      "tool_calls": 3,
-     "seconds": 8.3,
+     "seconds": 7.7,
      "correct": true,
      "detail": "truth Ario Tammson (8.0)"
     },
     {
      "kind": "pressing",
      "question": "Which team pressed harder over the whole match?",
-     "answer": "Westmoor Wanderers pressed harder over the whole match, as shown by their consistently lower match PPDA of 12.2 compared to Oakhaven FC's 16.6, indicating more intense pressing overall. They maintained especially strong pressing in the first half, with PPDA values as low as 9.9 and 8.6 in key periods, while Oakhaven FC's pressing remained looser and more variable. This demonstrates that Westmoor Wanderers exhibited more consistent and harder pressing throughout the game.",
+     "answer": "Westmoor Wanderers pressed harder over the whole match, demonstrated by their lower overall PPDA of 12.2 compared to Oakhaven FC's 16.6, indicating more intense pressing. Westmoor maintained stronger pressing in most segments, except from the 57th to 87th minute when their intensity dropped, while Oakhaven had a notably light pressing period between the 31st and 45th minute and a stronger spell from 45th to 57th. Additionally, Westmoor executed more defensive actions higher up the pitch and consistently won more balls in their own and middle thirds, reflecting a more intense and consistent pressing approach throughout the match.",
      "approved": true,
      "rewrites": 0,
      "tool_calls": 3,
-     "seconds": 21.2,
+     "seconds": 17.6,
      "correct": true,
      "detail": "truth Westmoor Wanderers"
     }
