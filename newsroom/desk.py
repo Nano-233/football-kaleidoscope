@@ -230,7 +230,7 @@ class Desk:
             return mv.sequence(int(event_id))
 
         def player_report(player: Annotated[str, "player name, shirt number or id"]) -> dict:
-            """A player's stats, rating and what made it, physical output (distance, sprints, top speed), heat map, per-90 against his role's average."""
+            """A player's stats (including pass length and difficulty, hard passes completed, shot speed), rating and what made it, physical output (distance, sprints, top speed), heat map, per-90 against his role's average."""
             return mv.player_profile(player_id(player))
 
         def find_moments(player: Annotated[str, "player name or id; empty for any"] = "", team: Annotated[str, "home, away or team name; empty for any"] = "",

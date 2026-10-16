@@ -607,10 +607,44 @@ class MatchView:
         vs = {k: dict(him=v, role_avg=norms[k]) for k, v in per90.items() if k in norms}
         return dict(player=p["name"], id=pid, number=p["number"], team=self.team_names[team], role=p["role"], traits=p.get("traits", []), star=p.get("star", False),
                     minutes=mins, rating=st.get("rating"), rating_terms=terms, rating_note="6.0 plus the terms; above 8 and below 4 the scale eases off, so the terms can add to more than the rating shows",
-                    stats={k: st.get(k) for k in keys + ("goals", "assists", "goals_conceded", "pass_accuracy")},
+                    stats={k: st.get(k) for k in keys + ("goals", "assists", "goals_conceded", "pass_accuracy", "avg_pass_length_m", "avg_pass_difficulty", "hard_passes",
+                                                         "hard_passes_completed", "hard_pass_accuracy", "avg_shot_speed_kmh", "top_shot_speed_kmh")},
+                    stats_note="pass difficulty is 1 minus the chance the pass would arrive, judged when he chose it (lane, pressure, distance); a hard pass is difficulty 0.5 or more",
                     physical=phys, heat_map_6x4=heat, per90_vs_role=vs)
 
     # ---------------------------------------------------------------- moments
+    def player_tags(self, kmh=30., every_km=5.):
+        """Moments to tag a player on screen: a sprint that peaks at or above `kmh` and is his fastest of the match so far (speed averaged
+        over a second, so one frame of tracking noise is not a sprint; a fixed bar alone tags a quick side hundreds of times), and each
+        `every_km` of distance covered. [{t, player, kind: speed|distance, value}], by time."""
+        idx = {}  # player -> frame indices and slot, segment by segment as he occupied each slot
+        bounds = [0.] + [c[0] for c in self.slot_changes] + [self.meta["duration"] + 1]
+        for k in range(22):
+            for a, b in zip(bounds, bounds[1:]):
+                i0, i1 = int(a / self.dt), min(int(b / self.dt), len(self.F))
+                if i1 - i0 > 5:
+                    idx.setdefault(self._occupant(k, (a + b) / 2), []).append((i0, i1, k))
+        out, need = [], kmh / 3.6
+        for pid, segs in idx.items():
+            dist, best = 0., need
+            for i0, i1, k in sorted(segs):
+                xy = self.F[i0:i1, [5 + 2 * k, 6 + 2 * k]]
+                sp = np.linalg.norm(np.diff(xy, axis=0), axis=1) / self.dt
+                sp[(sp > 12) | (xy[1:, 1] < -5)] = 0.  # jumps at restarts and substitutions, and a man sent off
+                cum = np.cumsum(sp * self.dt) + dist
+                for m in range(int(dist // (every_km * 1000)) + 1, int(cum[-1] // (every_km * 1000)) + 1 if len(cum) else 0):
+                    j = int(np.searchsorted(cum, m * every_km * 1000))
+                    out.append(dict(t=round(float((i0 + j + 1) * self.dt), 1), player=pid, kind="distance", value=m * every_km))
+                dist = float(cum[-1]) if len(cum) else dist
+                sm = np.convolve(sp, np.ones(5) / 5, "same")
+                fast = np.concatenate([[0], (sm > SPRINT).astype(int), [0]])
+                for a, b in zip(np.nonzero(np.diff(fast) == 1)[0], np.nonzero(np.diff(fast) == -1)[0]):
+                    j = a + int(np.argmax(sm[a:b]))
+                    if sm[j] >= best:
+                        best = sm[j] + .5 / 3.6  # the next tag needs half a km/h more
+                        out.append(dict(t=round(float((i0 + j + 1) * self.dt), 1), player=pid, kind="speed", value=round(float(sm[j] * 3.6), 1)))
+        return sorted(out, key=lambda r: r["t"])
+
     def find_moments(self, player=None, team=None, types=None, group=None, outcome=None, third=None, minutes=None, limit=40):
         """Events matching a filter: player id, team index, event types or an action group (passing, shooting, carrying, defending,
         keeping, discipline), outcome, third of the pitch in the acting team's frame (own/middle/final), time range [a, b) in seconds."""

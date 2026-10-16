@@ -1339,6 +1339,23 @@ the stored reports it found two (match_1 full time, the Westmoor half time); bot
 red_card moment" (the event type copied as is): the commentator now names the moment in plain words. Recaps keep each draft's
 checker issues, so a held report can be explained (one was held once and passed on the rerun: the LLM checker varies).
 
+### Pass quality, ball speed and player tags (2026-10-16)
+Why: the challenge lists pass distance, accuracy and a pass difficulty rating, ball and shot speed, and player name tags with speed
+and distance indicators at thresholds. The engine already logged all of it per event (`length`, `difficulty` = 1 - the passer's
+completion chance when he chose the pass, launch `speed`); nothing showed it.
+- `analytics/stats.py`: average pass length, average difficulty, hard passes (difficulty >= 0.5) attempted and completed, average
+  and fastest shot speed, for players and teams. Hard passes complete at 49-50 % in match_7, so the difficulty reads true.
+- `MatchView.player_tags`: speed over a 1 s average (one frame of tracking noise is not a sprint). A fixed 30 km/h bar tagged
+  400-630 sprints a match (6 a minute; 32 km/h still 34-218, depending on the squads' pace), so a tag needs 30 km/h and the man's
+  fastest of the match so far (+0.5 km/h each time): 21-38 a match. Distance: every 5 km (about 33 a match).
+- Match centre: the man on the ball is named on the pitch; tags for 3 s; shot speed and hard passes (length, difficulty, ball
+  speed) at the ball; new team stat rows; a "Pass quality" block and a "Hard passes" reel per player; tooltips and action rows
+  carry the numbers. The scout's report tool returns the new numbers, named by unit so they convert.
+- `build_site.py --keep-agents` recomputes the deterministic parts from `server/data/*.json.gz` and keeps the stored feed and
+  recaps, so no model calls. All five demo matches rebuilt this way; only team_stats, players and tags changed.
+- Noted, not reopened (engine frozen): the sim's players sprint (> 25 km/h for 1 s) about 60 times a match; real players
+  manage roughly 20-40.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

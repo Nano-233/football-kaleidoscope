@@ -1,6 +1,7 @@
 """Turn simulated matches into the data the match centre (web/) plays back. Run once per match; the site then needs no backend and no credentials.
 
     python scripts/build_site.py out/match_1.json [out/match_12.json ...]
+    python scripts/build_site.py --keep-agents server/data/match_1.json.gz   # recompute the deterministic parts only, keep the agents' feed and recaps (no model calls)
 
 Writes web/data/<match>/match.json (meta, events, team stats minute by minute, player stats, newsroom feed per persona, suggested clips)
 and frames.bin / heads.bin (tracking as int16 positions at 0.05 m and int8 facing at 1/40 rad, the bundle_viewer.py layout), plus
@@ -25,7 +26,8 @@ from newsroom.moments import moments  # noqa: E402
 
 PERSONAS = {"fan": "fan", "analyst": "analyst"}  # site persona -> commentator voice (the scout view works from the player data, not commentary)
 TEAM_KEYS = ("goals", "xg", "shots", "shots_on_target", "big_chances", "passes", "pass_accuracy", "ppda", "corners", "fouls", "yellow_cards", "red_cards",
-             "tackles_won", "interceptions", "take_on_rate", "progressive_passes", "final_third_passes", "possession_gains")
+             "tackles_won", "interceptions", "take_on_rate", "progressive_passes", "final_third_passes", "possession_gains",
+             "avg_pass_length_m", "avg_pass_difficulty", "hard_pass_accuracy", "top_shot_speed_kmh")
 CLIP = {"goal": (15, 6), "own_goal": (12, 5), "penalty": (8, 8), "var_check": (20, 4), "goal_disallowed": (20, 4)}  # seconds before / after; others (8, 4)
 OVERLAY_S = 10  # how long a published line stays on screen
 
@@ -173,16 +175,18 @@ def profiles(match):
     return out
 
 
-def build(src):
-    match = json.loads(src.read_text(encoding="utf-8"))
+def build(src, keep_agents=False):
+    name = src.name.split(".")[0]
+    with (gzip.open(src, "rt", encoding="utf-8") if src.suffix == ".gz" else open(src, encoding="utf-8")) as fh:
+        match = json.load(fh)
     meta = {k: v for k, v in match["meta"].items() if k != "frame_cols"}
-    dest = ROOT / "web" / "data" / src.stem
+    dest = ROOT / "web" / "data" / name
     dest.mkdir(parents=True, exist_ok=True)
     srv = ROOT / "server" / "data"  # the full match for the agents' tools (decision reasons, every frame), compressed; served to nobody
     srv.mkdir(parents=True, exist_ok=True)
     full = {**match, "events": [{k: v for k, v in e.items() if k != "freeze_frame"} for e in match["events"]],
             "frames": np.round(np.asarray(match["frames"]), 2).tolist()}
-    with gzip.open(srv / f"{src.stem}.json.gz", "wt", encoding="utf-8") as fh:
+    with gzip.open(srv / f"{name}.json.gz", "wt", encoding="utf-8") as fh:
         json.dump(full, fh, separators=(",", ":"))
     q, hd = pack_frames(match["frames"])
     (dest / "frames.bin").write_bytes(q.tobytes())
@@ -190,15 +194,18 @@ def build(src):
     packs = moments(match)
     timeline, players = stats_timeline(match)
     events = [{k: v for k, v in e.items() if k not in ("freeze_frame", "why", "players", "bench")} for e in match["events"]]
+    old = json.loads((dest / "match.json").read_text(encoding="utf-8")) if keep_agents else {}
     doc = dict(meta=meta, n_frames=len(q), events=events, team_stats=timeline, players=players,
-               newsroom=asyncio.run(newsroom(packs)), recaps=asyncio.run(recaps(match)), reading=reading(match), board=board(match), breakdowns=breakdowns(match), profiles=profiles(match), clips=clips(match["events"], {k: v["name"] for k, v in players.items()}, meta["duration"]))
+               newsroom=old.get("newsroom") or asyncio.run(newsroom(packs)), recaps=old.get("recaps") or asyncio.run(recaps(match)), reading=reading(match), board=board(match),
+               breakdowns=breakdowns(match), profiles=profiles(match), tags=MatchView(match).player_tags(), clips=clips(match["events"], {k: v["name"] for k, v in players.items()}, meta["duration"]))
     (dest / "match.json").write_text(json.dumps(doc, separators=(",", ":")), encoding="utf-8")
     print(dest, f"{sum(f.stat().st_size for f in dest.iterdir()) / 1e6:.1f} MB,", len(packs), "moments,", len(doc["clips"]), "clips")
-    return dict(id=src.stem, home=meta["home"]["name"], away=meta["away"]["name"], home_code=meta["home"]["code"], away_code=meta["away"]["code"], score=meta["score"])
+    return dict(id=name, home=meta["home"]["name"], away=meta["away"]["name"], home_code=meta["home"]["code"], away_code=meta["away"]["code"], score=meta["score"])
 
 
 if __name__ == "__main__":
-    built = [build(pathlib.Path(a)) for a in sys.argv[1:]]
+    keep = "--keep-agents" in sys.argv
+    built = [build(pathlib.Path(a), keep) for a in sys.argv[1:] if not a.startswith("--")]
     idx = ROOT / "web" / "data" / "index.json"
     old = {m["id"]: m for m in json.loads(idx.read_text())} if idx.exists() else {}
     old.update({m["id"]: m for m in built})

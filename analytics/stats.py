@@ -20,7 +20,9 @@ COUNT_KEYS = ["goals", "own_goals", "xg", "shots", "shots_on_target", "shots_blo
               "throws", "carries", "carry_metres", "progressive_carries", "take_ons", "take_ons_won", "take_ons_stopped", "dribbled_past", "tackles", "tackles_won",
               "dispossessed", "miscontrols", "interceptions", "clearances", "blocks", "recoveries", "aerial_won", "aerial_lost", "fifty_fifty_won", "fifty_fifty_lost",
               "pressures", "fouls", "fouls_won", "yellow_cards", "second_yellow_cards", "red_cards", "offsides", "saves", "keeper_claims", "keeper_punchs", "keeper_sweeps",
-              "errors", "errors_leading_to_shot", "errors_leading_to_goal", "corners", "free_kicks", "penalties", "possession_gains", "ppda_actions", "ppda_opp_passes", "goals_conceded"]
+              "errors", "errors_leading_to_shot", "errors_leading_to_goal", "corners", "free_kicks", "penalties", "possession_gains", "ppda_actions", "ppda_opp_passes", "goals_conceded",
+              "pass_metres", "pass_difficulty", "hard_passes", "hard_passes_completed", "shot_kmh", "shot_kmh_max"]
+HARD_PASS = .5  # difficulty (1 - the passer's completion chance when he chose it, from the lane, pressure and distance) at or above which a pass counts as hard
 
 
 class StatsAccumulator:
@@ -57,9 +59,17 @@ class StatsAccumulator:
                 inc(pid, "clearances"); tinc(tm, "clearances")
             else:
                 inc(pid, "passes"); tinc(tm, "passes")
-                if e.get("outcome") == "complete":
+                done = e.get("outcome") == "complete"
+                if done:
                     inc(pid, "passes_completed"); tinc(tm, "passes_completed")
                     inc(e.get("receiver"), "passes_received")
+                d = e.get("difficulty") or 0.
+                inc(pid, "pass_metres", e.get("length", 0.)); tinc(tm, "pass_metres", e.get("length", 0.))
+                inc(pid, "pass_difficulty", d); tinc(tm, "pass_difficulty", d)
+                if d >= HARD_PASS:
+                    inc(pid, "hard_passes"); tinc(tm, "hard_passes")
+                    if done:
+                        inc(pid, "hard_passes_completed"); tinc(tm, "hard_passes_completed")
                 if ty == "cross":
                     inc(pid, "crosses"); tinc(tm, "crosses")
                     if e.get("outcome") == "complete":
@@ -118,6 +128,11 @@ class StatsAccumulator:
             inc(pid, "offsides"); tinc(tm, "offsides")
         elif ty == "shot":
             inc(pid, "shots"); tinc(tm, "shots"); inc(pid, "xg", e["xg"]); tinc(tm, "xg", e["xg"])
+            kmh = e.get("speed", 0.) * 3.6  # launch speed
+            inc(pid, "shot_kmh", kmh); tinc(tm, "shot_kmh", kmh)
+            for c in (P[pid] if pid else None, T[tm] if tm in (0, 1) else None):
+                if c is not None:
+                    c["shot_kmh_max"] = max(c["shot_kmh_max"], kmh)
             if e["outcome"] in SUCCESS:
                 inc(pid, "shots_on_target"); tinc(tm, "shots_on_target")
             if e["outcome"] == "blocked":
@@ -173,6 +188,7 @@ class StatsAccumulator:
             d["take_on_rate"] = r(c["take_ons_won"], c["take_ons"])
             d["tackle_win_rate"] = r(c["tackles_won"], c["tackles"])
             d["aerial_win_rate"] = r(c["aerial_won"], c["aerial_won"] + c["aerial_lost"])
+            d.update(self._quality(c))
             tm = self.info[pid]["team"]
             d["rating"] = self.rating(c, self.info[pid]["role"], self.minutes(pid), int(np.sign(self.t[tm]["goals"] - self.t[1 - tm]["goals"])))
             out[pid] = d
@@ -187,9 +203,17 @@ class StatsAccumulator:
             d.update(pass_accuracy=r(c["passes_completed"], c["passes"]), take_on_rate=r(c["take_ons_won"], c["take_ons"]),
                      tackle_win_rate=r(c["tackles_won"], c["tackles"]), aerial_win_rate=r(c["aerial_won"], c["aerial_won"] + c["aerial_lost"]),
                      ppda=r(c["ppda_opp_passes"], c["ppda_actions"]), shot_conversion=r(c["goals"], c["shots"]),
-                     xg_per_shot=r(c["xg"], c["shots"]))
+                     xg_per_shot=r(c["xg"], c["shots"]), **self._quality(c))
             res.append(d)
         return res
+
+    @staticmethod
+    def _quality(c):
+        """Pass quality (average length and difficulty, hard passes completed) and shot speed (km/h at launch)."""
+        r = lambda a, b, n=3: round(a / b, n) if b else None
+        return dict(avg_pass_length_m=r(c["pass_metres"], c["passes"], 1), avg_pass_difficulty=r(c["pass_difficulty"], c["passes"]),
+                    hard_pass_accuracy=r(c["hard_passes_completed"], c["hard_passes"]), avg_shot_speed_kmh=r(c["shot_kmh"], c["shots"], 1),
+                    top_shot_speed_kmh=round(c["shot_kmh_max"], 1) if c["shots"] else None)
 
     @staticmethod
     def rating_terms(c, role, minutes, result):

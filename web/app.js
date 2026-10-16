@@ -23,13 +23,15 @@ const GOOD = new Set(['complete', 'won', 'goal', 'held']), BAD = new Set(['inter
 const GOOD_T = new Set(['goal', 'interception', 'ball_recovery', 'block', 'keeper_claim', 'foul_won']), BAD_T = new Set(['miscontrol', 'dispossessed', 'dribbled_past', 'foul', 'error', 'offside']);
 const verdict = e => GOOD.has(e.outcome) || (!e.outcome && GOOD_T.has(e.type)) ? 1 : BAD.has(e.outcome) || (!e.outcome && BAD_T.has(e.type)) ? -1 : 0;
 const LABEL = { ball_receipt: 'Received', ball_recovery: 'Recovery', fifty_fifty: '50-50', foul_won: 'Foul won', keeper_claim: 'Claim', dribbled_past: 'Dribbled past', take_on: 'Take-on' };
+const HARD = .5;  // a hard pass: difficulty (1 - its completion chance when chosen) of 0.5 or more, as in analytics/stats.py
 const label = ty => LABEL[ty] || ty.charAt(0).toUpperCase() + ty.slice(1).replace(/_/g, ' ');
 const STAT_ROWS = [  // key, label, format, lower-is-better
   ['goals', 'Goals'], ['xg', 'Expected goals (xG)', v => v.toFixed(2)], ['shots', 'Shots'], ['shots_on_target', 'On target'], ['big_chances', 'Big chances'],
-  ['passes', 'Passes'], ['pass_accuracy', 'Pass accuracy', v => Math.round(v * 100) + '%'], ['progressive_passes', 'Progressive passes'],
+  ['passes', 'Passes'], ['pass_accuracy', 'Pass accuracy', v => Math.round(v * 100) + '%'], ['avg_pass_length_m', 'Average pass length', v => conv('len', v, 1)],
+  ['avg_pass_difficulty', 'Average pass difficulty (0-1)', v => v.toFixed(2)], ['hard_pass_accuracy', 'Hard passes completed', v => Math.round(v * 100) + '%'], ['progressive_passes', 'Progressive passes'],
   ['final_third_passes', 'Final-third passes'], ['ppda', 'PPDA (lower = harder press)', v => v.toFixed(1), true], ['possession_gains', 'Possession gains'],
   ['tackles_won', 'Tackles won'], ['interceptions', 'Interceptions'], ['take_on_rate', 'Take-on success', v => Math.round(v * 100) + '%'],
-  ['corners', 'Corners'], ['fouls', 'Fouls', null, true], ['yellow_cards', 'Yellow cards', null, true], ['red_cards', 'Red cards', null, true],
+  ['top_shot_speed_kmh', 'Fastest shot', v => conv('spd', v)], ['corners', 'Corners'], ['fouls', 'Fouls', null, true], ['yellow_cards', 'Yellow cards', null, true], ['red_cards', 'Red cards', null, true],
 ];
 const FAN_ROWS = ['goals', 'xg', 'shots', 'shots_on_target', 'corners', 'yellow_cards'];
 
@@ -216,6 +218,7 @@ function draw() {
   g.globalAlpha = 1;
   if (viewOn()) { g.save(); (S.view.kind === 'shape' ? paintShape : paintNetwork)(S.view.team, S.view); g.restore(); }
   else if (boardOn()) drawBoard(t);
+  if (!boardOn() && !S.bd) drawTags(t, f);
   if (S.bd && S.bd.hold) { g.save(); g.globalAlpha = Math.min(1, (performance.now() - S.bd.at) / 450); paintStop(S.bd.b.stops[S.bd.i], f); g.restore(); }
   g.beginPath(); g.arc(px(f[1]), py(f[2]), 4.5, 0, 7); g.fillStyle = '#fff'; g.fill(); g.strokeStyle = '#0c0d0e'; g.lineWidth = 1.5; g.stroke();
   hud(t);
@@ -237,6 +240,31 @@ function drawActions(t) {
     g.fillStyle = c; g.beginPath(); g.arc(px(e.x), py(e.y), e.type === 'shot' || e.type === 'goal' ? 5 : 3, 0, 7); g.fill();
   }
   g.globalAlpha = 1;
+}
+
+// on-pitch tags: the man on the ball by name; a sprint that is his fastest of the match yet, or a distance milestone (analytics/tools.py
+// player_tags); the speed of a shot and the length, difficulty and speed of a hard pass, at the ball, for a few seconds
+const TAG_S = 3, surname = id => (S.info[id] ? S.info[id].name.split(' ').slice(-1)[0] : '');
+function drawTags(t, f) {
+  const at = k => [px(f[5 + 2 * k]), py(f[6 + 2 * k])], shown = new Set();
+  for (const r of S.D.tags || []) {
+    if (r.t > t) break;
+    if (t - r.t > TAG_S || shown.has(r.player)) continue;
+    const k = slotOf(r.player, t);
+    if (k < 0) continue;
+    const [X, Y] = at(k);
+    tag(X, Y - 14, `${surname(r.player)} · ${r.kind === 'speed' ? conv('spd', r.value, 1) : conv('dist', r.value) + ' ' + tr('covered')}`, COL.accent);
+    shown.add(r.player);
+  }
+  const c = f[3] >= 0 && f[3] < 22 ? who(f[3], t) : null;
+  if (c && !shown.has(c.id)) { const [X, Y] = at(f[3]); tag(X, Y - 14, `${c.number} ${surname(c.id)}`); }
+  const ev = S.D.events;
+  for (let i = lastBefore(ev, t); i >= 0 && t - ev[i].t <= TAG_S; i--) {
+    const e = ev[i], hard = ['pass', 'cross'].includes(e.type) && e.difficulty >= HARD && e.outcome === 'complete';
+    if ((e.type !== 'shot' || !e.speed) && !hard) continue;
+    tag(px(e.x), py(e.y) + 26, `${tr(e.type === 'shot' ? 'Shot' : 'Hard pass')} · ${quality(e)}`, e.type === 'shot' ? '#fff' : COL.good);
+    break;
+  }
 }
 
 let hudKey = '';
@@ -482,6 +510,7 @@ const REELS = {
   Shots: e => e.type === 'shot',
   'Chances created': e => (e.type === 'pass' || e.type === 'cross') && (e.key_pass || e.assist),
   'Progressive passes': e => e.type === 'pass' && e.progressive && e.outcome === 'complete',
+  'Hard passes': e => (e.type === 'pass' || e.type === 'cross') && e.difficulty >= HARD && e.outcome === 'complete',
   'Duels won': e => (e.type === 'tackle' || e.type === 'take_on' || e.type === 'duel' || e.type === 'fifty_fifty') && e.outcome === 'won',
   'Duels lost': e => ((e.type === 'tackle' || e.type === 'take_on' || e.type === 'duel') && e.outcome === 'lost') || ['dribbled_past', 'dispossessed', 'miscontrol'].includes(e.type),
   Defending: e => ['tackle', 'interception', 'block', 'clearance', 'ball_recovery'].includes(e.type),
@@ -548,7 +577,7 @@ function playerView() {
   const acts = S.D.events.filter(e => e.player === S.player && e.type !== 'goal' && (types ? types.includes(e.type) : e.type !== 'pressure'));
   const rows = acts.map(e => {
     const v = verdict(e), out = e.outcome ? `<span class="${v > 0 ? 'ok' : v < 0 ? 'no' : ''}">${esc(e.outcome.replace(/_/g, ' '))}</span>` : '<span></span>';
-    return `<li class="${e.t > S.t ? 'future' : ''}"><span class="clk">${esc(e.clock)}</span><span>${label(e.type)}${e.xg ? ` · xG ${e.xg.toFixed(2)}` : ''}</span>${out}
+    return `<li class="${e.t > S.t ? 'future' : ''}"><span class="clk">${esc(e.clock)}</span><span>${label(e.type)}${e.xg ? ` · xG ${e.xg.toFixed(2)}` : ''}${quality(e) ? ` · ${quality(e)}` : ''}</span>${out}
       <span><button class="link" data-seek="${e.t - 3}">Watch</button><button class="link" data-clip-event="${e.id}">Clip</button></span></li>`;
   }).join('');
   const chips = Object.keys(GROUPS).map(gname => `<button class="chip" data-group="${gname}" aria-pressed="${gname === S.group}">${gname}</button>`).join('');
@@ -559,6 +588,9 @@ function playerView() {
       <div class="sub">${esc(S.D.meta[side].name)} · ${esc(p.label || p.role)}${(p.traits || []).length ? ' · ' + esc(p.traits.map(x => x.replace(/_/g, ' ')).join(', ')) : ''}</div>
       <div class="sub">${s.minutes ?? 0} minutes played</div></div><span class="rating" title="Full-match rating">${s.rating ?? '–'}</span></div>
     <div class="label">Full match</div><div class="kv">${kv}</div>
+    ${s.passes ? `<div class="label">Pass quality${s.shots ? ' and shooting' : ''}</div><div class="kv"><div><b>${conv('len', s.avg_pass_length_m, 1)}</b><span>Avg pass length</span></div>
+      <div><b>${s.avg_pass_difficulty?.toFixed(2) ?? '–'}</b><span>Avg difficulty</span></div><div><b>${s.hard_passes_completed}/${s.hard_passes}</b><span>Hard passes completed</span></div>
+      ${s.shots ? `<div><b>${conv('spd', s.top_shot_speed_kmh)}</b><span>Fastest shot</span></div>` : ''}</div>` : ''}
     <div class="bar" style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
       ${S.persona === 'scout' ? `<button class="btn primary" data-report="${esc(S.player)}">Scout report</button>` : `<button class="btn primary" data-hismatch="${esc(S.player)}">His match</button>`}
       <button class="btn" data-reel="Highlights">Highlights reel</button></div>
@@ -576,7 +608,12 @@ const pname = id => (S.info[id] ? `${S.info[id].number} ${S.info[id].name}` : ''
 function evTip(e) {
   const out = e.outcome ? ` · ${e.outcome.replace(/_/g, ' ')}` : '';
   const to = e.receiver ? ` to ${pname(e.receiver)}` : e.target ? ` against ${pname(e.target)}` : '';
-  return `${e.clock} · ${label(e.type)}${to}${out}${e.xg != null ? ` · xG ${e.xg.toFixed(2)}` : ''}\nclick to watch`;
+  return `${e.clock} · ${label(e.type)}${to}${out}${e.xg != null ? ` · xG ${e.xg.toFixed(2)}` : ''}${quality(e) ? ' · ' + quality(e) : ''}\nclick to watch`;
+}
+function quality(e) {  // pass length, difficulty and ball speed; shot speed
+  if (e.type === 'shot' && e.speed) return conv('spd', e.speed * 3.6);
+  if (['pass', 'cross'].includes(e.type) && e.length != null) return `${conv('len', e.length)} · difficulty ${(e.difficulty ?? 0).toFixed(2)} · ${conv('spd', e.speed * 3.6)}`;
+  return '';
 }
 function jumpTo(t) { S.reel = null; S.bd = null; seek(t - 1.5); setPlaying(false); }
 function nextPass(tm, a, b, row) {  // a passing-network link: each click watches the next completed pass between the two

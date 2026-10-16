@@ -24,6 +24,11 @@ def test_stats_consistent():
         acc.update(e)
     assert acc.teams() == s["teams"] and half <= s["teams"][0]["passes"]
     assert all(0 < p["minutes"] <= 115 for p in s["players"].values() if p["minutes"])
+    # pass quality and shot speed: hard passes are a subset, difficulty is an average of 0-1 values, the top shot is the fastest
+    for t in s["teams"]:
+        assert t["hard_passes_completed"] <= t["hard_passes"] <= t["passes"] and 0 <= t["avg_pass_difficulty"] <= 1
+    shots = [e["speed"] * 3.6 for e in ev if e["type"] == "shot" and e["team"] == 0]
+    assert not shots or abs(s["teams"][0]["top_shot_speed_kmh"] - max(shots)) < .1
 
 
 if __name__ == "__main__":
