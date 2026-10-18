@@ -30,7 +30,7 @@ from matchsim.whatif import FORMATIONS, TACTIC_KEYS, cached_what_if
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DATA, CACHE, WEB = ROOT / "server" / "data", ROOT / "server" / "cache", ROOT / "web"
 ASK_SLOTS = int(os.environ.get("ASK_SLOTS", "2"))  # ponytail: one process-wide limit; per-user quotas if it is ever opened wider
-PROFILE_KEYS = ("persona", "depth", "club", "player", "language", "units")
+PROFILE_KEYS = ("persona", "depth", "club", "player", "language", "units", "metric")
 _matches, _gate, _client = {}, asyncio.Semaphore(ASK_SLOTS), None
 # What the public demo may spend a day (UTC) on the model and speech; cached answers, the replay and everything precomputed stay free.
 BUDGET = dict(ask=int(os.environ.get("ASKS_PER_DAY", "300")), live=int(os.environ.get("LIVE_RUNS_PER_DAY", "30")),

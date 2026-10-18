@@ -1412,6 +1412,24 @@ were never logged.
   `holds_his_space`); before, the answer gave the space a man holds as where he presses. Rerun: "11% of opponents' possession ...
   about 47.7 metres from their own goal", approved first time.
 
+### Control vs chaos, a metric to follow, milestones (2026-10-18)
+The brief names all three ("control vs chaos ... game rhythm patterns", "a single performance metric a viewer cares about",
+"notable milestones").
+- `MatchView.rhythm` (5-minute windows): possessions from tracking (a run of in-play time with one side on the ball); settled = 4+
+  completed passes or 15+ s, broken = over inside 8 s with at most one pass. Per window: shares of in-play time, who had the settled
+  ball, turnovers and passes a minute of play, stoppages, and a state: stop-start (ball in play under 40 % of the window), chaos
+  (under 45 % settled, or 20 % broken with 5 turnovers a minute), control by a side (60 % settled, 65 % of it theirs), else even.
+  Football check: Harlow-Stonebay (both direct, long balls) has the most chaos (6 windows, 16 % broken, a chaos spell 10'-30');
+  Redmere (keeps the ball) holds 60 % of the settled time against Ashmere's deep block. Shown on the fan Live strip and the
+  Momentum board (chips per window, spells); agent tool `control_and_rhythm`.
+- Metric focus: "Your metric" in the header (chances, pressing and winning it back, running, hard passes, duels won, control vs
+  chaos). `build_site.stats_timeline` stores the top three players at the end of every minute per metric (running from tracking:
+  `MatchView.distance_by_minute`, equal to the scout's distance at full time); a card leads the Live and Feed tabs; the metric goes
+  to the desk in the profile (the writer leads with it). Not tested live with the model.
+- `MatchView.milestones`: brace, hat-trick, a goal off the bench, a goal and an assist, 50 / 75 / 100 passes completed, 5 tackles won,
+  5 saves, a clean sheet at the final whistle: 5-10 a match. On the pitch as a tag for 6 s, in the feed as notes (no model), in the
+  followed player's notes, and in match_summary for the agents.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

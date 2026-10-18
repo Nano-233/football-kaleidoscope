@@ -38,7 +38,8 @@ that minute, and nothing else: name each one with its minute; do not add or infe
 without_ball_changes (those describe how the side defended; mention them only as that). Call formation_changes first, then team_shape for each period between changes. For each change of system, say why it was made: the match state at that minute
 (the score from find_moments with goals, red cards, substitutions) is what a manager reacts to. Look for causes: changes of shape, pressing height and PPDA by period, momentum
 spells, where attacks start, substitutions. For who presses, who tracks whom and who holds which space (and when that changed), use
-defensive_duties: its numbers are shares of the opponents' possession, read from tracking. For why goals were scored or conceded, find every one of
+defensive_duties: its numbers are shares of the opponents' possession, read from tracking. For whether a side controlled the game
+or it was chaotic, and the rhythm (tempo, stoppages), use control_and_rhythm. For why goals were scored or conceded, find every one of
 those goals so far with find_moments and call moment_breakdown on each: say how each move was built and where it beat the defence (who lost the ball,
 the pass that broke the line, who was free), not general trends. For a "what if" question (a different instruction or formation from a minute on), use what_if
 and report both columns, as it was and with the change, as chances out of the runs; say the runs are simulations. Use only numbers your tools returned. Reply with concise findings (bullet points), each with
@@ -94,7 +95,8 @@ def _writer_text(profile):
     p = profile or {}
     who = PERSONA.get(p.get("persona", "fan"), PERSONA["fan"])
     side = (f" The reader supports {p['club']}: tell it from that side, warmly but honestly." if p.get("club") else "") + \
-           (f" The reader follows the player {p['player']}: put him at the centre where the facts allow." if p.get("player") else "")
+           (f" The reader follows the player {p['player']}: put him at the centre where the facts allow." if p.get("player") else "") + \
+           (f" The reader's metric is {p['metric']}: lead with it where the facts have it (ask the specialists for it)." if p.get("metric") else "")
     lang = p.get("language", "English")
     return (f"You are the newsroom's writer. Turn the FINDINGS into the answer to the QUESTION for {who}. Length and style: "
             f"{DEPTH.get(p.get('depth', 'standard'), DEPTH['standard'])}.{side} Write in {lang}; keep player and team names as they are. "
@@ -182,7 +184,7 @@ class Desk:
         t_to = lambda m: t_at_minute(mv.events, m + 1, mv.meta["half_time"]) if mv.events else 0.
 
         def match_summary() -> dict:
-            """Score, goals (minute, scorer, team), cards, substitutions and the starting formations so far."""
+            """Score, goals (minute, scorer, team), cards, substitutions, milestones (brace, hat-trick, off the bench, 50 passes, clean sheet...) and the starting formations so far."""
             ev = mv.events
             goals = [dict(minute=e["clock"], team=mv.team_names[e["team"]], scorer=mv.names.get(e.get("player")), score=f"{e.get('home')}-{e.get('away')}") for e in ev if e["type"] in ("goal", "own_goal")]
             score = [0, 0]
@@ -193,6 +195,7 @@ class Desk:
                         cards=[dict(minute=e["clock"], team=mv.team_names[e["team"]], player=mv.names.get(e.get("player")), card=e["card"]) for e in ev if e["type"] == "card"],
                         substitutions=[dict(minute=e["clock"], team=mv.team_names[e["team"]], off=e["off_name"], on=e["on_name"], reason=e.get("reason")) for e in ev if e["type"] == "substitution"],
                         starting_formations={mv.team_names[t]: mv.meta[s]["formation"] for t, s in enumerate(("home", "away"))},
+                        milestones=[dict(minute=r["clock"], player=mv.names.get(r["player"]), team=mv.team_names[mv.players[r["player"]]["team"]], milestone=r["text"]) for r in mv.milestones()],
                         win_probability_now={k: wp[k] for k in ("home", "draw", "away")} if (wp := mv.win_probability()["series"][-1]) else None,
                         win_probability_note="simple model: league scoring rate blended with each side's xG so far")
 
@@ -250,6 +253,12 @@ class Desk:
             return _duty_words(dict(team=d["team"], team_by_window=d["team_by_window"], changes=[{k: v for k, v in c.items() if k not in ("id", "t", "confirmed_t")} for c in d["changes"]], note=d["note"],
                         players={nm: {k: v for k, v in q.items() if k != "by_window"} for nm, q in d["players"].items()}))
 
+        def control_and_rhythm() -> dict:
+            """Control vs chaos by 5 minutes: the share of in-play time in settled possession (4+ passes or 15+ s) and in broken play (over
+            in 8 s, at most one pass), who had the settled ball, turnovers and passes per minute of play, stoppages, the state of each window
+            (control: <team>, chaos, stop-start, even) and the spells of control or chaos."""
+            return mv.rhythm()
+
         def momentum() -> dict:
             """xG, shots and field tilt for both teams by 5 minutes, cumulative xG, and the spells when one side dominated."""
             return mv.momentum()
@@ -303,7 +312,7 @@ class Desk:
             self.trail.append(dict(agent="tactics_analyst", tool="what_if", args=kw))
             return json.dumps(out, default=str)
 
-        tt = [team_shape, formation_changes, pressing, defensive_duties, momentum, passing_network, moment_breakdown, find_moments, match_summary]
+        tt = [team_shape, formation_changes, pressing, defensive_duties, control_and_rhythm, momentum, passing_network, moment_breakdown, find_moments, match_summary]
         st = [player_report, defensive_duties, find_moments, moment_breakdown, list_players, match_summary]
         self.tactics = Agent(client, TACTICS, name="tactics_analyst", tools=[logged("tactics_analyst", f) for f in tt] + [what_if])
         self.scout = Agent(client, SCOUT, name="scout", tools=[logged("scout", f) for f in st])

@@ -39,16 +39,34 @@ def pack_frames(frames):
     return q, hd
 
 
+FOCUS = {  # the metric a viewer can choose to follow: player counters summed (running comes from tracking)
+    "xg": ("xg",), "pressing": ("pressures", "tackles_won", "interceptions"), "passing": ("hard_passes_completed",),
+    "duels": ("tackles_won", "take_ons_won", "aerial_won", "fifty_fifty_won"),
+}
+
+
 def stats_timeline(match):
-    """Team stats at the end of every match minute (index = clock minute), and final player stats."""
+    """Team stats at the end of every match minute (index = clock minute), final player stats, and for each focus metric the top
+    three players at the end of every minute ([[player id, value], ...])."""
     acc, out, nxt = StatsAccumulator(match["meta"]), [], 60.
+    lead = {k: [] for k in FOCUS}
+
+    def snap():
+        out.append([{k: t[k] for k in TEAM_KEYS} for t in acc.teams()])
+        ps = acc.players()
+        for k, keys in FOCUS.items():
+            vals = sorted(((round(sum(p.get(c) or 0 for c in keys), 2), pid) for pid, p in ps.items()), reverse=True)[:3]
+            lead[k].append([[pid, v] for v, pid in vals if v > 0])
     for e in match["events"]:
         while e["t"] >= nxt:
-            out.append([{k: t[k] for k in TEAM_KEYS} for t in acc.teams()])
+            snap()
             nxt += 60.
         acc.update(e)
-    out.append([{k: t[k] for k in TEAM_KEYS} for t in acc.teams()])
-    return out, acc.players()
+    snap()
+    dist = MatchView(match).distance_by_minute()
+    lead["running"] = [[[pid, km[min(i, len(km) - 1)]] for km, pid in sorted(((km, pid) for pid, km in dist.items()), key=lambda r: -r[0][min(i, len(r[0]) - 1)])[:3]]
+                       for i in range(len(out))]
+    return out, acc.players(), lead
 
 
 async def newsroom(packs):
@@ -128,7 +146,8 @@ def board(match):
     """Everything the analyst board draws, from the same toolkit the agents use, window by window so the replay only ever shows
     windows that have finished. Positions are in each team's own frame (own goal at x = 0)."""
     mv, dur = MatchView(match), match["meta"]["duration"]
-    out = dict(shape_window=SHAPE_W, net_window=NET_W, shape=[[], []], network=[[], []], pressing=[], momentum=mv.momentum(), regains=[], winprob=mv.win_probability())
+    out = dict(shape_window=SHAPE_W, net_window=NET_W, shape=[[], []], network=[[], []], pressing=[], momentum=mv.momentum(), regains=[], winprob=mv.win_probability(),
+               rhythm=mv.rhythm())
     for tm in (0, 1):
         t = 0.
         while t < dur:
@@ -203,12 +222,12 @@ def build(src, keep_agents=False):
     (dest / "frames.bin").write_bytes(q.tobytes())
     (dest / "heads.bin").write_bytes(hd.tobytes())
     packs = moments(match)
-    timeline, players = stats_timeline(match)
+    timeline, players, leaders = stats_timeline(match)
     events = [{k: v for k, v in e.items() if k not in ("freeze_frame", "why", "players", "bench")} for e in match["events"]]
     old = json.loads((dest / "match.json").read_text(encoding="utf-8")) if keep_agents else {}
-    doc = dict(meta=meta, n_frames=len(q), events=events, team_stats=timeline, players=players,
+    doc = dict(meta=meta, n_frames=len(q), events=events, team_stats=timeline, players=players, leaders=leaders,
                newsroom=old.get("newsroom") or asyncio.run(newsroom(packs)), recaps=old.get("recaps") or asyncio.run(recaps(match)), reading=reading(match), board=board(match),
-               breakdowns=breakdowns(match), profiles=profiles(match), tags=MatchView(match).player_tags(), duties=duties(match), clips=clips(match["events"], {k: v["name"] for k, v in players.items()}, meta["duration"]))
+               breakdowns=breakdowns(match), profiles=profiles(match), tags=MatchView(match).player_tags(), milestones=MatchView(match).milestones(), duties=duties(match), clips=clips(match["events"], {k: v["name"] for k, v in players.items()}, meta["duration"]))
     (dest / "match.json").write_text(json.dumps(doc, separators=(",", ":")), encoding="utf-8")
     print(dest, f"{sum(f.stat().st_size for f in dest.iterdir()) / 1e6:.1f} MB,", len(packs), "moments,", len(doc["clips"]), "clips")
     return dict(id=name, home=meta["home"]["name"], away=meta["away"]["name"], home_code=meta["home"]["code"], away_code=meta["away"]["code"], score=meta["score"])

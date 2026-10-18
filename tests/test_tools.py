@@ -31,4 +31,11 @@ for tm in (0, 1):
     assert du["players"] and all(0 <= q["press"] <= 1 and 0 <= q["mark"] <= 1 and q["press"] + q["mark"] <= 1 for q in du["players"].values())
     if match.get("jobs"):
         assert mv.score_duties(tm)["frame_agreement"] > .5
+# rhythm: shares add up inside each window; milestones: a hat-trick needs a brace first, every goal count matches the events
+rh = mv.rhythm()
+assert rh["by_window"] and all(r["settled_pct"] + r["broken_pct"] <= 100 for r in rh["by_window"])
+ms = mv.milestones()
+for r in ms:
+    if r["text"] in ("brace", "hat-trick"):
+        assert sum(1 for e in match["events"] if e["type"] == "goal" and e.get("player") == r["player"] and e["t"] <= r["t"]) == (2 if r["text"] == "brace" else 3)
 print("tools ok")

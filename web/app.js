@@ -45,9 +45,23 @@ const SUGGEST = {
   analyst: ['How did each team set up in and out of possession?', 'Where did the press win the ball back?', 'What changed after the substitutions?', 'Why did they concede?'],
   scout: ['Report on the highest-rated player', 'Who won their duels, and how?', 'Compare the two centre-forwards'],
 };
+// the metric a viewer follows (scripts/build_site.py FOCUS: top three players by the end of each minute; control is the rhythm reader's)
+const METRICS = { '': 'No focus metric', xg: 'Chances (xG)', pressing: 'Pressing and winning it back', running: 'Running', passing: 'Hard passes', duels: 'Duels won', control: 'Control vs chaos' };
+const METRIC_UNIT = { xg: v => `xG ${v.toFixed(2)}`, pressing: v => `${v} pressures, tackles and interceptions`, running: v => conv('dist', v, 1), passing: v => `${v} hard passes completed`, duels: v => `${v} duels won` };
+function metricCard() {
+  const k = S.profile.metric;
+  if (!k || !S.D) return '';
+  if (k === 'control') return rhythmStrip() || `<div class="label">Your metric · control vs chaos</div><div class="mono">The first five minutes are not over yet.</div>`;
+  const rows = (S.D.leaders || {})[k];
+  if (!rows) return '';
+  const now = rows[Math.min(rows.length - 1, Math.floor(S.t / 60))] || [];
+  return `<div class="label">Your metric · ${esc(METRICS[k])} · after ${esc(clockAt(S.t))}</div>${now.length ? `<table class="stats"><tbody>${now.map(([id, v], i) =>
+    `<tr><td>${i + 1}. ${num(id)} ${esc(S.info[id].name)} <span class="mono">${esc(S.D.meta[S.info[id].team ? 'away' : 'home'].code)}</span></td><td>${esc(METRIC_UNIT[k](v))}</td>
+     <td><button class="link" data-player="${esc(id)}">Profile</button></td></tr>`).join('')}</tbody></table>` : '<div class="mono">Nothing yet.</div>'}`;
+}
 const LANGS = ['English', 'Español', 'Français', 'Deutsch', 'Português', 'Italiano', '中文', '日本語', 'العربية'];
 function loadProfile() {
-  const base = { depth: 'standard', language: 'English', club: '', player: '', playerId: '' };
+  const base = { depth: 'standard', language: 'English', club: '', player: '', playerId: '', metric: '' };
   try { return Object.assign(base, JSON.parse(localStorage.getItem('mn-profile'))); } catch { return base; }
 }
 // published lines in the reader's language: fetched in small batches from the localizer, the original shown until it arrives
@@ -247,6 +261,14 @@ function drawActions(t) {
 const TAG_S = 3, surname = id => (S.info[id] ? S.info[id].name.split(' ').slice(-1)[0] : '');
 function drawTags(t, f) {
   const at = k => [px(f[5 + 2 * k]), py(f[6 + 2 * k])], shown = new Set();
+  for (const r of S.D.milestones || []) {
+    if (r.t > t) break;
+    const k = t - r.t <= 2 * TAG_S && !shown.has(r.player) ? slotOf(r.player, t) : -1;
+    if (k < 0) continue;
+    const [X, Y] = at(k);
+    tag(X, Y - 14, `${surname(r.player)} · ${tr(r.text)}`, '#e8c547');
+    shown.add(r.player);
+  }
   for (const r of S.D.tags || []) {
     if (r.t > t) break;
     if (t - r.t > TAG_S || shown.has(r.player)) continue;
@@ -336,7 +358,7 @@ function setPersona(p) {
 function render(force) {
   if (!S.D) return;
   const minute = Math.floor(S.t / 60), shown = feed().filter(it => it.moment.t <= S.t).length + (S.profile.playerId ? playerNotes().length : 0);
-  const key = [S.persona, S.tab, S.tab === 'Clips' || S.tab === 'Ask' ? '' : minute, (S.D.recaps || []).filter(r => r.t <= S.t + .5).length, shown, S.player, S.group, S.clip && S.clip.id, S.custom.length, S.askVer, S.liveVer, S.profile.playerId, JSON.stringify(S.board), JSON.stringify(S.wi), S.trVer, S.profile.language].join('|');
+  const key = [S.persona, S.tab, S.tab === 'Clips' || S.tab === 'Ask' ? '' : minute, (S.D.recaps || []).filter(r => r.t <= S.t + .5).length, shown, S.player, S.group, S.clip && S.clip.id, S.custom.length, S.askVer, S.liveVer, S.profile.playerId, S.profile.metric, JSON.stringify(S.board), JSON.stringify(S.wi), S.trVer, S.profile.language].join('|');
   if (!force && key === S.panelKey) return;
   S.panelKey = key;
   const body = $('panel-body'), keep = body.scrollTop, same = body.dataset.view === S.persona + S.tab + S.player;
@@ -346,8 +368,8 @@ function render(force) {
 }
 
 const VIEWS = {
-  Live: () => liveStrip() + feedView('fan'),
-  Feed: () => feedView('analyst'),
+  Live: () => metricCard() + liveStrip() + feedView('fan'),
+  Feed: () => metricCard() + feedView('analyst'),
   Stats: () => S.persona === 'fan' ? compareView() : tableView(),
   Players: () => S.player ? playerView() : squadView(),
   Clips: () => clipsView(),
@@ -376,15 +398,17 @@ function playerNotes() {
     else if (e.type === 'substitution' && (e.on === id || e.off === id)) line = e.on === id ? `${nm} comes on.` : `${nm} is substituted.`;
     if (line) out.push({ t: e.t, clock: e.clock, line });
   }
-  return out;
+  for (const r of S.D.milestones || []) if (r.player === id && r.t <= S.t) out.push({ t: r.t, clock: r.clock, line: `${nm}: ${r.text}!` });
+  return out.sort((a, b) => a.t - b.t);
 }
 
 function feedView(mode) {
   const notes = mode === 'fan' ? playerNotes().map(n => ({ note: true, moment: { t: n.t, clock: n.clock, type: 'your player' }, line: n.line, approved: true })) : [];
+  for (const r of S.D.milestones || []) if (r.t <= S.t && r.player !== S.profile.playerId) notes.push({ note: true, milestone: true, moment: { t: r.t, clock: r.clock, type: 'milestone' }, line: `${S.info[r.player].name}: ${r.text}.`, approved: true });
   const items = [...feed().filter(it => it.moment.t <= S.t), ...notes].sort((a, b) => a.moment.t - b.moment.t).reverse();
   if (!items.length) return `<div class="empty">The newsroom files its first story when something happens.</div>`;
   return `<ul class="feed ${mode}">` + items.map(it => {
-    if (it.note) return `<li class="note"><div class="meta"><span class="t">${esc(it.moment.clock)}</span><span class="kind">${esc(S.profile.player)}</span>
+    if (it.note) return `<li class="note"><div class="meta"><span class="t">${esc(it.moment.clock)}</span><span class="kind">${esc(it.milestone ? tr('Milestone') : S.profile.player)}</span>
       <button class="jump" data-seek="${it.moment.t - 6}">Watch</button></div><p>${esc(tr(it.line))}</p></li>`;
     if (it.pending) return `<li class="pending"><div class="meta"><span class="t">${esc(it.moment.clock)}</span><span class="kind">${esc(it.moment.type.replace(/_/g, ' '))}</span>
       <span class="badge live">${it.pending === 'drafting' ? 'Newsroom drafting · checking' : 'Queued for the newsroom'}</span></div><p>${tr('The desk is on it…')}</p></li>`;
@@ -832,7 +856,24 @@ function momentumSvg(h = 150) {
 
 function liveStrip() {  // the fan's glance at the game: who is on top, five minutes at a time, and the chances now
   if (!S.D.board || S.t < 300) return '';
-  return `${winBar()}<div class="label" style="margin-top:10px">Momentum · xG by five minutes</div>${momentumSvg(90)}`;
+  return `${winBar()}${rhythmStrip()}<div class="label" style="margin-top:10px">Momentum · xG by five minutes</div>${momentumSvg(90)}`;
+}
+// control vs chaos by five minutes (analytics/tools.py rhythm): a chip per finished window, the side in control in its colour
+const RH_COL = st => (st.startsWith('control') ? (st.endsWith(S.D.meta.home.name) ? 'var(--home)' : 'var(--away)') : st === 'chaos' ? 'var(--bad)' : st === 'stop-start' ? 'var(--text-3)' : 'var(--surface-3)');
+function rhythmStrip(full) {
+  const R = S.D.board && S.D.board.rhythm;
+  if (!R) return '';
+  const done = R.by_window.filter(r => r.t1 <= S.t), last = done[done.length - 1];
+  if (!last) return '';
+  const word = st => (st.startsWith('control') ? `${st.slice(9)} in control` : st === 'chaos' ? 'Chaos' : st === 'stop-start' ? 'Stop-start' : 'Even');
+  const tip = r => `${r.window}: ${word(r.state)} · settled ${r.settled_pct}% · broken ${r.broken_pct}% · ${r.turnovers_per_min} turnovers a minute · ${r.passes_per_min} passes a minute · ball in play ${r.ball_in_play_pct}%`;
+  const chips = R.by_window.map(r => `<i title="${esc(r.t1 <= S.t ? tip(r) : '')}" style="flex:1;height:10px;border-radius:2px;background:${r.t1 <= S.t ? RH_COL(r.state) : 'transparent'};border:1px solid var(--line)"></i>`).join('');
+  const spells = full ? R.spells.filter(x => x.end_t <= S.t) : [];
+  return `<div class="label" style="margin-top:10px">Control vs chaos · ${esc(word(last.state))} (${esc(last.window)})</div>
+    <div style="display:flex;gap:2px">${chips}</div>
+    <div class="mono" style="margin-top:4px">Settled ${last.settled_pct}% · broken ${last.broken_pct}% · ${last.turnovers_per_min} turnovers and ${last.passes_per_min} passes a minute of play</div>
+    ${full ? `<div class="mono" style="margin-top:4px">Settled: a move of four passes or fifteen seconds. Broken: lost inside eight seconds with at most one pass.</div>
+      ${spells.length ? `<table class="stats" style="margin-top:6px"><tbody>${spells.map(x => `<tr><td>${esc(word(x.state))}</td><td>${esc(x.start)}–${esc(x.to)}</td></tr>`).join('')}</tbody></table>` : ''}` : ''}`;
 }
 function winSvg() {
   const W_ = S.D.board.winprob, rows = W_.series.filter(r => r.t <= S.t), w = 368, h = 110, dx = w / Math.max(W_.series[W_.series.length - 1].t / 60, 1);
@@ -880,7 +921,7 @@ function boardView() {
       <div class="mono" style="margin-top:8px">PPDA: opponent passes per defensive action in their build-up (lower = harder press). Dots on the pitch: where the ball was won in the last fifteen minutes.</div>`;
   } else {
     const sp = B.momentum.dominant_spells.filter(x => x.end_t <= S.t);
-    body = `${winBar()}<div class="label">Win probability over the match</div>${winSvg()}<div class="label">Momentum · xG by five minutes</div>${momentumSvg()}
+    body = `${winBar()}<div class="label">Win probability over the match</div>${winSvg()}${rhythmStrip(true)}<div class="label">Momentum · xG by five minutes</div>${momentumSvg()}
       <div class="label">Spells of dominance</div>${sp.length ? `<table class="stats"><tbody>${sp.map(x => `<tr><td>${esc(x.team)} ${esc(x.start)}–${esc(x.end)}</td><td>xG ${x.xg} v ${x.opponent_xg}</td></tr>`).join('')}</tbody></table>` : '<div class="mono">None yet.</div>'}`;
   }
   return `<div class="chips">${['Shape', 'Network', 'Press', 'Duties', 'Momentum'].map(m => chip('bmode', m, m, b.mode === m)).join('')}</div>
@@ -982,7 +1023,7 @@ async function askNewsroom(q) {
   S.asks.push(a); S.askDraft = ''; S.askVer++; render(true);
   try {
     const res = await fetch('api/ask?stream=1', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ match: S.id, question: q, t: Math.max(60, S.t), profile: { persona: S.persona, depth: P.depth, language: P.language, club: P.club, player: P.player, units: P.units } }) });
+      body: JSON.stringify({ match: S.id, question: q, t: Math.max(60, S.t), profile: { persona: S.persona, depth: P.depth, language: P.language, club: P.club, player: P.player, units: P.units, metric: P.metric ? METRICS[P.metric] : '' } }) });
     if (!res.ok) throw new Error(res.status === 404 || res.status === 405 || res.status === 501 ? NO_SERVER : res.status === 429 ? await res.text() : `The newsroom could not answer (${res.status}).`);
     // server-sent events: each step of the newsroom as it happens, then the answer
     const reader = res.body.getReader(), dec = new TextDecoder();
@@ -1171,7 +1212,11 @@ $('panel-body').addEventListener('click', e => {
   const d = b.dataset;
   if (d.bd !== undefined) startBreakdown(S.D.breakdowns[+d.bd]);
   else if (d.seek) { seek(+d.seek); setPlaying(true); }
-  else if (d.player !== undefined) { S.player = d.player || null; S.group = 'All'; render(true); }
+  else if (d.player !== undefined) {
+    S.player = d.player || null; S.group = 'All';
+    if (S.player && !['Players'].includes(S.tab)) { if (!TABS[S.persona].includes('Players')) setPersona('scout'); S.tab = 'Players'; setTabs(); }  // from the metric card
+    render(true);
+  }
   else if (d.group) { S.group = d.group; render(true); }
   else if (d.clipEvent) clipFromEvent(d.clipEvent);
   else if (d.clip) openClip(allClips().find(c => c.id === d.clip));
@@ -1265,6 +1310,8 @@ $('live').onclick = () => {  // start; stop (the live feed stays); then back to 
 };
 $('voice').onclick = () => { voiceOn = !voiceOn; $('voice').setAttribute('aria-pressed', String(voiceOn)); if (!voiceOn && speaking) speaking.pause(); toast(voiceOn ? 'Commentary will be read out as the lines appear.' : 'Voice off.'); };
 $('lang').innerHTML = LANGS.map(l => `<option${l === S.profile.language ? ' selected' : ''}>${l}</option>`).join('');
+$('metric').innerHTML = Object.entries(METRICS).map(([k, l]) => `<option value="${k}"${k === S.profile.metric ? ' selected' : ''}>${l}</option>`).join('');
+$('metric').onchange = e => { S.profile.metric = e.target.value; saveProfile(); render(true); };
 $('lang').onchange = e => { S.profile.language = e.target.value; saveProfile(); $('lt-line').dataset.id = ''; render(true); };
 $('panel-body').addEventListener('input', e => {
   if (e.target.id === 'clip-start' || e.target.id === 'clip-end') { setPlaying(false); updateClip(e.target.id.slice(5), +e.target.value); }

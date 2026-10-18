@@ -6,6 +6,7 @@ tracking frames; no model computes a figure. Each tool returns a small JSON-read
     mv.formation_timeline(team=1)         # the formation read over the match, and when it changed
     mv.pressing(team=0)                   # PPDA and pressing height by 15 minutes, where the ball was won
     mv.momentum()                         # xG and field tilt by 5 minutes, spells of dominance
+    mv.rhythm()                           # control vs chaos by 5 minutes: settled and broken possession, turnovers, tempo, stoppages
     mv.passing_network(team=0)            # pass links, connectors, where attacks start, preferred side
     mv.sequence(event_id)                 # what led to a moment, with the engine's reasons
     mv.breakdown(event_id)                # the move behind a shot as stops to pause on: the regain, both shapes, the pass options, the shot
@@ -618,6 +619,68 @@ class MatchView:
                     physical=phys, heat_map_6x4=heat, per90_vs_role=vs)
 
     # ---------------------------------------------------------------- moments
+    def milestones(self):
+        """In-match milestones from the events, at the moment they are reached: a brace and a hat-trick, a goal off the bench, a goal and an
+        assist, 50 / 75 / 100 passes completed, 5 tackles won, 5 saves, and a clean sheet kept to the final whistle.
+        [{t, clock, player, kind: "milestone", text}], by time."""
+        out, c, sub_on = [], {}, {e["on"] for e in self.events if e["type"] == "substitution"}
+        add = lambda e, pid, text: out.append(dict(t=e["t"], clock=e.get("clock"), player=pid, kind="milestone", text=text))
+        for e in self.events:
+            ty, pid = e["type"], e.get("player")
+            n = c.setdefault(pid, dict(goals=0, assists=0, passes=0, tackles=0, saves=0)) if pid else None
+            if ty == "goal" and pid:
+                n["goals"] += 1
+                if n["goals"] in (2, 3):
+                    add(e, pid, "brace" if n["goals"] == 2 else "hat-trick")
+                if n["goals"] == 1 and pid in sub_on:
+                    add(e, pid, "scores off the bench")
+                if n["goals"] == 1 and n["assists"]:
+                    add(e, pid, "a goal and an assist")
+            elif ty in ("pass", "cross") and pid and e.get("outcome") == "complete":
+                n["passes"] += 1
+                if n["passes"] in (50, 75, 100):
+                    add(e, pid, f"{n['passes']} passes completed")
+                if e.get("assist"):
+                    n["assists"] += 1
+                    if n["assists"] == 1 and n["goals"]:
+                        add(e, pid, "a goal and an assist")
+            elif ty == "tackle" and pid and e.get("outcome") == "won":
+                n["tackles"] += 1
+                if n["tackles"] == 5:
+                    add(e, pid, "5 tackles won")
+            elif ty == "save" and pid:
+                n["saves"] += 1
+                if n["saves"] == 5:
+                    add(e, pid, "5 saves")
+        end = next((e for e in reversed(self.events) if e["type"] in ("full_time", "match_end", "half_end")), self.events[-1] if self.events else None)
+        if end:
+            scored = [sum(1 for e in self.events if e["type"] in ("goal", "own_goal") and e.get("team") == t) for t in (0, 1)]
+            for t in (0, 1):
+                gk = self._occupant(11 * t, end["t"])
+                if scored[1 - t] == 0 and self.players.get(gk, {}).get("role") == "GK":
+                    add(end, gk, "keeps a clean sheet")
+        return sorted(out, key=lambda r: r["t"])
+
+    def distance_by_minute(self):
+        """Distance covered (km) by every player by the end of each 60 s of match time, from tracking: {player id: [km, ...]}."""
+        bounds = [0.] + [c[0] for c in self.slot_changes] + [self.meta["duration"] + 1]
+        step = int(round(60 / self.dt))
+        nmin = int(np.ceil(len(self.F) / step))
+        out = {}
+        for k in range(22):
+            for a, b in zip(bounds, bounds[1:]):
+                i0, i1 = int(a / self.dt), min(int(b / self.dt), len(self.F))
+                if i1 - i0 < 2:
+                    continue
+                xy = self.F[i0:i1, [5 + 2 * k, 6 + 2 * k]]
+                sp = nrm(np.diff(xy, axis=0), axis=1)
+                sp[(sp > 12 * self.dt) | (xy[1:, 1] < -5)] = 0.  # jumps at restarts and substitutions, a man sent off
+                per = np.zeros(nmin)
+                np.add.at(per, (np.arange(i0 + 1, i1) // step).clip(0, nmin - 1), sp)
+                pid = self._occupant(k, (a + b) / 2)
+                out[pid] = out.get(pid, np.zeros(nmin)) + per
+        return {pid: np.round(np.cumsum(v) / 1000, 2).tolist() for pid, v in out.items()}
+
     def player_tags(self, kmh=30., every_km=5.):
         """Moments to tag a player on screen: a sprint that peaks at or above `kmh` and is his fastest of the match so far (speed averaged
         over a second, so one frame of tracking noise is not a sprint; a fixed bar alone tags a quick side hundreds of times), and each
@@ -649,6 +712,68 @@ class MatchView:
                         best = sm[j] + .5 / 3.6  # the next tag needs half a km/h more
                         out.append(dict(t=round(float((i0 + j + 1) * self.dt), 1), player=pid, kind="speed", value=round(float(sm[j] * 3.6), 1)))
         return sorted(out, key=lambda r: r["t"])
+
+    # ---------------------------------------------------------------- control vs chaos
+    def rhythm(self, window=300.):
+        """Control vs chaos and the rhythm of the game, by window. A possession is a run of in-play time with one side on the ball
+        (tracking); it is settled when the side strings 4 completed passes or keeps it 15 s, broken when it ends inside 8 s with at most
+        one pass (second balls, loose touches, a turnover straight back). Per window: the share of in-play time in each, who had the settled
+        ball, turnovers and passes per minute of play, stoppages, and a state: chaos (under 45 % settled, or a fifth broken with 5
+        turnovers a minute), stop-start (the ball in play under 40 % of the window), control by one side (60 % settled and 65 % of it
+        theirs), else even. Spells: consecutive windows in one state."""
+        live = np.ones(len(self.F), bool)
+        for a, b, _ in self.meta.get("dead_log", []):
+            live[int(a / self.dt):int(b / self.dt) + 1] = False
+        poss, n = self.F[:, 4].astype(int), len(self.F)
+        done = [e for e in self.events if e["type"] in ("pass", "cross") and e.get("outcome") == "complete"]
+        pt, pm = np.array([e["t"] for e in done]), np.array([e["team"] for e in done])
+        segs, i = [], 0
+        while i < n:
+            if not live[i] or poss[i] < 0:
+                i += 1
+                continue
+            j = i
+            while j < n and live[j] and poss[j] == poss[i]:
+                j += 1
+            t0, t1, tm = i * self.dt, j * self.dt, int(poss[i])
+            k = int(((pt >= t0) & (pt < t1) & (pm == tm)).sum()) if len(pt) else 0
+            kind = "settled" if k >= 4 or t1 - t0 >= 15 else "broken" if k <= 1 and t1 - t0 < 8 else "building"
+            segs.append((t0, t1, tm, kind, j < n and live[j]))  # the last flag: lost in play (a turnover), not to a stoppage
+            i = j
+        stops = [a for a, b, k in self.meta.get("dead_log", []) if k != "kickoff" or a > 0]
+        dur, rows, w0 = self.meta["duration"], [], 0.
+        while w0 < dur:
+            w1 = min(w0 + window, dur)
+            part = [(max(a, w0), min(b, w1), tm, k, lost) for a, b, tm, k, lost in segs if b > w0 and a < w1]
+            play = sum(b - a for a, b, *_ in part)
+            share = {k: sum(b - a for a, b, _, kk, _l in part if kk == k) / play if play else 0. for k in ("settled", "broken")}
+            mine = [sum(b - a for a, b, tm, kk, _l in part if kk == "settled" and tm == t) for t in (0, 1)]
+            turn = sum(1 for a, b, tm, k, lost in part if lost and w0 <= b < w1) / (play / 60) if play else 0.
+            tempo = int(((pt >= w0) & (pt < w1)).sum()) / (play / 60) if play else 0.
+            top = int(np.argmax(mine)) if sum(mine) else None
+            state = ("stop-start" if play < .4 * (w1 - w0) else
+                     "chaos" if share["settled"] < .45 or (share["broken"] >= .2 and turn >= 5) else
+                     f"control: {self.team_names[top]}" if share["settled"] >= .6 and top is not None and mine[top] >= .65 * sum(mine) else "even")
+            rows.append(dict(window=f"{self._clock(w0)}-{self._clock(w1)}", t0=w0, t1=w1, ball_in_play_pct=round(100 * play / max(w1 - w0, 1)),
+                             settled_pct=round(100 * share["settled"]), broken_pct=round(100 * share["broken"]),
+                             settled_by_team_pct=[round(100 * x / sum(mine)) if sum(mine) else None for x in mine],
+                             turnovers_per_min=round(turn, 1), passes_per_min=round(tempo, 1), stoppages=sum(1 for a in stops if w0 <= a < w1), state=state))
+            w0 += window
+        spells, cur = [], None
+        for r in rows:
+            if cur and cur["state"] == r["state"]:
+                cur.update(to=r["window"].split("-")[1], end_t=r["t1"], windows=cur["windows"] + 1)
+            else:
+                cur = dict(state=r["state"], start=r["window"].split("-")[0], to=r["window"].split("-")[1], start_t=r["t0"], end_t=r["t1"], windows=1)
+                spells.append(cur)
+        play = sum(b - a for a, b, *_ in segs) or 1
+        whole = dict(settled_pct=round(100 * sum(b - a for a, b, _, k, _l in segs if k == "settled") / play),
+                     broken_pct=round(100 * sum(b - a for a, b, _, k, _l in segs if k == "broken") / play),
+                     settled_by_team_pct=[round(100 * sum(b - a for a, b, tm, k, _l in segs if k == "settled" and tm == t) /
+                                                max(sum(b - a for a, b, _, k, _l in segs if k == "settled"), 1)) for t in (0, 1)])
+        return dict(teams=self.team_names, window_s=window, match=whole, by_window=rows, spells=[s_ for s_ in spells if s_["windows"] >= 2 and s_["state"] != "even"],
+                    note="settled = a possession of 4+ completed passes or 15+ s; broken = over inside 8 s with at most one pass; shares are of the "
+                         "time the ball was in play; states: chaos, stop-start, control: <team>, even")
 
     # ---------------------------------------------------------------- duties out of possession
     def _duty_frames(self, team, every=5):
