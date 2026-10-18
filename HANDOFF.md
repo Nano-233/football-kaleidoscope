@@ -16,12 +16,13 @@ Team of two: the user (technical) and a partner (football knowledge, no coding).
 
 | Area | State |
 |---|---|
-| Engine | Frozen at tag `engine-v4`. Realism work done; open gaps listed in DEVLOG (shots 16.4 vs 12.9, cut-backs, support in the gaps). Do not reopen unless asked. |
+| Engine | Frozen at tag `engine-v4` (since then only a job log added, no behaviour change). Realism work done; open gaps listed in DEVLOG (shots 16.4 vs 12.9, cut-backs, support in the gaps). Do not reopen unless asked. |
 | Demo data | 5 matches rebuilt on engine-v4 and committed (`web/data`, `server/data`): match_1, match_7, RED-ASH, HAR-STB, WMW-OAK. What-if replays reproduce each exactly. |
 | Newsroom accuracy | `web/data/eval.json`: overall 0.84 (25 answers), goals 1.0, best player 1.0, pressing 1.0, formation 0.6; changes found 6/11; 100 % fact-checker approved; ~15 s an answer. |
 | Walkthrough | Fan / Analyst / Scout walked; fixes in DEVLOG "Persona walkthrough fixes" and "A red card given to the wrong team". Scout ratings are full-match by design (labelled). |
 | Match metrics | Pass length / difficulty / hard passes, shot and ball speed, on-pitch player tags (sprints, distance, man on the ball) shown (DEVLOG "Pass quality, ball speed and player tags"). `build_site.py --keep-agents` rebuilds the deterministic parts without model calls. |
 | Live run | `GET /api/live` + "Live run" button: events streamed on the server clock, newsroom runs per moment on Foundry (about 7 s a goal), one run at a time. DEVLOG "Live run". |
+| Defensive duties | `MatchView.duties` reads closing down, man tracked, space held from tracking only; scored against the engine job log (`jobs`, logging only, matches identical): frames 0.63-0.69, tracked man 64-81 %. Board "Duties", Scout block, agent tool `defensive_duties`. DEVLOG "Defensive duties". |
 | Deploy | **Ready, not done.** `infra/deploy.ps1` (Azure Container Apps, managed identity, scale to zero). Image verified locally by a copy of exactly what the Dockerfile ships (server loads, replay matches). Needs the user's explicit go-ahead: it creates paid resources. |
 | README / pitch / video | Last. Video < 2 min, public repo, free working test link required by the rules. |
 

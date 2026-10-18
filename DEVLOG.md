@@ -1371,6 +1371,33 @@ the numbers as they stood, stats are incremental), but nothing showed it running
   loads the match. The cached replay stays the default (free, instant).
 - Seen in passing, not fixed: the live goal line called a PPDA of 23.0 "lower", and the checker approved it.
 
+### Defensive duties: who closes down, who tracks whom, who holds which space (2026-10-18)
+Why: the user wanted tactical insight that would hold for real matches: each player's tendency to close the ball down, whether he
+follows a man or holds a space, and when that changes. The engine already decides this (`movement.defend_assign`: one optimal
+matching of the defence to jobs: press, cover, mark a given attacker, lane, post, open space, or none = hold his place), but the jobs
+were never logged.
+- Engine: `_record` logs `job_prev` per frame (`jobs` in the match, codes in `jobs_note`). Logging only: the five demo matches were
+  re-simulated from their recipes and are identical (events equal, frames equal), so the engine stays engine-v4 in behaviour.
+- Reader (`MatchView.duties`, tracking only, as with real data), at 1 Hz while the opponents have the ball in play: closing down =
+  within 8 m of the man on the ball (or the man it is travelling to) and running at him at 2 m/s or more, or on top of him, and one
+  of the two nearest; tracking = paired one-to-one (Hungarian) with an attacker within 8 m, goal-side, and ahead of the ball (a man
+  behind it offers only a ball back); otherwise he holds his space (his mean position then, in words: depth and channel). By 15
+  minutes; a change (more / less / higher / deeper closing down, a different man, a different space) counts when the next two
+  windows both show it (one window is about four minutes of defending: one alone is noise; first try had 30-45 "changes" a team).
+- Scored against the job log (`score_duties`, five matches): frame agreement 0.63-0.69 (zone recall about 0.85, mark precision
+  0.6-0.68); the man read as tracked is the one the engine gave him 64-81 % of the time; press share per player and window r = 0.37-0.59.
+  Single frames cannot do better: a zonal defender standing near an attacker looks like a marker at that moment.
+- Seen: the press slider barely changes how much of the time a side presses, even in the truth (0.040 at press 0.25, 0.057 at 0.80);
+  it changes where. Pressing height read 54.9 m (true 58.8) for Redmere (0.8) against 42.0 (44.0) for Ashmere (0.25), so the reader
+  reports height (`press_height_m`) as well as share. The engine's press job also covers a jockeying or designated man 20 m away, which
+  is why press recall is only about 0.3: not tuned further (it would be fitting the reader to an internal label, not to football).
+- Tried, not kept: closing down only on the ball at someone's feet (fewer frames); nearest-defender-is-the-presser (recall 0.35,
+  precision 0.25-0.29).
+- Shown: agent tool `defensive_duties` (tactics analyst and scout); Board "Duties" (each man where he holds his space, ring = how
+  much he closes down, dashed line to the man he tracks, table, confirmed changes, the score); Scout "Without the ball" by window.
+  Live test on Foundry: "who presses and who tracks whom for Oakhaven, and after the red card?" called defensive_duties twice,
+  approved first time. The answer quoted raw shares ("press share 0.031") instead of percentages.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

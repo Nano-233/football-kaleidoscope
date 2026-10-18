@@ -156,6 +156,17 @@ def board(match):
     return out
 
 
+def duties(match):
+    """Out-of-possession duties per team, window by window, for the board; and the reader scored against the engine's job log."""
+    mv = MatchView(match)
+    out = []
+    for tm in (0, 1):
+        d = mv.duties(tm)
+        out.append(dict(window=900., rows=[dict(t0=r["t0"], t1=r["t1"], players=r["players"]) for r in d["rows"]], team_by_window=d["team_by_window"],
+                        changes=d["changes"], score=mv.score_duties(tm)))
+    return out
+
+
 def breakdowns(match):
     """The pause-and-draw breakdown of every goal and big chance (penalties aside)."""
     mv = MatchView(match)
@@ -197,7 +208,7 @@ def build(src, keep_agents=False):
     old = json.loads((dest / "match.json").read_text(encoding="utf-8")) if keep_agents else {}
     doc = dict(meta=meta, n_frames=len(q), events=events, team_stats=timeline, players=players,
                newsroom=old.get("newsroom") or asyncio.run(newsroom(packs)), recaps=old.get("recaps") or asyncio.run(recaps(match)), reading=reading(match), board=board(match),
-               breakdowns=breakdowns(match), profiles=profiles(match), tags=MatchView(match).player_tags(), clips=clips(match["events"], {k: v["name"] for k, v in players.items()}, meta["duration"]))
+               breakdowns=breakdowns(match), profiles=profiles(match), tags=MatchView(match).player_tags(), duties=duties(match), clips=clips(match["events"], {k: v["name"] for k, v in players.items()}, meta["duration"]))
     (dest / "match.json").write_text(json.dumps(doc, separators=(",", ":")), encoding="utf-8")
     print(dest, f"{sum(f.stat().st_size for f in dest.iterdir()) / 1e6:.1f} MB,", len(packs), "moments,", len(doc["clips"]), "clips")
     return dict(id=name, home=meta["home"]["name"], away=meta["away"]["name"], home_code=meta["home"]["code"], away_code=meta["away"]["code"], score=meta["score"])

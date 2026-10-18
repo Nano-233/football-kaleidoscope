@@ -572,6 +572,17 @@ function profileBlocks(pid, p) {
     <div class="label">Reels</div><div class="chips">${reels.map(r => `<button class="chip" data-reel="${esc(r)}">${esc(r)}</button>`).join('')}</div>`;
 }
 
+function dutyBlock(pid, tm) {  // his job without the ball, window by window (completed windows only, as on the board)
+  const D_ = (S.D.duties || [])[tm];
+  const ws = D_ ? D_.rows.filter(r => r.t1 <= S.t && r.players[pid]).map(r => [r, r.players[pid]]) : [];
+  if (!ws.length) return '';
+  const ch = D_.changes.filter(c => c.id === pid && c.confirmed_t <= S.t);
+  return `<div class="label">Without the ball</div><table class="stats"><thead><tr><th>Window</th><th>Closes down</th><th>Where</th><th>Tracks</th><th>Holds</th></tr></thead><tbody>
+    ${ws.map(([r, q]) => `<tr><td>${clockAt(r.t0)}–${clockAt(r.t1)}</td><td>${pct(q.press)}</td><td>${q.press_height_m != null ? conv('len', q.press_height_m) : '–'}</td>
+      <td>${q.tracks && q.tracks_share >= .5 ? esc(q.tracks) : 'zone'}</td><td>${esc(q.holds || '–')}</td></tr>`).join('')}</tbody></table>
+    ${ch.length ? `<div class="mono" style="margin-top:6px">${ch.map(c => `${esc(c.at)}: ${esc(c.change)}`).join('<br>')}</div>` : ''}`;
+}
+
 function playerView() {
   const p = S.info[S.player], s = S.D.players[S.player] || {}, side = p.team ? 'away' : 'home';
   const kv = kvFor(p.role).map(([k, l, f]) => `<div><b>${s[k] == null ? '–' : f ? f(s[k]) : s[k]}</b><span>${l}</span></div>`).join('');
@@ -596,7 +607,7 @@ function playerView() {
     <div class="bar" style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
       ${S.persona === 'scout' ? `<button class="btn primary" data-report="${esc(S.player)}">Scout report</button>` : `<button class="btn primary" data-hismatch="${esc(S.player)}">His match</button>`}
       <button class="btn" data-reel="Highlights">Highlights reel</button></div>
-    ${profileBlocks(S.player, p)}
+    ${profileBlocks(S.player, p)}${dutyBlock(S.player, p.team)}
     <div class="label">Actions (${acts.length})</div><div class="chips">${chips}</div>
     <ul class="actions" style="margin-top:10px">${rows || '<li><span></span><span class="empty">No actions in this group.</span></li>'}</ul>
     ${S.group === 'All' ? '<div class="mono" style="margin-top:8px">Pressures are under Defending.</div>' : ''}`;
@@ -759,6 +770,33 @@ function paintNetwork(tm, row) {
       }
   }
 }
+// out of possession, read from tracking (analytics/tools.py duties): where each man holds his space, how much he closes the ball down, whom he tracks
+const dutyRow = tm => { const D_ = (S.D.duties || [])[tm]; return D_ ? lastWin(D_.rows, D_.window) : null; };
+const pct = v => (v == null ? '–' : Math.round(v * 100) + '%');
+function dutyTip(id, q) {
+  return `${pname(id)}\ncloses the ball down ${pct(q.press)} of their possession${q.press_height_m != null ? `, ${conv('len', q.press_height_m)} from his goal` : ''}`
+    + `\ntracks a man ${pct(q.mark)}${q.tracks ? `, mostly ${q.tracks} (${pct(q.tracks_share)})` : ''}${q.holds ? `\nholds his space ${q.holds}` : ''}`;
+}
+function paintDuties(tm, row) {
+  if (!row) return;
+  const at = {};
+  for (const [id, q] of Object.entries(row.players)) if (q.holds_xy) at[id] = toWorld(tm, ...q.holds_xy);
+  const opp = (S.D.duties[1 - tm] || {}).rows, orow = opp && opp.find(r => r.t0 === row.t0);
+  for (const [id, q] of Object.entries(row.players)) {  // a line to the man he tracks, where that man held his own space
+    const o = q.tracks_id && orow && orow.players[q.tracks_id];
+    if (!at[id] || !o || !o.holds_xy || q.tracks_share < .5) continue;
+    const [ox, oy] = toWorld(1 - tm, ...o.holds_xy);
+    g.setLineDash([4, 4]); g.strokeStyle = 'rgba(241,242,244,.45)'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(px(at[id][0]), py(at[id][1])); g.lineTo(px(ox), py(oy)); g.stroke(); g.setLineDash([]);
+    g.beginPath(); g.arc(px(ox), py(oy), 5, 0, 7); g.strokeStyle = teamCol(1 - tm); g.lineWidth = 2; g.stroke();
+  }
+  for (const [id, q] of Object.entries(row.players)) {
+    if (!at[id]) continue;
+    const [X, Y] = [px(at[id][0]), py(at[id][1])], r = 9 + Math.min(10, q.press * 80);  // the ring grows with how much he closes down
+    hitPt(X, Y, dutyTip(id, q));
+    g.beginPath(); g.arc(X, Y, r, 0, 7); g.fillStyle = 'rgba(12,13,14,.75)'; g.fill(); g.lineWidth = 2.5; g.strokeStyle = teamCol(tm); g.stroke();
+    g.fillStyle = '#f1f2f4'; g.font = '600 11px "Segoe UI", system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(num(id), X, Y + .5);
+  }
+}
 function drawBoard(t) {
   const B = S.D.board, tm = S.board.team;
   g.save();
@@ -767,6 +805,8 @@ function drawBoard(t) {
     paintShape(tm, row && row[S.board.phase]);
   } else if (S.board.mode === 'Network') {
     paintNetwork(tm, lastWin(B.network[tm], B.net_window));
+  } else if (S.board.mode === 'Duties') {
+    paintDuties(tm, dutyRow(tm));
   } else if (S.board.mode === 'Press') {
     for (const [rt, team, x, y, by, how] of B.regains) {
       if (rt > t || rt < t - B.net_window || team !== tm) continue;
@@ -820,6 +860,19 @@ function boardView() {
       `<div class="label">${esc(M[b.team ? 'away' : 'home'].name)} · passing network ${clockAt(row.t0)}–${clockAt(row.t1)}</div>
        <table class="stats"><tbody>${row.links.slice(0, 6).map(([a, c, n]) => `<tr><td>${num(a)} ${esc(S.info[a].name)} → ${num(c)} ${esc(S.info[c].name)}</td><td>${n}</td></tr>`).join('')}</tbody></table>
        <div class="mono" style="margin-top:8px">Entries into the final third, left / centre / right: ${row.entries.join(' / ')}</div>`;
+  } else if (b.mode === 'Duties') {
+    const D_ = (S.D.duties || [])[b.team], row = dutyRow(b.team);
+    if (!D_) body = '<div class="empty">Rebuild the match data (scripts/build_site.py) for duties.</div>';
+    else {
+      const ps = row ? Object.entries(row.players).sort((x, y) => y[1].press - x[1].press) : [];
+      const seen = D_.changes.filter(c => c.confirmed_t <= S.t), sc = D_.score;
+      body = !row ? '<div class="empty">The first fifteen minutes are not over yet.</div>' :
+        `<div class="label">${esc(M[b.team ? 'away' : 'home'].name)} · without the ball · ${clockAt(row.t0)}–${clockAt(row.t1)}</div>
+        <table class="stats"><thead><tr><th>Player</th><th title="Share of their possession spent closing the ball down">Closes down</th><th title="Where, from his own goal">Where</th><th>Tracks</th></tr></thead><tbody>
+        ${ps.map(([id, q]) => `<tr title="${esc(dutyTip(id, q))}"><td>${num(id)} ${esc(S.info[id].name)}</td><td>${pct(q.press)}</td><td>${q.press_height_m != null ? conv('len', q.press_height_m) : '–'}</td><td>${q.tracks && q.tracks_share >= .5 ? esc(q.tracks) : '<span class="mono">zone</span>'}</td></tr>`).join('')}</tbody></table>
+        <div class="label">Changes</div>${seen.length ? `<ul class="actions">${seen.map(c => `<li><span class="clk">${esc(c.at)}</span><span>${esc(c.player)} ${esc(c.change)}</span><span></span><span><button class="link" data-seek="${c.t}">Watch</button></span></li>`).join('')}</ul>` : '<div class="mono">None confirmed yet (a change counts once two windows show it).</div>'}
+        <div class="mono" style="margin-top:8px">Read from tracking alone, as with real data: who closes the ball down, who follows a man (dashed line to him) and where each holds his space (the ring grows with closing down). Against the engine's own instructions: ${pct(sc && sc.frame_agreement)} of moments agree; the man read as tracked is the one he was given ${pct(sc && sc.tracked_man_right)} of the time; pressing height ${sc ? conv('len', sc.press_height_read_m) : '–'} read, ${sc ? conv('len', sc.press_height_true_m) : '–'} true.</div>`;
+    }
   } else if (b.mode === 'Press') {
     const rows = B.pressing[b.team], cur = Math.floor(S.t / B.net_window);
     body = `<div class="label">${esc(M[b.team ? 'away' : 'home'].name)} · pressing by 15 minutes</div>
@@ -830,7 +883,7 @@ function boardView() {
     body = `${winBar()}<div class="label">Win probability over the match</div>${winSvg()}<div class="label">Momentum · xG by five minutes</div>${momentumSvg()}
       <div class="label">Spells of dominance</div>${sp.length ? `<table class="stats"><tbody>${sp.map(x => `<tr><td>${esc(x.team)} ${esc(x.start)}–${esc(x.end)}</td><td>xG ${x.xg} v ${x.opponent_xg}</td></tr>`).join('')}</tbody></table>` : '<div class="mono">None yet.</div>'}`;
   }
-  return `<div class="chips">${['Shape', 'Network', 'Press', 'Momentum'].map(m => chip('bmode', m, m, b.mode === m)).join('')}</div>
+  return `<div class="chips">${['Shape', 'Network', 'Press', 'Duties', 'Momentum'].map(m => chip('bmode', m, m, b.mode === m)).join('')}</div>
     ${b.mode !== 'Momentum' ? `<div class="chips" style="margin-top:8px">${[0, 1].map(t => chip('bteam', t, M[t ? 'away' : 'home'].code, b.team === t)).join('')}
       ${b.mode === 'Shape' ? chip('bphase', 'in_possession', 'With the ball', b.phase === 'in_possession') + chip('bphase', 'out_of_possession', 'Without the ball', b.phase === 'out_of_possession') : ''}</div>` : ''}
     <div style="margin-top:12px">${body}</div>`;

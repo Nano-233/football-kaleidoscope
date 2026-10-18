@@ -37,7 +37,8 @@ tools (never assume how a system defends) and say which phase you mean. A system
 that minute, and nothing else: name each one with its minute; do not add or infer others from team_shape windows, substitutions or
 without_ball_changes (those describe how the side defended; mention them only as that). Call formation_changes first, then team_shape for each period between changes. For each change of system, say why it was made: the match state at that minute
 (the score from find_moments with goals, red cards, substitutions) is what a manager reacts to. Look for causes: changes of shape, pressing height and PPDA by period, momentum
-spells, where attacks start, substitutions. For why goals were scored or conceded, find every one of
+spells, where attacks start, substitutions. For who presses, who tracks whom and who holds which space (and when that changed), use
+defensive_duties: its numbers are shares of the opponents' possession, read from tracking. For why goals were scored or conceded, find every one of
 those goals so far with find_moments and call moment_breakdown on each: say how each move was built and where it beat the defence (who lost the ball,
 the pass that broke the line, who was free), not general trends. For a "what if" question (a different instruction or formation from a minute on), use what_if
 and report both columns, as it was and with the change, as chances out of the runs; say the runs are simulations. Use only numbers your tools returned. Reply with concise findings (bullet points), each with
@@ -109,6 +110,8 @@ def _until(match, t):
     m["events"] = [e for e in match["events"] if e["t"] <= t]
     m["frames"] = match["frames"][:int(t / match["meta"]["dt"]) + 1]
     m["meta"] = dict(match["meta"], duration=float(t))
+    if match.get("jobs"):
+        m["jobs"] = match["jobs"][:len(m["frames"])]
     return m
 
 
@@ -217,6 +220,18 @@ class Desk:
             """PPDA for the whole match and by 15 minutes (lower = harder press), height of the defensive actions, where balls were won and counter-press wins."""
             return mv.pressing(team_ix(team))
 
+        def defensive_duties(team: Annotated[str, "home, away or the team name"], player: Annotated[str, "player name, shirt number or id; empty for the whole team"] = "") -> dict:
+            """Out of possession, read from tracking: how much of the opponents' possession each player spends closing the ball down and where
+            (press_height_m from his own goal), how much tracking one man and whom, the space he holds in the block, by 15 minutes, and the
+            changes (closes down more / less / higher / deeper, tracks someone else, holds a different space) with the minute they started."""
+            d = mv.duties(team_ix(team))
+            if player:
+                pid = player_id(player)
+                one = next((v for v in d["players"].values() if v["id"] == pid), None)
+                return dict(team=d["team"], player=mv.names.get(pid), duties=one or "no defending time to read", changes=[{k: v for k, v in c.items() if k not in ("id", "t", "confirmed_t")} for c in d["changes"] if c["player"] == mv.names.get(pid)], note=d["note"])
+            return dict(team=d["team"], team_by_window=d["team_by_window"], changes=[{k: v for k, v in c.items() if k not in ("id", "t", "confirmed_t")} for c in d["changes"]], note=d["note"],
+                        players={nm: {k: v for k, v in q.items() if k != "by_window"} for nm, q in d["players"].items()})
+
         def momentum() -> dict:
             """xG, shots and field tilt for both teams by 5 minutes, cumulative xG, and the spells when one side dominated."""
             return mv.momentum()
@@ -270,12 +285,12 @@ class Desk:
             self.trail.append(dict(agent="tactics_analyst", tool="what_if", args=kw))
             return json.dumps(out, default=str)
 
-        tt = [team_shape, formation_changes, pressing, momentum, passing_network, moment_breakdown, find_moments, match_summary]
-        st = [player_report, find_moments, moment_breakdown, list_players, match_summary]
+        tt = [team_shape, formation_changes, pressing, defensive_duties, momentum, passing_network, moment_breakdown, find_moments, match_summary]
+        st = [player_report, defensive_duties, find_moments, moment_breakdown, list_players, match_summary]
         self.tactics = Agent(client, TACTICS, name="tactics_analyst", tools=[logged("tactics_analyst", f) for f in tt] + [what_if])
         self.scout = Agent(client, SCOUT, name="scout", tools=[logged("scout", f) for f in st])
         self.orchestrator = Agent(client, ORCHESTRATOR, name="orchestrator", tools=[
-            self.tactics.as_tool(name="tactics_analyst", description="Investigates teams, shapes, pressing, momentum and why things happened.", arg_name="task"),
+            self.tactics.as_tool(name="tactics_analyst", description="Investigates teams, shapes, pressing, who closes down or tracks whom, momentum and why things happened.", arg_name="task"),
             self.scout.as_tool(name="scout", description="Investigates players: reports, strengths, weaknesses, moments.", arg_name="task"),
             logged("orchestrator", match_summary), logged("orchestrator", list_players)])
         self.writer = Agent(client, _writer_text(self.profile), name="writer")

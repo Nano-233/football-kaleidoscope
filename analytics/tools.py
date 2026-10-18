@@ -10,6 +10,7 @@ tracking frames; no model computes a figure. Each tool returns a small JSON-read
     mv.sequence(event_id)                 # what led to a moment, with the engine's reasons
     mv.breakdown(event_id)                # the move behind a shot as stops to pause on: the regain, both shapes, the pass options, the shot
     mv.player_profile(player_id)          # stats, rating terms, heat map, physical output, against role averages
+    mv.duties(team=1)                     # out of possession, per player and 15 minutes: how often he closes the ball down, whom he tracks, the space he holds
     mv.find_moments(player=..., types=[...], outcome=..., third=..., minutes=(a, b))
 
 Frames: team 0 attacks towards x = L, team 1 towards x = 0. Tools report positions in the team's own frame (own goal at x = 0,
@@ -55,6 +56,8 @@ def _hull(P):
 
 
 SPRINT = 7.0      # m/s (25 km/h), the usual sprint threshold
+nrm = lambda a, axis=-1: np.linalg.norm(a, axis=axis)
+DUTY_PRESS_R, DUTY_APPROACH, DUTY_MARK_R = 8., 2., 8.  # m, m/s, m: closing down (within 8 m and running at the carrier at 2 m/s or more), tracking a man (within 8 m)
 ROLE_NORMS = pathlib.Path(__file__).with_name("role_norms.json")  # per-role per-90 averages over many simulated matches (scripts/role_norms.py)
 GROUPS = {
     "passing": ("pass", "cross", "ball_receipt"),
@@ -70,6 +73,8 @@ class MatchView:
     def __init__(self, match):
         self.meta, self.events = match["meta"], match["events"]
         self.F = np.asarray(match["frames"], float)
+        self.jobs = np.asarray(match["jobs"], int) if match.get("jobs") else None  # the engine's own defensive jobs: only for scoring the duty reader, never read by it
+        self._duty_cache = {}
         self.dt = self.meta["dt"]
         self.players = {}
         for t, side in enumerate(("home", "away")):
@@ -644,6 +649,177 @@ class MatchView:
                         best = sm[j] + .5 / 3.6  # the next tag needs half a km/h more
                         out.append(dict(t=round(float((i0 + j + 1) * self.dt), 1), player=pid, kind="speed", value=round(float(sm[j] * 3.6), 1)))
         return sorted(out, key=lambda r: r["t"])
+
+    # ---------------------------------------------------------------- duties out of possession
+    def _duty_frames(self, team, every=5):
+        """Each outfield man's duty, read from tracking alone (as an analyst would read real tracking data), at 1 Hz while the opponents
+        have the ball on the pitch: 2 closing the ball down (within DUTY_PRESS_R of the carrier and running at him, or on top of him),
+        1 tracking a man (paired one-to-one with the nearest attacker within DUTY_MARK_R, goal-side counted closer), 0 holding his
+        space in the block. Only men ahead of the ball are tracked: one behind it offers only a ball back. Returns the frame indices,
+        the duties (n, 11) and the slot (0-10 of the opponents) of the man tracked."""
+        if (team, every) in self._duty_cache:
+            return self._duty_cache[(team, every)]
+        XY = self.F[:, 5:49].reshape(len(self.F), 22, 2)
+        poss, car = self.F[:, 4].astype(int), self.F[:, 3].astype(int)
+        me, op0 = slice(11 * team, 11 * team + 11), 11 * (1 - team)
+        live = np.ones(len(self.F), bool)
+        for a, b, _ in self.meta.get("dead_log", []):
+            live[int(a / self.dt):int(b / self.dt) + 1] = False
+        idx = np.nonzero((poss == 1 - team) & live)[0][::every]  # their ball, in play (passes in the air included)
+        nxt, cur = np.empty(len(car), int), -1  # with the ball in the air, the man who controls it next (a reading after the fact, a few seconds ahead)
+        for i in range(len(car) - 1, -1, -1):
+            cur = car[i] if car[i] >= 0 else cur
+            nxt[i] = cur
+        goal = np.array([0., W / 2]) if team == 0 else np.array([L, W / 2])
+        duty, tgt = np.zeros((len(idx), 11), int), -np.ones((len(idx), 11), int)
+        for n, i in enumerate(idx):
+            P, O = XY[i, me], XY[i, op0:op0 + 11]
+            Vp = (XY[min(i + 1, len(XY) - 1), me] - XY[max(i - 1, 0), me]) / (2 * self.dt)
+            who = car[i] if car[i] >= 0 else nxt[i]
+            on_ball = op0 <= who < op0 + 11  # the ball is theirs, at a man's feet or on its way to him
+            c = XY[i, who] if on_ball else self.F[i, 1:3]
+            d = nrm(P - c, axis=1)
+            app = ((c - P) * Vp).sum(1) / np.maximum(d, .1)  # how fast he runs at the carrier
+            dd = np.where(P[:, 1] < -5, 99., d); dd[0] = 99.
+            first2 = np.zeros(11, bool); first2[np.argsort(dd)[:2]] = True  # only the nearest two can be engaging the ball; a third man running is covering
+            press = (d <= DUTY_PRESS_R) & ((app >= DUTY_APPROACH) | (d <= 2.)) & on_ball & first2  # closing down the man on the ball, or the man it is going to
+            press[0] = False
+            duty[n, press] = 2
+            D = nrm(P[:, None] - O[None], axis=2)
+            D = np.where(nrm(P - goal, axis=1)[:, None] < nrm(O - goal, axis=1)[None] + 1., D, D + 3.)  # a man on the wrong side of his attacker is not marking him
+            D[:, nrm(O - goal, axis=1) > nrm(c - goal) + 2.] = 99.  # behind the ball
+            if on_ball:
+                D[:, who - op0] = 99.
+            D[:, 0] = D[0, :] = 99.
+            D[press, :] = 99.
+            D[P[:, 1] < -5, :] = D[:, O[:, 1] < -5] = 99.  # sent off
+            for a, b in zip(*linear_sum_assignment(D)):
+                if D[a, b] <= DUTY_MARK_R:
+                    duty[n, a], tgt[n, a] = 1, b
+        self._duty_cache[(team, every)] = idx, duty, tgt
+        return idx, duty, tgt
+
+    @staticmethod
+    def _area(x, y):
+        """A place in the team's own frame, in words: depth and channel (left is the left as the team attacks)."""
+        depth = "deep" if x < 30 else "in the middle third" if x < 65 else "high"
+        lane = ("on the left", "in the left half-space", "centrally", "in the right half-space", "on the right")[int(np.clip(y / (W / 5), 0, 4))]
+        return f"{depth}, {lane}"
+
+    def duties(self, team, window=900.):
+        """Out of possession, per player and per window: the share of the time he spends closing the ball down and tracking a man, the
+        man he tracks most, and where he stands when he holds his space; then what changed from one window to the next. Read from
+        tracking only. Shares are of the time the opponents had the ball on the pitch."""
+        idx, duty, tgt = self._duty_frames(team)
+        ts = idx * self.dt
+        XY = self._team_xy(team, self.F[idx, 5 + 22 * team:5 + 22 * team + 22].reshape(len(idx), 11, 2))
+        dur, rows = self.meta["duration"], []
+        w0 = 0.
+        while w0 < dur:
+            sel = (ts >= w0) & (ts < w0 + window)
+            row = dict(window=f"{self._clock(w0)}-{self._clock(min(w0 + window, dur))}", t0=w0, t1=min(w0 + window, dur), players={})
+            for k in range(1, 11):
+                occ = np.array([self._occupant(11 * team + k, t) for t in ts[sel]])
+                for pid in set(occ):
+                    on = np.nonzero(sel)[0][occ == pid]
+                    if len(on) < 60:  # under a minute of defending: too little to read
+                        continue
+                    dk, tk = duty[on, k], tgt[on, k]
+                    marked = tk[dk == 1]
+                    top = np.bincount(marked, minlength=11).argmax() if len(marked) else -1
+                    zx = XY[on, k][dk == 0]
+                    zx = zx[zx[:, 1] > -5] if len(zx) else zx
+                    rows_p = dict(press=round(float((dk == 2).mean()), 3), mark=round(float((dk == 1).mean()), 3),
+                                  tracks=self.names.get(self._occupant(11 * (1 - team) + int(top), float(ts[on].mean()))) if top >= 0 and (marked == top).mean() >= .35 else None,
+                                  tracks_id=self._occupant(11 * (1 - team) + int(top), float(ts[on].mean())) if top >= 0 and (marked == top).mean() >= .35 else None,
+                                  tracks_share=round(float((marked == top).mean()), 2) if top >= 0 else None)
+                    px_ = XY[on, k, 0][dk == 2]
+                    if len(px_) >= 10:  # where he engages: metres from his own goal, and the share of it in their half
+                        rows_p.update(press_height_m=round(float(px_.mean()), 1), press_in_their_half=round(float((px_ > L / 2).mean()), 2))
+                    if len(zx):
+                        cx, cy = zx.mean(0)
+                        rows_p.update(holds=self._area(cx, cy), holds_xy=[round(float(cx), 1), round(float(cy), 1)])
+                    rows_p["minutes_defending"] = round(len(on) * 5 * self.dt / 60, 1)  # samples are 1 s apart
+                    row["players"][pid] = rows_p
+            rows.append(row)
+            w0 += window
+        changes = []  # a change counts when the next two windows both show it (one window of four minutes' defending is too noisy to call)
+        for a, b, c in zip(rows, rows[1:], rows[2:]):
+            for pid, q in b["players"].items():
+                p_, r_ = a["players"].get(pid), c["players"].get(pid)
+                if not (p_ and r_) or min(p_["minutes_defending"], q["minutes_defending"], r_["minutes_defending"]) < 3:
+                    continue
+                nm, at = self.names[pid], b["window"].split("-")[0]
+                n0 = len(changes)
+                both = lambda f: f(q) and f(r_)
+                lo, hi = sorted((p_["press"], min(q["press"], r_["press"]) if q["press"] > p_["press"] else max(q["press"], r_["press"])))
+                if hi - lo >= .04 and hi >= 2 * max(lo, .01) and (q["press"] > p_["press"]) == (r_["press"] > p_["press"]):
+                    changes.append(dict(at=at, player=nm, change=f"closes the ball down {'more' if q['press'] > p_['press'] else 'less'}", before=p_["press"], after=round((q["press"] + r_["press"]) / 2, 3)))
+                if all("press_height_m" in w for w in (p_, q, r_)):
+                    d1, d2 = q["press_height_m"] - p_["press_height_m"], r_["press_height_m"] - p_["press_height_m"]
+                    if min(abs(d1), abs(d2)) >= 10 and d1 * d2 > 0:
+                        changes.append(dict(at=at, player=nm, change=f"closes the ball down {'higher' if d1 > 0 else 'deeper'}", before_height_m=p_["press_height_m"],
+                                            after_height_m=round((q["press_height_m"] + r_["press_height_m"]) / 2, 1)))
+                if p_["tracks"] and both(lambda w: w["tracks"] and w["tracks"] != p_["tracks"] and w["tracks_share"] >= .5) and q["tracks"] == r_["tracks"]:
+                    changes.append(dict(at=at, player=nm, change=f"tracks {q['tracks']} instead of {p_['tracks']}"))
+                if "holds" in p_ and both(lambda w: w.get("holds") and w["holds"] != p_["holds"]) and q["holds"] == r_["holds"] and np.hypot(*np.subtract(q["holds_xy"], p_["holds_xy"])) >= 10:
+                    changes.append(dict(at=at, player=nm, change=f"holds a different space: now {q['holds']} (was {p_['holds']})"))
+                for ch in changes[n0:]:
+                    ch.update(id=pid, t=b["t0"], confirmed_t=c["t1"])  # seen once the second window is over
+        players = {}
+        for pid in {pid for r in rows for pid in r["players"]}:
+            ws = [(r["window"], r["players"][pid]) for r in rows if pid in r["players"]]
+            mins = sum(w["minutes_defending"] for _, w in ws)
+            most = lambda key: max({w[key] for _, w in ws if w.get(key)}, key=lambda v: sum(w["minutes_defending"] for _, w in ws if w.get(key) == v), default=None)
+            players[self.names[pid]] = dict(id=pid, role=self.players[pid]["role"], minutes_defending=round(mins, 1), tracks_most=most("tracks"), holds_most=most("holds"),
+                                            press=round(sum(w["press"] * w["minutes_defending"] for _, w in ws) / mins, 3),
+                                            mark=round(sum(w["mark"] * w["minutes_defending"] for _, w in ws) / mins, 3),
+                                            by_window={wn: {k: v for k, v in w.items() if k not in ("holds_xy", "tracks_id")} for wn, w in ws})
+        team_rows = []
+        for r in rows:
+            sel = (ts >= r["t0"]) & (ts < r["t1"])
+            px_ = XY[sel][:, 1:, 0][duty[sel][:, 1:] == 2]
+            team_rows.append(dict(window=r["window"], press_share=round(float((duty[sel][:, 1:] == 2).mean()), 3) if sel.any() else None,
+                                  mark_share=round(float((duty[sel][:, 1:] == 1).mean()), 3) if sel.any() else None,
+                                  press_height_m=round(float(px_.mean()), 1) if len(px_) >= 10 else None))
+        return dict(team=self.team_names[team], windows=[r["window"] for r in rows], team_by_window=team_rows, players=players, changes=changes, rows=rows,
+                    note="read from tracking alone: press = share of the opponents' possession spent closing the ball down (press_height_m: where, "
+                         "metres from his own goal; a high press shows as height more than as time); mark = share spent "
+                         "tracking one man (paired goal-side within 8 m); the rest he holds his space in the block. At a single moment a zonal "
+                         "defender near an attacker looks like a marker, so read the 15-minute shares, not single frames.")
+
+    def score_duties(self, team, window=900.):
+        """The duty reader against what the engine actually told each defender (its job log): frame agreement on zone / mark / press,
+        how well the press shares match per player and window, and how often the man read as tracked is the one he was given."""
+        if self.jobs is None:
+            return None
+        idx, duty, tgt = self._duty_frames(team)
+        J = self.jobs[idx, 11 * team:11 * team + 11]
+        true = np.where((J >= 0) & (J <= 10), 1, np.where((J == 200) | (J == 201), 2, 0))  # cover, lane, post and space are holding a place in the block
+        out = true[:, 1:], duty[:, 1:]
+        agree = float((out[0] == out[1]).mean())
+        ts = idx * self.dt
+        rp, tp, hits, n_t = [], [], 0, 0
+        w0 = 0.
+        while w0 < self.meta["duration"]:
+            sel = (ts >= w0) & (ts < w0 + window)
+            if sel.sum() >= 60:
+                for k in range(1, 11):
+                    rp.append(float((duty[sel, k] == 2).mean())); tp.append(float((true[sel, k] == 2).mean()))
+                    tj = J[sel, k][(J[sel, k] >= 0) & (J[sel, k] <= 10)]
+                    rm = tgt[sel, k][duty[sel, k] == 1]
+                    if len(tj) >= .25 * sel.sum() and len(rm):
+                        n_t += 1; hits += int(np.bincount(tj, minlength=11).argmax() == np.bincount(rm, minlength=11).argmax())
+            w0 += window
+        XY = self._team_xy(team, self.F[idx, 5 + 22 * team:5 + 22 * team + 22].reshape(len(idx), 11, 2))[:, 1:, 0]
+        h_read, h_true = XY[out[1] == 2], XY[out[0] == 2]
+        return dict(frame_agreement=round(agree, 3),
+                    press_height_read_m=round(float(h_read.mean()), 1) if len(h_read) else None, press_height_true_m=round(float(h_true.mean()), 1) if len(h_true) else None, by_duty={nm: dict(true_share=round(float((out[0] == c).mean()), 3), recall=round(float((out[1][out[0] == c] == c).mean()), 3),
+                                                                     precision=round(float((out[0][out[1] == c] == c).mean()), 3) if (out[1] == c).any() else None)
+                                                            for c, nm in ((0, "zone"), (1, "mark"), (2, "press"))},
+                    press_share_corr=round(float(np.corrcoef(rp, tp)[0, 1]), 3) if len(rp) > 2 else None,
+                    press_share_mae=round(float(np.abs(np.subtract(rp, tp)).mean()), 3) if rp else None,
+                    tracked_man_right=round(hits / n_t, 3) if n_t else None, tracked_cases=n_t)
 
     def find_moments(self, player=None, team=None, types=None, group=None, outcome=None, third=None, minutes=None, limit=40):
         """Events matching a filter: player id, team index, event types or an action group (passing, shooting, carrying, defending,

@@ -121,7 +121,7 @@ class Match:
         s.line_hist = [collections.deque(maxlen=4), collections.deque(maxlen=4)]  # the line as the passer last saw it (~.8 s ago)
         s.done = False
         s.score = [0, 0]
-        s.events, s.frames = [], []
+        s.events, s.frames, s.jobs = [], [], []
         s.ball, s.ball_v = np.array([L / 2, W / 2]), np.zeros(2)
         s.state, s.poss, s.carrier, s.flight, s.rk = "dead", -1, -1, None, None
         s.last_touch, s.last_ctrl_team = -1, None
@@ -550,6 +550,7 @@ class Match:
     def _record(s):
         s.frames.append(np.concatenate([[s.t, *s.ball, s.carrier, -1 if s.last_ctrl_team is None else s.last_ctrl_team],
                                         s.pos.ravel(), [s._ball_z()], np.round(np.arctan2(s.head[:, 1], s.head[:, 0]), 2)]))
+        s.jobs.append(np.concatenate(s.job_prev))  # ground truth for the duty reader (analytics/tools.py): each defender's job, logged only, never read back
 
     # ------------------------------------------------------------------ possession
     def _dwell(s, i):
@@ -1989,4 +1990,7 @@ class Match:
             meta=dict(seed=s.seed, dt=s.dt, pitch=[L, W], home=team_meta(s.teams[0]), away=team_meta(s.teams[1]),
                       score=s.score, dead_log=[[round(a, 1), round(b if b is not None else s.t, 1), k] for a, b, k in s.dead_log], ball_in_play=round(1 - s.state_ticks["dead"] / max(sum(s.state_ticks.values()), 1), 3), half_time=s.h1, added_time=s.added, duration=round(s.t, 1), info=s.info,
                       frame_cols=["t", "ball_x", "ball_y", "carrier", "poss"] + [f"{c}{i}" for i in range(22) for c in "xy"] + ["ball_z"] + [f"head{i}" for i in range(22)]),
-            events=s.events, frames=fr.tolist())
+            events=s.events, frames=fr.tolist(), jobs=np.array(s.jobs, int).tolist(),
+            jobs_note="per frame, per slot (home 0-10, away 11-21): the job the defending team's matching gave him when it last ran: -1 none (holds his place "
+                      "in the block), 0-10 mark the opponent in that slot of his team, 100 lane to goal, 102 cut-back space, 200/201 press, 210 cover, 300+ open space cell; "
+                      "only meaningful while his team is out of possession")

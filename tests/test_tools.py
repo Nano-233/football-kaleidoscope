@@ -23,4 +23,10 @@ shots = mv.find_moments(player=pid, types=["shot"])["count"]
 assert shots == sum(1 for e in match["events"] if e["type"] == "shot" and e.get("player") == pid)
 goal = next(e for e in match["events"] if e["type"] == "goal")
 assert mv.sequence(goal["id"])["steps"][-1]["type"] == "goal"
+# duties: shares are shares, and the reader beats chance against the engine's job log (a third of the frames would be a coin among three)
+for tm in (0, 1):
+    du = mv.duties(tm)
+    assert du["players"] and all(0 <= q["press"] <= 1 and 0 <= q["mark"] <= 1 and q["press"] + q["mark"] <= 1 for q in du["players"].values())
+    if match.get("jobs"):
+        assert mv.score_duties(tm)["frame_agreement"] > .5
 print("tools ok")
