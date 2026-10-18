@@ -23,8 +23,8 @@ prof = mv.player_profile(pid)
 assert prof["physical"]["distance_km"] > 5 and prof["heat_map_6x4"] and prof["per90_vs_role"]
 shots = mv.find_moments(player=pid, types=["shot"])["count"]
 assert shots == sum(1 for e in match["events"] if e["type"] == "shot" and e.get("player") == pid)
-goal = next(e for e in match["events"] if e["type"] == "goal")
-assert mv.sequence(goal["id"])["steps"][-1]["type"] == "goal"
+goal = next(e for e in match["events"] if e["type"] in ("goal", "own_goal"))  # a match may have only an own goal
+assert mv.sequence(goal["id"])["steps"][-1]["type"] == goal["type"]
 # duties: shares are shares, and the reader beats chance against the engine's job log (a third of the frames would be a coin among three)
 for tm in (0, 1):
     du = mv.duties(tm)
