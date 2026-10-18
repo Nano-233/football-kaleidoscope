@@ -90,6 +90,7 @@ class Match:
         s.run_until, s.run_cool = np.zeros(22), np.zeros(22)
         s.deflected = None  # the last shot that came off a defender: who struck it, who deflected it, when
         s.box_prev = [[-1] * 4, [-1] * 4]  # who held each box place last time (incumbents keep the job)
+        s.cb_man = [(-1, -9.), (-1, -9.)]  # who held the cut-back point at the byline, and when (he attacks the spot if the cross goes in instead)
         s.wide_hold = [[-1, -1], [-1, -1]]  # who holds each touchline, per team (low-y, high-y)
         s.run_tgt = np.zeros((22, 2))
         s.commit_until = np.zeros(22)  # presser committed to a tackle until this time

@@ -1462,6 +1462,24 @@ first (real about -10 to -20 %), last-15 goals 14 % of all (real 20-22 %). A tra
   his team-mates' drop. On the five rebuilt demo matches, pooled over 54 full-match players: r = 0.50 with true fatigue; those flagged
   tiring are at 0.71 true fatigue against 0.49.
 
+### Big chances: the cut-back man at the byline (engine, 2026-10-18; tag engine-v5.1)
+Measured first (`big_chance_source.py` 48): the whole big-chance gap is cut-backs: 0.02 vs 0.25 a team-match (cross 0.27 | 0.35,
+through ball 0.03 | 0.02, other pass 0.09 | 0.10, no pass 0.08 | 0.08); shots after a cut-back 0.2 vs 0.8, after a cross 5.1 vs 3.2.
+Checked DEVLOG before building (user): a defender reaction delay is already on the dead-end list (Oct 8, "no effect"): dropped;
+re-valuing passes into the box by the receiver's xG would override the pass policy, which reproduces real choices on real frames
+("it is where the men stand"): dropped; filling the penalty-spot place all the time (of_mask 14, Oct 9 and 12) made shots, not
+chances. Built the narrower thing those entries point at:
+- With our man on the ball at the byline (last 12 m, outside the six-yard box) the man for the penalty-spot place holds the
+  cut-back point (11.5 m out, 1.5 m far side of the middle) instead of charging; if the cross goes in instead he arrives late at
+  the spot (`byline_on`, `cb_man`).
+- `cutback_outcome.py` 48, off | on | real: reached a team-mate 0.41 | 0.44 | 0.44, a shot follows 0.23 | 0.31 | 0.31, first time
+  0.76 | 0.61 | 0.59, its xG 0.091 | 0.105 | 0.144.
+- 96 unseen matches: loss 124.2 -> 122.7 (holding only) -> 121.6 (holding, then the spot on a cross); goals 1.11 -> 1.28 (1.24),
+  big chances 0.36 -> 0.54 (0.86), shots 15.4 -> 15.7 (12.9).
+- Not solved: big chances from cut-backs are still about 0.01 (cut-backs 1.2 a team-match; the shot after one is weaker than real).
+  The 48-match source probe (one pairing, default tactics) put all big chances at 0.32 against 0.50 before: 48 matches swing about
+  0.1 at this rate, so the 96 unseen matches decide.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

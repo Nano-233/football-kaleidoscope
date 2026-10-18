@@ -646,9 +646,24 @@ def team_targets(m, t):
             if hold[0 if Bs[1] < W / 2 else 1] >= 0:
                 held[hold[0 if Bs[1] < W / 2 else 1]] = True  # only the ball-side holder is reserved: the far-side one may attack the back post
             ids = teamplay.box_slots(m, t, role, out_f, P, Bs, side_o, held, carrier_l, m.box_prev[t])
+            spot_man = ids[1]
             if not TP.get("of_slots", 0.):
                 ids = [i_ if (int(TP.get("of_mask", 13.)) >> k_) & 1 else -1 for k_, i_ in enumerate(ids)]  # only the places in the mask are filled
             m.box_prev[t] = ids
+            # byline staging: with our man on the ball at the byline (the last 12 m, outside the six-yard box) the defenders are dragged towards their own
+            # goal line, so the man for the penalty-spot place does not join the charge: he holds the cut-back point, just far side of the spot, and waits
+            # (real teams have 2.0 team-mates in the cut-back zone at that moment, 0.86 of them free; the sim had 0.81 and 0.47). Only at the byline: filling
+            # the spot place all the time (of_mask 14, Oct 9 and 12) made shots, not chances.
+            at_byline = TP.get("byline_on", 1.) > 0 and carrier_l >= 0 and m.state == "held" and Bs[0] > L - TP.get("byline_d", 12.) and abs(Bs[1] - W / 2) > 9.16
+            if at_byline and ids[1] < 0 and spot_man >= 0 and spot_man not in ids:
+                cb_ = np.array([L - TP.get("cutback_d", 11.5), W / 2 - side_o * TP.get("cutback_lat", 1.5)])
+                zone[spot_man] = (min(cb_[0], max(cap_o[spot_man], ba[spot_man, 0])), cb_[1])
+                plan_skip[spot_man] = True
+                m.cb_man[t] = (spot_man, m.t)
+            cbm, cbt = m.cb_man[t]
+            if TP.get("byline_on", 1.) > 0 and cbm >= 0 and cbm not in ids and m.t - cbt < 3. and teamplay.in_flight_to_goal(m, t):
+                zone[cbm], urgent[cbm] = teamplay.slot_point(1, side_o), True  # the cross went in instead: he arrives late at the penalty spot
+                plan_skip[cbm] = True
             st = teamplay.stage(Bs[0] / L, teamplay.in_flight_to_goal(m, t))
             for k_, i_ in enumerate(ids):
                 if i_ >= 0:
