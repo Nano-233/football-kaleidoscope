@@ -774,6 +774,9 @@ class MatchView:
             players[self.names[pid]] = dict(id=pid, role=self.players[pid]["role"], minutes_defending=round(mins, 1), tracks_most=most("tracks"), holds_most=most("holds"),
                                             press=round(sum(w["press"] * w["minutes_defending"] for _, w in ws) / mins, 3),
                                             mark=round(sum(w["mark"] * w["minutes_defending"] for _, w in ws) / mins, 3),
+                                            press_height_m=round(float(np.average([w["press_height_m"] for _, w in ws if "press_height_m" in w],
+                                                                                   weights=[w["press"] * w["minutes_defending"] for _, w in ws if "press_height_m" in w])), 1)
+                                            if any("press_height_m" in w and w["press"] > 0 for _, w in ws) else None,
                                             by_window={wn: {k: v for k, v in w.items() if k not in ("holds_xy", "tracks_id")} for wn, w in ws})
         team_rows = []
         for r in rows:

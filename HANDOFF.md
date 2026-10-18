@@ -76,11 +76,13 @@ Server answer cache: `server/cache` (git-ignored), keyed by match data, question
 
 ## Open items, in order
 
-1. Deploy (on go-ahead): `./infra/deploy.ps1` in PowerShell from the repo root; then open the URL, check Ask, What-if, Recap.
-2. Optional: raise the gpt-4.1-mini capacity (user's call).
-3. Accuracy left: formation 0.6. The ceiling is the reader: the engine's 4-3-3 plays as 4-1-4-1 (wingers level with midfield) and
-   its 3-4-3 with ten men as 5-4-1. "Why did they concede?" covers only the latest goal (orchestrator narrows the task).
-4. README (status table, quick start, architecture, Microsoft tech used), pitch, < 2 min video. Last.
+1. Make the repo public (user's call; it is private now, the rules need it public). Check the history for anything sensitive first.
+2. Deploy (on go-ahead): `./infra/deploy.ps1` in PowerShell from the repo root; then open the URL, check Ask, What-if, Recap, Live run.
+   Optional: an Azure budget alert on the resource group (the server's daily allowance resets when the app restarts).
+3. Eval: add duty and pass-quality questions to `scripts/eval_newsroom.py`, scored against engine truth (jobs log).
+4. README (status table is stale: quick start, architecture, Microsoft tech used, judge test instructions), pitch, < 2 min video.
+5. Known, can live with: formation 0.6 (reader ceiling: the engine's 4-3-3 plays as 4-1-4-1); Live run queued/drafting states not
+   seen on screen; phone layout not rechecked since the new features.
 
 ## Key files
 

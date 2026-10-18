@@ -983,7 +983,7 @@ async function askNewsroom(q) {
   try {
     const res = await fetch('api/ask?stream=1', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ match: S.id, question: q, t: Math.max(60, S.t), profile: { persona: S.persona, depth: P.depth, language: P.language, club: P.club, player: P.player, units: P.units } }) });
-    if (!res.ok) throw new Error(res.status === 404 || res.status === 405 || res.status === 501 ? NO_SERVER : `The newsroom could not answer (${res.status}).`);
+    if (!res.ok) throw new Error(res.status === 404 || res.status === 405 || res.status === 501 ? NO_SERVER : res.status === 429 ? await res.text() : `The newsroom could not answer (${res.status}).`);
     // server-sent events: each step of the newsroom as it happens, then the answer
     const reader = res.body.getReader(), dec = new TextDecoder();
     let buf = '';
@@ -1254,7 +1254,7 @@ function startLive() {
   src.onerror = () => {  // no reconnect: that would start a second run from the same minute
     if (S.live !== L || L.done) return;
     L.done = true; stopLive(L.started);
-    toast(L.started ? 'Live connection dropped; the feed keeps what arrived.' : 'Live run needs the newsroom server and is one at a time: another may be on. Try again shortly.');
+    toast(L.started ? 'Live connection dropped; the feed keeps what arrived.' : 'Live run needs the newsroom server, runs one at a time and has a daily allowance: another may be on. Try again shortly.');
   };
   render(true);
 }

@@ -21,7 +21,7 @@ from agent_framework import Agent
 
 from analytics.tools import MatchView
 from matchsim.whatif import cached_what_if, t_at_minute
-from newsroom.agents import _run, _verdict, unsupported_numbers, wrong_leader, wrong_team
+from newsroom.agents import _run, _verdict, unsupported_numbers, wrong_leader, wrong_ppda, wrong_team
 from newsroom.clients import traced
 
 MAX_REWRITES = 2
@@ -99,7 +99,25 @@ def _writer_text(profile):
     return (f"You are the newsroom's writer. Turn the FINDINGS into the answer to the QUESTION for {who}. Length and style: "
             f"{DEPTH.get(p.get('depth', 'standard'), DEPTH['standard'])}.{side} Write in {lang}; keep player and team names as they are. "
             "Use only facts and numbers from the FINDINGS; never invent one. Mention minutes as they appear (e.g. 63'). "
+            "Shares and rates between 0 and 1 (closing down, tracking, accuracy, success rates) are written as percentages: 0.031 is 3%; xG stays as it is. "
             f"Units: {', '.join(UNIT_WORDS[u] for u in _units(p))}; the FINDINGS already use them, so never convert a number.")
+
+
+DUTY_WORDS = {"press": "closes_down_pct", "mark": "tracking_a_man_pct", "tracks_share": "tracks_him_pct", "press_share": "closes_down_pct",
+              "mark_share": "tracking_a_man_pct", "press_in_their_half": "closing_down_in_their_half_pct", "before": "before_pct", "after": "after_pct",
+              "holds": "holds_his_space", "holds_most": "holds_his_space_most", "press_height_m": "closes_down_height_m",
+              "before_height_m": "before_closes_down_height_m", "after_height_m": "after_closes_down_height_m"}
+
+
+def _duty_words(obj):
+    """The duty reader's output as the writer should say it: shares as whole percentages, and keys that say what they are (where he closes
+    the ball down is not the space he holds; both used to read as "in the middle third" and were mixed up)."""
+    if isinstance(obj, dict):
+        return {DUTY_WORDS.get(k, k): (round(v * 100) if k in ("press", "mark", "tracks_share", "press_share", "mark_share", "press_in_their_half", "before", "after")
+                                       and isinstance(v, (int, float)) else _duty_words(v)) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_duty_words(x) for x in obj]
+    return obj
 
 
 def _until(match, t):
@@ -222,15 +240,15 @@ class Desk:
 
         def defensive_duties(team: Annotated[str, "home, away or the team name"], player: Annotated[str, "player name, shirt number or id; empty for the whole team"] = "") -> dict:
             """Out of possession, read from tracking: how much of the opponents' possession each player spends closing the ball down and where
-            (press_height_m from his own goal), how much tracking one man and whom, the space he holds in the block, by 15 minutes, and the
+            (closes_down_height_m: metres from his own goal), how much tracking one man and whom, the space he holds in the block when he is not pressing, by 15 minutes, and the
             changes (closes down more / less / higher / deeper, tracks someone else, holds a different space) with the minute they started."""
             d = mv.duties(team_ix(team))
             if player:
                 pid = player_id(player)
                 one = next((v for v in d["players"].values() if v["id"] == pid), None)
-                return dict(team=d["team"], player=mv.names.get(pid), duties=one or "no defending time to read", changes=[{k: v for k, v in c.items() if k not in ("id", "t", "confirmed_t")} for c in d["changes"] if c["player"] == mv.names.get(pid)], note=d["note"])
-            return dict(team=d["team"], team_by_window=d["team_by_window"], changes=[{k: v for k, v in c.items() if k not in ("id", "t", "confirmed_t")} for c in d["changes"]], note=d["note"],
-                        players={nm: {k: v for k, v in q.items() if k != "by_window"} for nm, q in d["players"].items()})
+                return _duty_words(dict(team=d["team"], player=mv.names.get(pid), duties=one or "no defending time to read", changes=[{k: v for k, v in c.items() if k not in ("id", "t", "confirmed_t")} for c in d["changes"] if c["player"] == mv.names.get(pid)], note=d["note"]))
+            return _duty_words(dict(team=d["team"], team_by_window=d["team_by_window"], changes=[{k: v for k, v in c.items() if k not in ("id", "t", "confirmed_t")} for c in d["changes"]], note=d["note"],
+                        players={nm: {k: v for k, v in q.items() if k != "by_window"} for nm, q in d["players"].items()}))
 
         def momentum() -> dict:
             """xG, shots and field tilt for both teams by 5 minutes, cumulative xG, and the spells when one side dominated."""
@@ -351,7 +369,7 @@ class Desk:
             v = await _run(self.checker, f"FINDINGS:\n{found}\nANSWER:\n{answer}\n")
             verdict = _verdict(v.text)
             bad = unsupported_numbers(answer, facts)
-            lead = wrong_leader(answer, self._score_pack()) + wrong_team(answer, self._squads())
+            lead = wrong_leader(answer, self._score_pack()) + wrong_team(answer, self._squads()) + wrong_ppda(answer, [self.mv.pressing(t)["match_ppda"] for t in (0, 1)])
             approved = bool(verdict["approved"]) and not bad and not lead
             issues = list(verdict.get("issues") or []) + ([f"numbers not in the tool results: {bad}"] if bad else []) + lead
             attempts.append(dict(answer=answer, approved=approved, issues=issues))

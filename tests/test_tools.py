@@ -1,4 +1,5 @@
 """The analysis toolkit agrees with the stats layer and reads the starting shapes.   python tests/test_tools.py"""
+import gzip
 import json
 import pathlib
 import sys
@@ -8,7 +9,8 @@ sys.path.insert(0, str(ROOT))
 from analytics.stats import match_stats  # noqa: E402
 from analytics.tools import MatchView  # noqa: E402
 
-match = json.load(open(ROOT / "out" / "match_7.json", encoding="utf-8"))
+_SRV = pathlib.Path(__file__).resolve().parents[1] / "server" / "data" / "match_7.json.gz"
+match = json.load(gzip.open(_SRV, "rt", encoding="utf-8")) if not (_OUT := pathlib.Path(__file__).resolve().parents[1] / "out" / "match_7.json").exists() else json.load(open(_OUT, encoding="utf-8"))  # the committed demo match when out/ is not there (CI)
 mv = MatchView(match)
 teams = match_stats(match)["teams"]
 assert mv.momentum()["cumulative_xg"] == [round(teams[0]["xg"], 2), round(teams[1]["xg"], 2)]

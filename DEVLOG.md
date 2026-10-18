@@ -1398,6 +1398,20 @@ were never logged.
   Live test on Foundry: "who presses and who tracks whom for Oakhaven, and after the red card?" called defensive_duties twice,
   approved first time. The answer quoted raw shares ("press share 0.031") instead of percentages.
 
+### Before going public: a daily allowance, CI, and two wording slips (2026-10-18)
+- Daily allowance (server/app.py `spend`): new questions 300, live runs 30, translations 3000, spoken lines 1500 a day (UTC; env
+  ASKS_PER_DAY etc.); past it a 429 that says cached answers and the replay still work. In memory on the one replica: a restart or
+  scale to zero resets it, so an Azure budget alert is the backstop (not set up: the user's call).
+- CI: `.github/workflows/tests.yml` runs the four test scripts; test_tools and test_newsroom fall back to the committed
+  `server/data/match_7.json.gz` when `out/` is missing (it is git-ignored). MIT LICENSE added.
+- PPDA slip ("a lower ppda of 23.0" for the side with the higher one, approved by the LLM checker): deterministic `agents.wrong_ppda`,
+  in live commentary and the desk: low/lower next to the higher of the two match values (or high/higher next to the lower) fails
+  the draft; a 15-minute figure that is neither is left alone.
+- "press share 0.108": a prompt rule (shares as percentages) was ignored, because the writer copies the findings. The duty tool
+  now hands the agents whole percentages and keys that say what they are (`closes_down_pct`, `closes_down_height_m`,
+  `holds_his_space`); before, the answer gave the space a man holds as where he presses. Rerun: "11% of opponents' possession ...
+  about 47.7 metres from their own goal", approved first time.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

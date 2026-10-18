@@ -1,5 +1,6 @@
 """Newsroom plumbing runs offline (scripted client) and the number check rejects an invented statistic.   python tests/test_newsroom.py"""
 import asyncio
+import gzip
 import json
 import pathlib
 import sys
@@ -9,7 +10,8 @@ from newsroom.agents import cover, unsupported_numbers, wrong_leader, wrong_minu
 from newsroom.clients import ScriptedClient  # noqa: E402
 from newsroom.moments import moments  # noqa: E402
 
-match = json.load(open(pathlib.Path(__file__).resolve().parents[1] / "out" / "match_7.json", encoding="utf-8"))
+_SRV = pathlib.Path(__file__).resolve().parents[1] / "server" / "data" / "match_7.json.gz"
+match = json.load(gzip.open(_SRV, "rt", encoding="utf-8")) if not (_OUT := pathlib.Path(__file__).resolve().parents[1] / "out" / "match_7.json").exists() else json.load(open(_OUT, encoding="utf-8"))  # the committed demo match when out/ is not there (CI)
 packs = [p for p in moments(match) if p["moment"]["type"] == "goal"]
 assert packs
 item = asyncio.run(cover(ScriptedClient(), packs[0]))
@@ -26,7 +28,10 @@ assert wrong_leader("Kestrel United trail", pk)
 print("checks ok")
 assert wrong_minutes("the spell from 15' to 30'", {**packs[0], "moment": {**packs[0]["moment"], "clock": "31'"}, "spell": {"start": "15'", "end": "30'"}}) == []
 print("minute check ok")
-from newsroom.agents import wrong_team  # noqa: E402
+from newsroom.agents import wrong_ppda, wrong_team  # noqa: E402
+assert wrong_ppda("sharper chance creation, highlighted by a lower ppda of 23.0", [9.1, 23.0])  # the slip seen live
+assert not wrong_ppda("a lower PPDA of 9.1 against 23.0", [9.1, 23.0]) and not wrong_ppda("PPDA 23.0 is high: they sat off", [9.1, 23.0])
+assert not wrong_ppda("a lower PPDA of 7.5 in the last 15 minutes", [9.1, 23.0])  # a window figure: not checked
 sq = {"Oakhaven FC": ["Ridor Novakley"], "Westmoor Wanderers": ["Arstor Vossez"]}
 assert wrong_team("the red card to Oakhaven's Arstor Vossez at 26'", sq) == ["Arstor Vossez plays for Westmoor Wanderers, not Oakhaven FC"]
 assert wrong_team("Westmoor's Arstor Vossez was sent off; Oakhaven FC's striker Ridor Novakley scored", sq) == []

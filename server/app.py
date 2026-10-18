@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 import pathlib
+import time
 
 import aiohttp
 from aiohttp import web
@@ -31,6 +32,19 @@ DATA, CACHE, WEB = ROOT / "server" / "data", ROOT / "server" / "cache", ROOT / "
 ASK_SLOTS = int(os.environ.get("ASK_SLOTS", "2"))  # ponytail: one process-wide limit; per-user quotas if it is ever opened wider
 PROFILE_KEYS = ("persona", "depth", "club", "player", "language", "units")
 _matches, _gate, _client = {}, asyncio.Semaphore(ASK_SLOTS), None
+# What the public demo may spend a day (UTC) on the model and speech; cached answers, the replay and everything precomputed stay free.
+BUDGET = dict(ask=int(os.environ.get("ASKS_PER_DAY", "300")), live=int(os.environ.get("LIVE_RUNS_PER_DAY", "30")),
+              translate=int(os.environ.get("TRANSLATIONS_PER_DAY", "3000")), speak=int(os.environ.get("SPEECH_PER_DAY", "1500")))
+_spent = {}  # ponytail: in memory, one replica (deploy.ps1 max 1); a restart or scale to zero resets it, the Azure budget alert is the backstop
+
+
+def spend(kind, n=1):
+    """Count n model-backed requests of this kind against today's allowance, or refuse with 429."""
+    key = (time.strftime("%Y-%m-%d", time.gmtime()), kind)
+    if _spent.get(key, 0) + n > BUDGET[kind]:
+        raise web.HTTPTooManyRequests(text=f"The free demo has used today's allowance of new {dict(ask="questions", live="live runs", translate="translations", speak="spoken lines")[kind]}; cached answers, the replay and the stored "
+                                           "newsroom still work. It resets at midnight UTC.")
+    _spent[key] = _spent.get(key, 0) + n
 
 
 def match(mid):
@@ -63,6 +77,7 @@ async def ask(request):
             return web.json_response(out)
     else:
         out = None
+        spend("ask")
     if not stream:
         out = await _answer(m, prof, t, q, hit)
         return web.json_response(out, dumps=lambda o: json.dumps(o, default=str))
@@ -106,6 +121,7 @@ async def tr(request):
     got = {k: json.loads((CACHE / f"tr-{k}.json").read_text(encoding="utf-8")) for k in keys if (CACHE / f"tr-{k}.json").exists()}
     todo = [i for i, k in enumerate(keys) if k not in got]
     if todo:
+        spend("translate", len(todo))
         async with _gate:
             _client = _client or make_client()
             new = await translate(_client, lang, [texts[i] for i in todo])
@@ -131,6 +147,7 @@ async def live(request):
     speed = max(1., min(float(request.query.get("speed", 10)), 30.))
     if _live_gate.locked():
         raise web.HTTPConflict(text="another live run is on; try again in a few minutes")
+    spend("live")
     async with _live_gate:
         resp = web.StreamResponse(headers={"Content-Type": "text/event-stream", "Cache-Control": "no-cache"})
         await resp.prepare(request)
@@ -218,6 +235,7 @@ async def speak(request):
         rid, host = os.environ.get("SPEECH_RESOURCE_ID", ""), os.environ.get("SPEECH_ENDPOINT", "")
         if not (text and rid and host):
             raise web.HTTPNotImplemented(text="speech is not configured (SPEECH_RESOURCE_ID, SPEECH_ENDPOINT)")
+        spend("speak")
         if _cred is None:
             from azure.identity import DefaultAzureCredential
             _cred = DefaultAzureCredential()

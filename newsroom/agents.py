@@ -85,6 +85,25 @@ def wrong_leader(line, pack):
     return out
 
 
+def wrong_ppda(line, pair):
+    """PPDA called low / lower when it is the higher of the two sides' (the lighter press), or high / higher when it is the lower. pair: both
+    sides' PPDA; a quoted value that is neither (a 15-minute figure, say) is left alone."""
+    vals = [v for v in pair if v is not None]
+    if len(vals) != 2 or abs(vals[0] - vals[1]) < .05:
+        return []
+    out = []
+    for m in re.finditer(r"\b(low|lower|high|higher)\b[^.\d]{0,25}?ppda[^.\d]{0,20}?(\d+(?:\.\d+)?)|ppda[^.\d]{0,20}?(\d+(?:\.\d+)?)[^.]{0,25}?\b(low|lower|high|higher)\b", line, flags=re.I):
+        word, num = (m.group(1), m.group(2)) if m.group(1) else (m.group(4), m.group(3))
+        v = float(num)
+        side = next((i for i, p in enumerate(vals) if abs(v - p) <= .5 * 10 ** -(len(num.split(".")[1]) if "." in num else 0) + 1e-9), None)
+        if side is None:
+            continue
+        is_low = vals[side] < vals[1 - side]
+        if word.lower().startswith("low") != is_low:
+            out.append(f"PPDA {num} is the {'lower' if is_low else 'higher'} of the two ({vals[0]} v {vals[1]}): lower PPDA means the harder press")
+    return out
+
+
 def wrong_team(line, squads):
     """A player given to the other side ("Oakhaven's Arstor Vossez" for a Westmoor player). squads: {team name: [player names]};
     a team is also matched by its first word (Oakhaven for Oakhaven FC)."""
@@ -142,6 +161,8 @@ async def cover(client, pack, persona="veteran"):
         if bad := unsupported_numbers(line, pack):
             checks.append(f"numbers not in the facts: {bad}")
         if bad := wrong_leader(line, pack):
+            checks.append("; ".join(bad))
+        if bad := wrong_ppda(line, [st.get("ppda") for st in pack.get("stats", {}).values()]):
             checks.append("; ".join(bad))
         if bad := wrong_minutes(line, pack):
             checks.append(f"minute {bad} is not the clock {pack['moment']['clock']}")
