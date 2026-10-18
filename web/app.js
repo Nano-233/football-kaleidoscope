@@ -110,7 +110,7 @@ async function boot() {
 }
 
 async function load(id) {
-  $('loading').hidden = false; S.playing = false;
+  $('loading').hidden = false; S.playing = false; stopLive();
   const base = `data/${encodeURIComponent(id)}/`;
   const [D, fb, hb] = await Promise.all([fetch(base + 'match.json').then(r => r.json()), fetch(base + 'frames.bin').then(r => r.arrayBuffer()), fetch(base + 'heads.bin').then(r => r.arrayBuffer())]);
   const q = new Int16Array(fb), h = new Int8Array(hb), n = D.n_frames, F = new Float32Array(n * 72);
@@ -162,7 +162,7 @@ function slotOf(pid, t) {  // which tracking slot a player occupies at time t (s
   return cur.indexOf(pid);
 }
 function who(k, t) { let id = S.slots[k]; for (const e of S.subs) { if (e.t > t) break; if (e.slot === k) id = e.on; } return S.info[id]; }
-const feed = () => S.D.newsroom[VOICE[S.persona]] || [];
+const feed = () => (S.live ? [...S.live.items.values()] : S.D.newsroom[VOICE[S.persona]] || []);
 const statsAt = t => S.D.team_stats[Math.min(S.D.team_stats.length - 1, Math.floor(t / 60))];
 
 // ---------------------------------------------------------------- pitch
@@ -336,7 +336,7 @@ function setPersona(p) {
 function render(force) {
   if (!S.D) return;
   const minute = Math.floor(S.t / 60), shown = feed().filter(it => it.moment.t <= S.t).length + (S.profile.playerId ? playerNotes().length : 0);
-  const key = [S.persona, S.tab, S.tab === 'Clips' || S.tab === 'Ask' ? '' : minute, (S.D.recaps || []).filter(r => r.t <= S.t + .5).length, shown, S.player, S.group, S.clip && S.clip.id, S.custom.length, S.askVer, S.profile.playerId, JSON.stringify(S.board), JSON.stringify(S.wi), S.trVer, S.profile.language].join('|');
+  const key = [S.persona, S.tab, S.tab === 'Clips' || S.tab === 'Ask' ? '' : minute, (S.D.recaps || []).filter(r => r.t <= S.t + .5).length, shown, S.player, S.group, S.clip && S.clip.id, S.custom.length, S.askVer, S.liveVer, S.profile.playerId, JSON.stringify(S.board), JSON.stringify(S.wi), S.trVer, S.profile.language].join('|');
   if (!force && key === S.panelKey) return;
   S.panelKey = key;
   const body = $('panel-body'), keep = body.scrollTop, same = body.dataset.view === S.persona + S.tab + S.player;
@@ -386,11 +386,13 @@ function feedView(mode) {
   return `<ul class="feed ${mode}">` + items.map(it => {
     if (it.note) return `<li class="note"><div class="meta"><span class="t">${esc(it.moment.clock)}</span><span class="kind">${esc(S.profile.player)}</span>
       <button class="jump" data-seek="${it.moment.t - 6}">Watch</button></div><p>${esc(tr(it.line))}</p></li>`;
+    if (it.pending) return `<li class="pending"><div class="meta"><span class="t">${esc(it.moment.clock)}</span><span class="kind">${esc(it.moment.type.replace(/_/g, ' '))}</span>
+      <span class="badge live">${it.pending === 'drafting' ? 'Newsroom drafting · checking' : 'Queued for the newsroom'}</span></div><p>${tr('The desk is on it…')}</p></li>`;
     if (!it.approved && mode === 'fan') return '';
     const badge = !it.approved ? `<span class="badge warn">Held by fact-checker</span>`
       : it.fallback ? `<span class="badge warn" title="Every agent draft was held, so a plain line built from the facts went out">Drafts held · plain line</span>`
       : it.rewrites ? `<span class="badge ok">Fact-checked · rewritten ${it.rewrites}×</span>` : `<span class="badge ok">Fact-checked</span>`;
-    return `<li><div class="meta"><span class="t">${esc(it.moment.clock)}</span><span class="kind">${esc(it.moment.type.replace(/_/g, ' '))}</span>${mode === 'analyst' ? badge : ''}
+    return `<li><div class="meta"><span class="t">${esc(it.moment.clock)}</span><span class="kind">${esc(it.moment.type.replace(/_/g, ' '))}</span>${mode === 'analyst' ? badge : ''}${it.latency_s != null ? `<span class="badge live" title="From the moment arriving to the line going out, live on Foundry">Live · ${it.latency_s} s</span>` : ''}
       <button class="jump" data-share="${it.moment.t}|${esc(it.moment.type)}">Share</button>${bdBtn(it.moment.t)}<button class="jump" data-seek="${it.moment.t - 8}">Watch</button></div>
       <p${it.approved ? '' : ' class="rejected"'}>${esc(tr(it.line))}</p>${mode === 'analyst' ? trail(it) : ''}</li>`;
   }).join('') + '</ul>';
@@ -1176,6 +1178,38 @@ function setUnits(u) {
 $('u-preset').onclick = e => { const b = e.target.closest('button'); if (b) setUnits(b.dataset.u); };
 for (const id of ['u-len', 'u-spd', 'u-dist']) $(id).onchange = () => setUnits([$('u-len').value, $('u-spd').value, $('u-dist').value].join(','));
 setUnits(S.profile.units || 'm,kmh,km');
+// live run: the server streams the match from here on its own clock and the newsroom covers each moment as it arrives (GET /api/live)
+const liveKey = m => `${m.t}|${m.type}`;
+function stopLive(keep) {
+  if (!S.live) return;
+  S.live.src.close();
+  if (!keep) S.live = null;
+  $('live').setAttribute('aria-pressed', 'false'); S.liveVer = (S.liveVer || 0) + 1; render(true);
+}
+function startLive() {
+  const speed = Math.max(1, +$('speed').value), q = new URLSearchParams({ match: S.id, persona: S.persona, from: S.t.toFixed(1), speed });
+  const src = new EventSource('api/live?' + q), L = S.live = { src, items: new Map(), started: false };
+  const bump = () => { S.liveVer = (S.liveVer || 0) + 1; };
+  const on = (kind, fn) => src.addEventListener(kind, ev => { if (S.live === L) { fn(JSON.parse(ev.data)); bump(); } });
+  $('live').setAttribute('aria-pressed', 'true'); S.reel = null; S.clip = null; S.bd = null; setPlaying(false); toast('Connecting to the newsroom…');
+  on('start', d => { L.started = true; S.t = d.t; setPlaying(true); toast(`Live from ${clockAt(d.t)} at ${d.speed}×: ${d.moments} moments to cover. Commentary is written as they happen.`); });
+  on('clock', d => { if (Math.abs(S.t - d.t) > .5) S.t = d.t; if (!S.playing) setPlaying(true); });
+  on('moment', m => L.items.set(liveKey(m), { moment: m, pending: 'queued', approved: false }));
+  on('drafting', d => { const it = L.items.get(liveKey(d.moment)); if (it) it.pending = 'drafting'; });
+  on('published', it => L.items.set(liveKey(it.moment), it));
+  on('end', () => { L.done = true; stopLive(true); toast('Live run finished. The feed shows what the newsroom wrote live.'); });
+  src.onerror = () => {  // no reconnect: that would start a second run from the same minute
+    if (S.live !== L || L.done) return;
+    L.done = true; stopLive(L.started);
+    toast(L.started ? 'Live connection dropped; the feed keeps what arrived.' : 'Live run needs the newsroom server and is one at a time: another may be on. Try again shortly.');
+  };
+  render(true);
+}
+$('live').onclick = () => {  // start; stop (the live feed stays); then back to the stored feed
+  if (!S.live) return startLive();
+  if (S.live.src.readyState !== EventSource.CLOSED) { stopLive(true); return toast('Live run stopped. Click again for the stored feed.'); }
+  stopLive(); toast('Back to the stored newsroom feed.');
+};
 $('voice').onclick = () => { voiceOn = !voiceOn; $('voice').setAttribute('aria-pressed', String(voiceOn)); if (!voiceOn && speaking) speaking.pause(); toast(voiceOn ? 'Commentary will be read out as the lines appear.' : 'Voice off.'); };
 $('lang').innerHTML = LANGS.map(l => `<option${l === S.profile.language ? ' selected' : ''}>${l}</option>`).join('');
 $('lang').onchange = e => { S.profile.language = e.target.value; saveProfile(); $('lt-line').dataset.id = ''; render(true); };

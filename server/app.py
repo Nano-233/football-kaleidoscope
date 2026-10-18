@@ -3,6 +3,8 @@
     python -m server.app                 # http://localhost:8080 ; FOUNDRY_PROJECT_ENDPOINT / FOUNDRY_MODEL as for the newsroom
     POST /api/ask  {"match": "match_7", "question": "...", "profile": {...}, "t": 3600}
          -> the answer, the agents' steps, the moments it refers to; t (seconds) answers from what had happened by then
+    GET  /api/live?match=match_7&persona=fan&from=1800&speed=10
+         -> server-sent events: the match clock, and each moment as it arrives, as the newsroom drafts, checks and publishes it
 
 Answers are cached on disk (server/cache), so a question asked once costs nothing again; at most ASK_SLOTS questions run at a time.
 """
@@ -17,9 +19,11 @@ import aiohttp
 from aiohttp import web
 from xml.sax.saxutils import escape
 
+from newsroom.agents import cover
 from newsroom.clients import make_client
 from newsroom.desk import Desk
 from newsroom.localize import translate
+from newsroom.moments import moments, template_line
 from matchsim.whatif import FORMATIONS, TACTIC_KEYS, cached_what_if
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -112,6 +116,61 @@ async def tr(request):
     return web.json_response(dict(texts=[got[k] for k in keys]))
 
 
+_live_gate = asyncio.Semaphore(1)  # ponytail: one live run at a time for the whole site (each costs model calls); a queue if it is ever opened wider
+LIVE_SLOTS, OVERLAY_S = 2, 10  # moments drafted at once; how long a published line stays on screen (as scripts/build_site.py)
+
+
+async def live(request):
+    """Plays a match's event stream on the server's clock (from `from`, at `speed` x) and runs the newsroom on each moment the moment it
+    arrives: stats and tactics analysts, commentator, fact-checker with rewrites, all live on Foundry, nothing cached. The fact pack holds
+    the numbers as they stood at the moment (newsroom/moments.py), so the desk never sees the rest of the match."""
+    global _client
+    m = match(request.query.get("match", ""))
+    voice = "fan" if request.query.get("persona") == "fan" else "analyst"
+    t0 = max(0., min(float(request.query.get("from", 0)), m["meta"]["duration"]))
+    speed = max(1., min(float(request.query.get("speed", 10)), 30.))
+    if _live_gate.locked():
+        raise web.HTTPConflict(text="another live run is on; try again in a few minutes")
+    async with _live_gate:
+        resp = web.StreamResponse(headers={"Content-Type": "text/event-stream", "Cache-Control": "no-cache"})
+        await resp.prepare(request)
+        send = lambda kind, data: resp.write(f"event: {kind}\ndata: {json.dumps(data, default=str)}\n\n".encode())
+        _client = _client or make_client()
+        loop, gate, jobs = asyncio.get_running_loop(), asyncio.Semaphore(LIVE_SLOTS), []
+        w0, dur = loop.time(), m["meta"]["duration"]
+        now = lambda: t0 + (loop.time() - w0) * speed
+        packs = [p for p in await loop.run_in_executor(None, moments, m) if p["moment"]["t"] >= t0]
+
+        async def one(p):
+            arrived = loop.time()
+            async with gate:
+                await send("drafting", dict(moment=p["moment"], waited=round(loop.time() - arrived, 1)))
+                try:
+                    it = await cover(_client, p, voice)
+                except Exception as ex:  # the model failed after its retries (newsroom/agents._run): the plain line from the facts goes out
+                    it = dict(moment=p["moment"], persona=voice, line=template_line(p), approved=True, fallback=True, issues=[f"newsroom failed: {ex}"], rewrites=0, trail={})
+            it["overlay"] = dict(t_in=it["moment"]["t"], t_out=it["moment"]["t"] + OVERLAY_S, kind=it["moment"]["type"])
+            await send("published", dict(it, latency_s=round(loop.time() - arrived, 1), published_at=round(now(), 1)))
+        try:
+            await send("start", dict(t=t0, speed=speed, moments=len(packs)))
+            i = 0
+            while now() < dur and (i < len(packs) or not all(j.done() for j in jobs)):
+                while i < len(packs) and packs[i]["moment"]["t"] <= now():
+                    await send("moment", packs[i]["moment"])
+                    jobs.append(asyncio.create_task(one(packs[i])))
+                    i += 1
+                await send("clock", dict(t=round(now(), 1)))
+                await asyncio.sleep(1.)
+            await asyncio.gather(*jobs)
+            await send("end", dict(t=round(now(), 1)))
+            await resp.write_eof()
+        except (ConnectionResetError, asyncio.CancelledError):  # the viewer left: stop paying for drafts nobody will read
+            for j in jobs:
+                j.cancel()
+            raise
+        return resp
+
+
 _sim_gate = asyncio.Semaphore(1)  # a what-if uses every core for about a minute
 
 
@@ -194,6 +253,7 @@ def app():
     a.router.add_post("/api/translate", tr)
     a.router.add_post("/api/whatif", whatif)
     a.router.add_post("/api/speak", speak)
+    a.router.add_get("/api/live", live)
     a.router.add_get("/", index)
     a.router.add_static("/", WEB)
     return a

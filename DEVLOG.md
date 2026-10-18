@@ -1356,6 +1356,21 @@ completion chance when he chose the pass, launch `speed`); nothing showed it.
 - Noted, not reopened (engine frozen): the sim's players sprint (> 25 km/h for 1 s) about 60 times a match; real players
   manage roughly 20-40.
 
+### Live run: the newsroom covers the match as it streams (2026-10-18)
+Why: the site replayed commentary written by `build_site.py` after the match. The pipeline was already as-of (each fact pack holds
+the numbers as they stood, stats are incremental), but nothing showed it running live, and the brief asks for ingest as it happens.
+- `GET /api/live` (server/app.py): the server plays the event stream on its own clock (from the viewer's minute, at the chosen
+  speed, up to 30x) and sends each moment the moment it arrives; the newsroom (`agents.cover`: stats + tactics, commentator,
+  fact-checker, rewrites) runs on it then, on Foundry, nothing cached. Server-sent events: start, clock (1 s), moment, drafting,
+  published (with latency), end. Two moments drafted at once; one live run for the whole site (a second gets 409), so judges
+  cannot pile up 429s. A viewer leaving stops the run (the next clock write fails, the drafts are cancelled). A model failure after
+  `_run`'s retries publishes the plain line from the facts (as when every draft is held).
+- Match centre: "Live run" button; the pitch follows the server's clock; the feed shows each moment queued, drafting, then
+  published with "Live · N s". Click again to stop (the live feed stays), again for the stored feed.
+- Measured: match_7 from 26' at 10x, the goal published 7.2 s after it arrived. The first run waits a few seconds while the server
+  loads the match. The cached replay stays the default (free, instant).
+- Seen in passing, not fixed: the live goal line called a PPDA of 23.0 "lower", and the checker approved it.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
