@@ -469,6 +469,8 @@ def team_targets(m, t):
     """Returns (targets (11,2) in world coords, urgent (11,) bool) for team t."""
     sl, osl = slice(11 * t, 11 * t + 11), slice(11 * (1 - t), 11 * (1 - t) + 11)
     m.sprint_hint[sl] = False
+    m.chasing[sl] = False
+    m.hard[sl] = False
     f = _tf if t else (lambda a: a)
     fv = (lambda v: -v) if t else (lambda v: v)
     P, O, B, Bv = f(m.pos[sl]), f(m.pos[osl]), f(m.ball), fv(m.ball_v)
@@ -761,9 +763,20 @@ def team_targets(m, t):
             d = nrm(P - B, axis=1)
             if nrm(B - GOAL) > 24:  # the keeper goes for a loose ball in and around his own box, not out in the field
                 d[role == GK] = 1e9
-            for i in np.argsort(d)[:2]:
-                zone[i], urgent[i] = B + Bv * .6, True
-                m.sprint_hint[11 * t + i] = bool(TP.get("hint_loose", 1.))  # a loose ball is chased flat out
+            tgt_ = B + Bv * .6
+            if TP.get("loose_race", 1.) > 0:  # a race: flat out only when it is contested (he and the nearest opponent would get there within race_margin of each
+                # other); a man who will clearly be first, the second man, and a man who has lost it run as the gap needs
+                vme, vop = m.vmax[sl], m.vmax[osl]
+                t_me = nrm(P - tgt_, axis=1) / np.maximum(vme, 1.) + (role == GK) * 1e9 * (nrm(B - GOAL) > 24)
+                t_op = float((nrm(O - tgt_, axis=1) / np.maximum(vop, 1.)).min())
+                for k, i in enumerate(np.argsort(d)[:2]):
+                    zone[i], urgent[i], m.chasing[11 * t + i] = tgt_, True, True
+                    m.sprint_hint[11 * t + i] = (bool(TP.get("hint_loose", 1.)) and k == 0 and abs(t_me[i] - t_op) <= TP.get("race_margin", .5)
+                                                 and d[i] >= TP.get("loose_sprint_d", 8.))  # a sprint needs room to build: a scramble at 2 m is quick steps, not 25 km/h
+            else:
+                for i in np.argsort(d)[:2]:
+                    zone[i], urgent[i], m.chasing[11 * t + i] = tgt_, True, True
+                    m.sprint_hint[11 * t + i] = bool(TP.get("hint_loose", 1.))  # a loose ball is chased flat out
         elif m.state == "flight" and m.flight["kind"] == "lofted":  # win the second ball / header
             d = nrm(P - f(m.flight["end"]), axis=1)
             if f(m.flight["end"])[0] > 18:  # the keeper only comes for balls into his own area
@@ -824,7 +837,7 @@ def team_targets(m, t):
             # goes back to a cover point three metres goal-side of it. His job (a man, a lane) fixes where he stands across and along the ball line; this only
             # stops a job putting him on the wrong side of the ball. It is inert for a defender already goal-side of the cover point.
             if TP.get("recover_on", 1.):
-                engaged = m.sprint_hint[sl]  # the presser and the men closing the receiver are going to the ball
+                engaged = m.sprint_hint[sl] | m.chasing[sl]  # the presser, the men closing the receiver and the loose-ball chasers are going to the ball
                 lim = out_f & ((role != ST) | (Bs[0] < TP.get("recover_st", 0.))) & ~engaged
                 cover_x = Bs[0] - TP.get("cover_margin", 3.)
                 zone[lim, 0] = np.minimum(zone[lim, 0], np.maximum(cover_x, MIN_X[role[lim]]))
@@ -834,7 +847,9 @@ def team_targets(m, t):
             rec = out_f & (P[:, 0] - zone[:, 0] > 5.) & (Bs[0] < .65 * L)
             urgent |= rec  # recovery run: well upfield of where he should be, ball in his half: sprint back, do not jog
             if TP.get("rec_sprint", 0.):
-                m.sprint_hint[sl] |= rec & (P[:, 0] - zone[:, 0] > TP["rec_sprint"])  # with his goal under threat a man who is beaten by the ball runs flat out
+                gap_ = P[:, 0] - zone[:, 0]
+                m.sprint_hint[sl] |= rec & (gap_ > max(TP["rec_sprint"], TP.get("rec_far", 0.)))  # with his goal under threat a man who is well beaten runs flat out
+                m.hard[sl] |= rec & (gap_ > TP["rec_sprint"])  # a few metres out: a hard run back (20-24 km/h), not a sprint
     else:
         # runs in behind
         if mine and m.state == "held":

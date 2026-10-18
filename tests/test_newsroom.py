@@ -29,6 +29,9 @@ print("checks ok")
 assert wrong_minutes("the spell from 15' to 30'", {**packs[0], "moment": {**packs[0]["moment"], "clock": "31'"}, "spell": {"start": "15'", "end": "30'"}}) == []
 print("minute check ok")
 from newsroom.agents import wrong_ppda, wrong_team  # noqa: E402
+from newsroom.desk import _first_json_list  # noqa: E402
+assert _first_json_list('Here [see]: ```json\n[{"change": {"press": 0.7}, "why": "x [y]"}]\n``` done') == [{"change": {"press": 0.7}, "why": "x [y]"}]
+assert _first_json_list("no proposal") == []
 assert wrong_ppda("sharper chance creation, highlighted by a lower ppda of 23.0", [9.1, 23.0])  # the slip seen live
 assert not wrong_ppda("a lower PPDA of 9.1 against 23.0", [9.1, 23.0]) and not wrong_ppda("PPDA 23.0 is high: they sat off", [9.1, 23.0])
 assert not wrong_ppda("a lower PPDA of 7.5 in the last 15 minutes", [9.1, 23.0])  # a window figure: not checked

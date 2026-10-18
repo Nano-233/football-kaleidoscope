@@ -7,6 +7,7 @@ tracking frames; no model computes a figure. Each tool returns a small JSON-read
     mv.pressing(team=0)                   # PPDA and pressing height by 15 minutes, where the ball was won
     mv.momentum()                         # xG and field tilt by 5 minutes, spells of dominance
     mv.rhythm()                           # control vs chaos by 5 minutes: settled and broken possession, turnovers, tempo, stoppages
+    mv.fatigue(team=0)                    # who is tiring: high-intensity running by 15 minutes against his own first half-hour and his team-mates
     mv.passing_network(team=0)            # pass links, connectors, where attacks start, preferred side
     mv.sequence(event_id)                 # what led to a moment, with the engine's reasons
     mv.breakdown(event_id)                # the move behind a shot as stops to pause on: the regain, both shapes, the pass options, the shot
@@ -75,6 +76,7 @@ class MatchView:
         self.meta, self.events = match["meta"], match["events"]
         self.F = np.asarray(match["frames"], float)
         self.jobs = np.asarray(match["jobs"], int) if match.get("jobs") else None  # the engine's own defensive jobs: only for scoring the duty reader, never read by it
+        self.stamina = np.asarray(match["stamina"], float) if match.get("stamina") else None  # the engine's fatigue: only for scoring the fatigue reader
         self._duty_cache = {}
         self.dt = self.meta["dt"]
         self.players = {}
@@ -619,6 +621,70 @@ class MatchView:
                     physical=phys, heat_map_6x4=heat, per90_vs_role=vs)
 
     # ---------------------------------------------------------------- moments
+    def fatigue(self, team, window=900., hi=5.5):
+        """Who is tiring, from tracking: each player's high-intensity running (metres a minute above 19.8 km/h) by 15 minutes against his
+        own first 30 minutes, and that drop against his team-mates' (a side protecting a lead runs less as a whole: that is the game, not
+        tiredness). tiring = over the latest two windows he is down 25 % or more on his own start and 15 points more than the team; needs 45
+        minutes on the pitch. Everything is read from positions only."""
+        sl = slice(11 * team, 11 * team + 11)
+        xy = self.F[:, 5:49].reshape(len(self.F), 22, 2)[:, sl]
+        sp = nrm(np.diff(xy, axis=0), axis=2) / self.dt
+        sp[(sp > 12) | (xy[1:, :, 1] < -5)] = 0.
+        ts = self.F[1:, 0]
+        dur, rows, w0 = self.meta["duration"], [], 0.
+        while w0 < dur:
+            rows.append((w0, min(w0 + window, dur)))
+            w0 += window
+        if rows and rows[-1][1] - rows[-1][0] < 300 and len(rows) > 1:  # a short tail joins the window before it
+            rows[-2] = (rows[-2][0], rows[-1][1]); rows.pop()
+        per = {}  # player -> [(window, metres a minute, minutes)]
+        for k in range(11):
+            for a, b in rows:
+                sel = (ts >= a) & (ts < b)
+                occ = np.array([self._occupant(11 * team + k, t) for t in ts[sel][::25]])
+                for pid in set(occ):
+                    if self.players.get(pid, {}).get("role") == "GK":
+                        continue
+                    mask = np.nonzero(sel)[0][np.repeat(occ == pid, 25)[:sel.sum()]]
+                    mins = len(mask) * self.dt / 60
+                    if mins >= 5:
+                        per.setdefault(pid, []).append((f"{self._clock(a)}-{self._clock(b)}", round(float((sp[mask, k] * (sp[mask, k] > hi)).sum() * self.dt / mins), 1), round(mins, 1)))
+        out = {}
+        for pid, ws in per.items():
+            first = [v for _, v, m in ws[:2]]
+            base = float(np.mean(first)) if first else 0.
+            on = sum(m for *_, m in ws)
+            out[pid] = dict(name=self.names[pid], id=pid, role=self.players[pid]["role"], minutes=round(on, 1), hi_m_per_min_by_window={w: v for w, v, _ in ws},
+                            start_hi_m_per_min=round(base, 1), latest_drop_pct=round(100 * (1 - np.mean([v for _, v, _m in ws[-2:]]) / base)) if base > 1 and len(ws) > 3 else None)  # now = the latest two windows: one is too noisy
+        drops = [q["latest_drop_pct"] for q in out.values() if q["latest_drop_pct"] is not None]
+        team_drop = float(np.median(drops)) if drops else None
+        for q in out.values():
+            d = q["latest_drop_pct"]
+            q["vs_team_points"] = round(d - team_drop) if d is not None and team_drop is not None else None
+            q["tiring"] = bool(d is not None and q["minutes"] >= 45 and d >= 25 and q["vs_team_points"] >= 15)
+        return dict(team=self.team_names[team], team_drop_pct=round(team_drop) if team_drop is not None else None,
+                    tiring=[q["name"] for q in sorted(out.values(), key=lambda q: -(q["latest_drop_pct"] or 0)) if q["tiring"]],
+                    players={q["name"]: {k: v for k, v in q.items() if k != "name"} for q in out.values()},
+                    note="high-intensity running (above 19.8 km/h) in metres a minute; drops against his own first 30 minutes and against the team's median drop")
+
+    def score_fatigue(self, team):
+        """The fatigue reader against the engine's own stamina (its log): how well each player's latest drop ranks the truly tired."""
+        st = self.stamina
+        if st is None:
+            return None
+        f = self.fatigue(team)
+        pairs = []
+        for nm, q in f["players"].items():
+            if q["latest_drop_pct"] is None:
+                continue
+            k = next((k for k in range(11) if self._occupant(11 * team + k, self.meta["duration"] - 1) == q["id"]), None) if "id" in q else None
+            if k is not None:
+                pairs.append((q["latest_drop_pct"], 1. - st[-1][11 * team + k]))
+        if len(pairs) < 4:
+            return None
+        a = np.array(pairs)
+        return dict(players=len(a), drop_vs_true_fatigue_r=round(float(np.corrcoef(a[:, 0], a[:, 1])[0, 1]), 2))
+
     def milestones(self):
         """In-match milestones from the events, at the moment they are reached: a brace and a hat-trick, a goal off the bench, a goal and an
         assist, 50 / 75 / 100 passes completed, 5 tackles won, 5 saves, and a clean sheet kept to the final whistle.

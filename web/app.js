@@ -358,7 +358,7 @@ function setPersona(p) {
 function render(force) {
   if (!S.D) return;
   const minute = Math.floor(S.t / 60), shown = feed().filter(it => it.moment.t <= S.t).length + (S.profile.playerId ? playerNotes().length : 0);
-  const key = [S.persona, S.tab, S.tab === 'Clips' || S.tab === 'Ask' ? '' : minute, (S.D.recaps || []).filter(r => r.t <= S.t + .5).length, shown, S.player, S.group, S.clip && S.clip.id, S.custom.length, S.askVer, S.liveVer, S.profile.playerId, S.profile.metric, JSON.stringify(S.board), JSON.stringify(S.wi), S.trVer, S.profile.language].join('|');
+  const key = [S.persona, S.tab, S.tab === 'Clips' || S.tab === 'Ask' ? '' : minute, (S.D.recaps || []).filter(r => r.t <= S.t + .5).length, shown, S.player, S.group, S.clip && S.clip.id, S.custom.length, S.askVer, S.liveVer, S.profile.playerId, S.profile.metric, JSON.stringify(S.board), JSON.stringify(S.wi), S.bench && (S.bench.step + S.bench.busy + !!S.bench.r + S.bench.err), S.trVer, S.profile.language].join('|');
   if (!force && key === S.panelKey) return;
   S.panelKey = key;
   const body = $('panel-body'), keep = body.scrollTop, same = body.dataset.view === S.persona + S.tab + S.player;
@@ -596,6 +596,16 @@ function profileBlocks(pid, p) {
     <div class="label">Reels</div><div class="chips">${reels.map(r => `<button class="chip" data-reel="${esc(r)}">${esc(r)}</button>`).join('')}</div>`;
 }
 
+function fatigueBlock(pid, tm) {  // high-intensity running by 15 minutes (analytics/tools.py fatigue), completed windows only
+  const F_ = (S.D.fatigue || [])[tm], q = F_ && Object.values(F_.players).find(x => x.id === pid);
+  if (!q) return '';
+  const ws = Object.entries(q.hi_m_per_min_by_window).filter(([w]) => clockMin(w.split('-')[1]) <= clockMin(clockAt(S.t)));
+  if (ws.length < 2) return '';
+  const mx = Math.max(...ws.map(([, v]) => v), 1);
+  return `<div class="label">Running hard · metres a minute above ${conv('spd', 19.8, 1)}</div>
+    <div style="display:flex;gap:4px;align-items:flex-end;height:46px">${ws.map(([w, v]) => `<i title="${esc(w)}: ${v} m a minute" style="flex:1;background:var(--accent);opacity:.75;height:${Math.max(3, v / mx * 44)}px;border-radius:2px"></i>`).join('')}</div>
+    <div class="mono" style="margin-top:4px">${ws[0][0].split('-')[0]} to ${ws[ws.length - 1][0].split('-')[1]}${q.latest_drop_pct != null && ws.length === Object.keys(q.hi_m_per_min_by_window).length ? ` · down ${q.latest_drop_pct}% on his first half-hour (team ${F_.team_drop_pct}%)${q.tiring ? ' · tiring' : ''}` : ''}</div>`;
+}
 function dutyBlock(pid, tm) {  // his job without the ball, window by window (completed windows only, as on the board)
   const D_ = (S.D.duties || [])[tm];
   const ws = D_ ? D_.rows.filter(r => r.t1 <= S.t && r.players[pid]).map(r => [r, r.players[pid]]) : [];
@@ -631,7 +641,7 @@ function playerView() {
     <div class="bar" style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
       ${S.persona === 'scout' ? `<button class="btn primary" data-report="${esc(S.player)}">Scout report</button>` : `<button class="btn primary" data-hismatch="${esc(S.player)}">His match</button>`}
       <button class="btn" data-reel="Highlights">Highlights reel</button></div>
-    ${profileBlocks(S.player, p)}${dutyBlock(S.player, p.team)}
+    ${profileBlocks(S.player, p)}${fatigueBlock(S.player, p.team)}${dutyBlock(S.player, p.team)}
     <div class="label">Actions (${acts.length})</div><div class="chips">${chips}</div>
     <ul class="actions" style="margin-top:10px">${rows || '<li><span></span><span class="empty">No actions in this group.</span></li>'}</ul>
     ${S.group === 'All' ? '<div class="mono" style="margin-top:8px">Pressures are under Defending.</div>' : ''}`;
@@ -952,10 +962,55 @@ function whatIfView() {
       <div class="mono" style="margin-top:6px">${r.runs} simulations each way from the same moment, paired so only the change differs; ${r.runs_with_a_different_result} of ${r.runs} pairs ended with a different score.${r.replay_matches ? '' : ' Note: the replay did not reproduce the match exactly.'}</div>
       <div class="bar" style="margin-top:10px"><button class="btn" data-act="wi-explain">Ask the newsroom to explain</button></div>` : '';
   return `<div class="chips">${[0, 1].map(t => `<button class="chip" data-witeam="${t}" aria-pressed="${w.team === t}">${esc(M[t ? 'away' : 'home'].name)}</button>`).join('')}</div>
+    ${benchView(side)}
     <div class="editor" style="margin-top:10px"><h3>From ${now}', ${esc(M[side].name)} change to</h3>${sl}
       <div class="row"><span>System</span><select id="wi-form"><option value="">as it was</option>${forms.map(f => `<option${f === w.formation ? ' selected' : ''}>${f}</option>`).join('')}</select><span></span></div>
       <div class="bar"><button class="btn primary" data-act="wi-run"${w.busy ? ' disabled' : ''}>Play it out</button><button class="btn" data-act="wi-reset">Reset</button></div></div>
     ${res}`;
+}
+// the bench assistant (POST /api/assistant): reads the game, proposes two changes, replays the rest of the match with and without each, picks from the results
+const CH_WORD = { press: 'pressing', line_height: 'defensive line', compactness: 'compactness', width: 'width', directness: 'directness', risk: 'risk', shoot: 'shooting' };
+const chText = ch => Object.entries(ch).map(([k, v]) => (k === 'formation' ? `switch to ${v}` : `${CH_WORD[k] || k} to ${Math.round(v * 100)}`)).join(', ');
+function benchView(side) {
+  const b = S.bench;
+  const head = `<div class="editor" style="margin-top:10px"><h3>Bench assistant</h3><div class="mono">Reads ${esc(S.D.meta[side].name)}'s game at ${esc(clockAt(S.t))}, proposes two changes, then replays the rest of the match with and without each before recommending one.</div>
+    <div class="bar" style="margin-top:8px"><button class="btn primary" data-act="bench"${b && b.busy ? ' disabled' : ''}>Advise the manager</button></div>`;
+  if (!b || b.side !== side) return head + '</div>';
+  if (b.busy) return head + `<div class="thinking">${esc(b.step || 'Reading the game')}</div></div>`;
+  if (b.err) return head + `<div class="empty">${esc(b.err)}</div></div>`;
+  const r = b.r, pct = x => Math.round(x * 100) + '%';
+  const rows = r.tests.map(x => `<tr${r.recommendation && JSON.stringify(x.change) === JSON.stringify(r.recommendation) ? ' class="lead"' : ''}><td>${esc(chText(x.change))}<div class="mono">${esc(x.why)}</div></td>
+    <td>${pct(x.as_it_was.win)} / ${pct(x.as_it_was.draw)} / ${pct(x.as_it_was.loss)}</td><td>${pct(x.with_change.win)} / ${pct(x.with_change.draw)} / ${pct(x.with_change.loss)}</td><td>${x.points_gain > 0 ? '+' : ''}${x.points_gain}</td></tr>`).join('');
+  return head + `<div class="label">${esc(r.team)} at ${esc(r.minute)} · ${esc(r.score)}</div>
+    <p>${esc(tr(r.answer || r.held || ''))}</p>${r.approved ? '<span class="badge ok">Fact-checked</span>' : '<span class="badge warn">Held by fact-checker</span>'}
+    <table class="stats" style="margin-top:8px"><thead><tr><th>Change tried</th><th>As it was W/D/L</th><th>With it</th><th>Points</th></tr></thead><tbody>${rows || '<tr><td colspan="4">No usable proposal.</td></tr>'}</tbody></table>
+    <div class="mono" style="margin-top:6px">${r.tests[0] ? `${r.tests[0].runs} paired replays each (same random numbers with and without). ` : ''}${r.recommendation ? `Recommended: ${esc(chText(r.recommendation))}.` : 'Recommended: keep it as it is.'} Points = 3 × win + draw, expected.</div>
+    ${r.recommendation ? '<div class="bar" style="margin-top:8px"><button class="btn" data-act="bench-apply">Load it into the sliders</button></div>' : ''}</div>`;
+}
+async function runBench() {
+  const side = S.wi.team ? 'away' : 'home', b = S.bench = { side, busy: true, step: '' };
+  render(true);
+  try {
+    const res = await fetch('api/assistant', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ match: S.id, t: S.t, team: S.wi.team }) });
+    if (!res.ok) throw new Error(res.status === 404 || res.status === 405 ? NO_SERVER : await res.text());
+    const reader = res.body.getReader(), dec = new TextDecoder();
+    let buf = '';
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let k;
+      while ((k = buf.indexOf('\n\n')) >= 0) {
+        const block = buf.slice(0, k); buf = buf.slice(k + 2);
+        const kind = (block.match(/^event: (.*)$/m) || [])[1], data = JSON.parse((block.match(/^data: (.*)$/m) || [])[1] || 'null');
+        if (kind === 'step') { b.step = data.tool === 'what_if' ? `Replaying the rest of the match with: ${chText(Object.fromEntries(Object.entries(data.args).filter(([k_]) => k_ !== 'team')))}` : `${data.agent.replace('_', ' ')}: ${data.tool.replace(/_/g, ' ')}`; render(true); }
+        if (kind === 'advice') b.r = data;
+        if (kind === 'error') throw new Error(data.error);
+      }
+    }
+    if (!b.r) throw new Error('The assistant did not answer.');
+  } catch (err) { b.err = err.message.startsWith('The ') ? err.message : 'The assistant did not answer: ' + err.message; }
+  b.busy = false; render(true);
 }
 async function runWhatIf() {
   const w = S.wi, ch = { ...w.change };
@@ -1242,6 +1297,8 @@ $('panel-body').addEventListener('click', e => {
   else if (d.witeam !== undefined) { S.wi = { team: +d.witeam, change: {}, formation: '', busy: false, res: null, err: '' }; render(true); }
   else if (d.act === 'highlights') playHighlights();
   else if (d.act === 'wi-run') runWhatIf();
+  else if (d.act === 'bench') runBench();
+  else if (d.act === 'bench-apply') { const rc = S.bench.r.recommendation; S.wi.change = Object.fromEntries(Object.entries(rc).filter(([k]) => k !== 'formation')); S.wi.formation = rc.formation || ''; render(true); }
   else if (d.act === 'wi-reset') { S.wi = { team: S.wi.team, change: {}, formation: '', busy: false, res: null, err: '' }; render(true); }
   else if (d.act === 'wi-explain') {
     const w = S.wi, r = w.res, parts = Object.entries(w.change).map(([k, v]) => `${k.replace('_', ' ')} ${Math.round(v * 100)}%`).concat(w.formation ? [`formation ${w.formation}`] : []);

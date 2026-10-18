@@ -16,3 +16,4 @@ jobs:
           python tests/test_stats.py
           python tests/test_tools.py
           python tests/test_newsroom.py
+          python -c "import server.app"

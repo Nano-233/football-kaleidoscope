@@ -16,7 +16,7 @@ Team of two: the user (technical) and a partner (football knowledge, no coding).
 
 | Area | State |
 |---|---|
-| Engine | Frozen at tag `engine-v4` (since then only a job log added, no behaviour change). Realism work done; open gaps listed in DEVLOG (shots 16.4 vs 12.9, cut-backs, support in the gaps). Do not reopen unless asked. |
+| Engine | Tag `engine-v5` (2026-10-18): glycogen fatigue, hard-run recovery, contested loose-ball race (DEVLOG "Fatigue, recovery runs and loose balls"); real-data loss 128.9 -> 124.2 on 96 unseen matches. Open gaps: big chances 0.36 vs 0.86, shots 15.4 vs 12.9, sprinting 90 s vs about 30 s a player (need-based runs over long gaps), support too far from the passer. |
 | Demo data | 5 matches rebuilt on engine-v4 and committed (`web/data`, `server/data`): match_1, match_7, RED-ASH, HAR-STB, WMW-OAK. What-if replays reproduce each exactly. |
 | Newsroom accuracy | `web/data/eval.json`: overall 0.84 (25 answers), goals 1.0, best player 1.0, pressing 1.0, formation 0.6; changes found 6/11; 100 % fact-checker approved; ~15 s an answer. |
 | Walkthrough | Fan / Analyst / Scout walked; fixes in DEVLOG "Persona walkthrough fixes" and "A red card given to the wrong team". Scout ratings are full-match by design (labelled). |
@@ -24,6 +24,7 @@ Team of two: the user (technical) and a partner (football knowledge, no coding).
 | Live run | `GET /api/live` + "Live run" button: events streamed on the server clock, newsroom runs per moment on Foundry (about 7 s a goal), one run at a time. DEVLOG "Live run". |
 | Defensive duties | `MatchView.duties` reads closing down, man tracked, space held from tracking only; scored against the engine job log (`jobs`, logging only, matches identical): frames 0.63-0.69, tracked man 64-81 %. Board "Duties", Scout block, agent tool `defensive_duties`. DEVLOG "Defensive duties". |
 | Rhythm, metric, milestones | `MatchView.rhythm` (control vs chaos by 5 min), "Your metric" (per-minute leaders), `MatchView.milestones`. DEVLOG "Control vs chaos, a metric to follow, milestones". |
+| Bench assistant + fatigue | `Desk.advise` (POST `/api/assistant`, What-if tab "Advise the manager"): reads the game, proposes two changes, tests each with 12 paired replays, the pick is made in code (expected points +0.15 and 2+ changed results), writer + checker explain. About 105 s. `MatchView.fatigue` (tracking only, r 0.50 with true stamina), agent tool `fatigue`, Scout "Running hard". |
 | Deploy | **Ready, not done.** `infra/deploy.ps1` (Azure Container Apps, managed identity, scale to zero). Image verified locally by a copy of exactly what the Dockerfile ships (server loads, replay matches). Needs the user's explicit go-ahead: it creates paid resources. |
 | README / pitch / video | Last. Video < 2 min, public repo, free working test link required by the rules. |
 
@@ -50,6 +51,8 @@ Team of two: the user (technical) and a partner (football knowledge, no coding).
 .venv/Scripts/python.exe scripts/eval_newsroom.py --only=formation ...   # one question kind, prints answers, leaves eval.json alone
 .venv/Scripts/python.exe scripts/formation_eval.py 24       # formation reader against engine truth on fresh matches (no model)
 .venv/Scripts/python.exe tests/test_tools.py ; tests/test_newsroom.py ; tests/test_stats.py ; tests/test_sim.py   # plain scripts, no pytest
+.venv/Scripts/python.exe scripts/fatigue_profile.py 24 ; scripts/sprint_causes.py 8   # running by 15 minutes vs research; where sprinting comes from
+.venv/Scripts/python.exe scripts/tune_norms.py eval 96 seed0=6000 [key=value]          # real-data loss on unseen matches (engine changes: compare before/after)
 ```
 Never run a site build and an eval at the same time (429s). Builds and evals retry 429/5xx/timeouts in `newsroom/agents._run`.
 Server answer cache: `server/cache` (git-ignored), keyed by match data, question, profile and minute.

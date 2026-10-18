@@ -1430,6 +1430,38 @@ The brief names all three ("control vs chaos ... game rhythm patterns", "a singl
   5 saves, a clean sheet at the final whistle: 5-10 a match. On the pitch as a tag for 6 s, in the feed as notes (no model), in the
   followed player's notes, and in match_summary for the agents.
 
+### Fatigue, recovery runs and loose balls (engine, 2026-10-18; tag engine-v5)
+Saw: players barely tired. Stamina at full time 0.92 (0.78-0.97), subs off at 0.82-0.94, so the 15 % top-speed cut was worth 1-2 %.
+`scripts/fatigue_profile.py` (16 matches, rates a minute so stoppage time does not inflate a window): high-intensity running
+(> 19.8 km/h) in the last 15 minutes -1 % on the first 15 (real -35 to -45 %, Mohr, Krustrup & Bangsbo 2003), second half +3 % on the
+first (real about -10 to -20 %), last-15 goals 14 % of all (real 20-22 %). A tracking-only fatigue reader found almost nothing
+(r 0.14-0.28 with the true stamina): there was no fatigue to find.
+- Fixed (logic): match fatigue is glycogen gone from the fast fibres, spent per metre run above critical speed (`fat_k`) plus a
+  small base, instead of a cube of speed; and it lowers both halves of the critical-speed model: the reserve above CS shrinks
+  with stamina (`dmax * stam`) and CS dips (`fat_cs` 10 %), as prolonged exercise does. Magnitude set once against the research
+  (`fat_k` 1.1e-3, the last value tried after 4e-4 and 5.5e-4): last 15 -32 %, second half -16 %, after the most intense 5 minutes
+  the next 5 at 0.98 of the average (real about 0.88), last-15 goals 20 %, stamina at the end 0.46 (min 0.18).
+- Sprinting (`scripts/sprint_causes.py`): 110 s a player above 7 m/s (real about 30 s, 0.25 km), 83 s of it on all-out cues.
+  Attributing it by switching one cue off at a time first gave "loose balls: 110 -> 21 s": wrong. Those matches stalled (the
+  defensive-recovery rule takes "sprinting" to mean "engaged with the ball", so a chaser who stopped sprinting was pulled 3 m goal-side
+  of the ball and nobody fetched it; 385 events a match). With a separate `chasing` flag the real attribution: recovery runs
+  83 -> 32 s when off; every other cue 1-7 s.
+- Fixed (logic): a recovering man a few metres out of position makes a hard run (`hard`, at least 6.5 m/s, 23 km/h), flat out only
+  when beaten by 10 m or more (`rec_far`); a loose ball is a race: flat out only when it is contested (he and the nearest opponent
+  within 0.5 s of it) and 8 m or more away (a sprint needs room to build); the second man and a man who has lost the race run as the
+  gap needs. Sprinting 110 -> 90 s a player; most of the rest is need-based runs over long gaps (the 3.4 s time budget), structural.
+- Real-data loss (96 unseen matches, seed0=6000): 128.9 before, 127.1 with fatigue (5.5e-4), 125.7 + hard-run recovery, 122.4 + the
+  loose-ball race, 124.2 with fatigue at the research strength. Distance 10.96 km (10.8), passes 550 (484, from 577), shots 15.4
+  (12.9), goals 1.11 (1.24), big chances 0.36 (0.86, from 0.50: the open gap widens a little).
+- Tried, not kept: support spots by pitch control (Spearman: 0.7 s reaction, 5 m/s, 0.45 s logistic) instead of distance to the
+  nearest defender: no change, because openness was never the gap (open share of options matches real: half-space 0.29 vs 0.30;
+  the sim has fewer team-mates near the passer: options within 12 m 0.19-0.29 vs 0.54-0.62 in the camera view). Speed-dependent
+  acceleration (force-velocity profile, tau 0.95-1.33 s): loss 127 -> 139-147 and no sprint gain once top speed was set right;
+  removed.
+- Fatigue reader (`MatchView.fatigue`, tracking only): high-intensity metres a minute by 15 minutes against his first 30 and against
+  his team-mates' drop. On the five rebuilt demo matches, pooled over 54 full-match players: r = 0.50 with true fatigue; those flagged
+  tiring are at 0.71 true fatigue against 0.49.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

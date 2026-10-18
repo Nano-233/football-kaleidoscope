@@ -25,6 +25,8 @@ TUNE = dict(xg_z0=-2.08, xg_d=-.07, xg_a=1.89, xg_h=-.2, xg_b=.72, xg_c=.25, cle
             carry_base=0.22, carry_prog=.2, carry_streak=.3, dwell_base=0.9, dwell_shape=2.4, dwell_scale=1.61,
             tackle_rate=1.2, wide_error=4.0, off_miss=.2, off_mult=.02, off_lag=.25, head_keep=.7, safe_out_x=.12, card_thr=.85, adv_sev=.14, clear_dir_sd=1.2, rec_sprint=3., fk_xg=2.2, fk_over0=.45, fk_over_d=.02, fk_shot_k=.5, fk_shot_d=27.2, foul_risk=6., box_avoid=.2, tackle_risk=2.2, tackle_danger=.7)
 TUNE.update(burst_gain=-1e9, block_v=.8, push_k=1., pol_space=0., follow_poss=0.5, pin_from=.35, recover_on=1., cover_margin=3., threat_depth=.34, threat_ball=25., mark_base=4., mark_reach=19., layer_bias=.9, space_cover=0., space_k=100., n_space=3, assign_on=1., press_v=4.3, cover_v=3.5, mark_k=100., lane_job_k=35., post_v=5., space_v=4.8, job_hyst=1.5, press_hyst=2.0, templ_w=.9, busy_gate=.6, flat_gate=.6, run_gate=.95, mark_sprint_d=3.0, box_start=38., wn_end=42., lag_k=1., drop_k=1., mark_gap=1.1, box_gate=.85, dang_far=38., dang_gate=1.0, react_def=.35, close_gap=1.5, jock_k=1., press_k=1., open_w=1., lane_w=1., slot_gate=.5, lean_r=24., lean_min=.35, shoot_close=28., shot_gap=.7, jobs_on=1., jobs_d=38., jobs_att=40., jobs_w=.9, job_mark=3., job_lane=12., job_post=1.4, job_wv=4., way_pen=0., way_r=2.2, run_k=1., ball_side=.9, hover=.3)  # block shape (read by movement.py through TP)
+TUNE.update(rec_far=10., hard_v=6.5)  # recovery: flat out only when beaten by 10 m or more, a hard run (6.5 m/s, 23 km/h) when a few metres out
+TUNE.update(fat_on=1., fat_base=1.5e-5, fat_k=1.1e-3, fat_cs=.1)
 TUNE.update(body_sep=.7, area_run=1., area_slide=.25, mark_lat=8., area_half=13.75, area_ball=.8, far_free=1., far_dy=14., of_mask=13., cross_sigma=1.6, threat_xg=.15, tackle_floor=.5, cover_k=.04, behind_k=1.5, foul_miss=.35, duel_reach=1.4, gk_reach=1.6, stop_a=15., touch_sd=.9, pin_d=4., pin_p=.6, pin_r=1.5, slide_c=1., lat_def_c=1., fb_up=6., far_tuck=1., tackle_dir_sd=.5, tackle_v0=2.5, tackle_v1=6., body_r=.5, contact_mu=.35, contact_e=.3, loose_k=.07, loose_v0=5., touch_r=.9, take_tau=.35, take_k=.04, take_v0=10.)  # a player's body as the ball meets it: radius with a leg out (m), friction that takes pace off a glancing ball, how much a head-on ball comes back
 movement.TP = TUNE
 sig = lambda x: 1 / (1 + np.exp(-x))
@@ -106,6 +108,8 @@ class Match:
         s.chance_xg, s.chance_t = 0., 0.
         s.urg_until, s.cap_s = np.zeros(22), None
         s.sprint_hint = np.zeros(22, bool)
+        s.chasing = np.zeros(22, bool)
+        s.hard = np.zeros(22, bool)  # a hard run (high intensity, below a sprint): a man recovering a few metres  # going for a loose ball, flat out or not (engaged with it: the recovery rule leaves him alone)
         s.head = np.array([[1., 0.]] * 11 + [[-1., 0.]] * 11)  # which way each player's body faces
         s.carry_scale = 1.0
         s.audit = None  # a list switches on decision auditing (scripts/logic_audit.py)
@@ -121,7 +125,7 @@ class Match:
         s.line_hist = [collections.deque(maxlen=4), collections.deque(maxlen=4)]  # the line as the passer last saw it (~.8 s ago)
         s.done = False
         s.score = [0, 0]
-        s.events, s.frames, s.jobs = [], [], []
+        s.events, s.frames, s.jobs, s.stam_log = [], [], [], []
         s.ball, s.ball_v = np.array([L / 2, W / 2]), np.zeros(2)
         s.state, s.poss, s.carrier, s.flight, s.rk = "dead", -1, -1, None, None
         s.last_touch, s.last_ctrl_team = -1, None
@@ -477,8 +481,10 @@ class Match:
         vmax = s.vmax * (1 - .15 * (1 - s.stam))
         if TUNE["dp_on"] > 0:  # running above critical speed spends a finite reserve and slowly refills below it (critical speed / D' model; soccer CS about 3.7-4.0 m/s, D' a few hundred metres)
             sp0 = nrm(s.vel, axis=1)
-            s.dp = clip(np.where(sp0 > s.cs, s.dp - (sp0 - s.cs) * dt, s.dp + (s.dmax - s.dp) * (1. - np.exp(-dt / TUNE["dp_tau"]))), 0., s.dmax)
-            vmax = np.maximum(s.cs + (vmax - s.cs) * clip(s.dp / (TUNE["dp_floor"] * s.dmax), 0., 1.), np.minimum(vmax, s.cs))
+            # match fatigue (glycogen gone from the fast fibres) lowers both halves of the model, the reserve most: prolonged exercise cuts CS a little and D' a lot
+            cs, dmax = (s.cs * (1. - TUNE["fat_cs"] * (1. - s.stam)), s.dmax * s.stam) if TUNE["fat_on"] > 0 else (s.cs, s.dmax)
+            s.dp = clip(np.where(sp0 > cs, s.dp - (sp0 - cs) * dt, s.dp + (dmax - s.dp) * (1. - np.exp(-dt / TUNE["dp_tau"]))), 0., dmax)
+            vmax = np.maximum(cs + (vmax - cs) * clip(s.dp / (TUNE["dp_floor"] * dmax), 0., 1.), np.minimum(vmax, cs))
         energy = s.mod["cruise"] * movement.CRUISE[s.role] * TUNE["cruise_k"]  # role/trait work rate: how much ground a player covers
         near_ball = nrm(tg - s.ball, axis=1) < 6.
         if s.state == "flight":
@@ -499,6 +505,7 @@ class Match:
         need = np.maximum(dist - TUNE["catch_slack"], 0.) / TUNE["catch_t"]  # effort follows need: a man who is 6 m from where he has to be goes flat out, one who is 2 m off does not
         run = np.clip(need, vmax * TUNE["run_frac"] if TUNE["run_frac"] >= 0 else jog, vmax)  # an urgent man runs as hard as the ground to cover demands, never slower than his jog (run_frac < 0)
         cap = np.where(sprint, run if TUNE["sprint_need"] > 0 else vmax, np.where(urg, run, jog))  # all-out only when the time to cover the ground demands it
+        cap = np.where(urg & s.hard & ~sprint, np.minimum(np.maximum(run, TUNE["hard_v"]), vmax), cap)  # a hard run: at least high-intensity pace
         if s.state == "held":
             cap[s.carrier] = min(cap[s.carrier], s.carry_speed * s.carry_scale, .85 * vmax[s.carrier])
         if s.cap_s is None:
@@ -531,7 +538,10 @@ class Match:
         if s.off.any():
             s.pos[s.off], s.vel[s.off] = PARK[s.off], 0
         sp = nrm(s.vel, axis=1)
-        s.stam = clip(s.stam - dt * (1.5e-5 + 6e-4 * (sp / s.vmax) ** 3) * (1.35 - .035 * s.attr["stamina"]) * s.heat, 0, 1)
+        if TUNE["fat_on"] > 0:  # glycogen use: a little all the time, and per metre run above critical speed (where the fast fibres do the work)
+            s.stam = clip(s.stam - dt * (TUNE["fat_base"] + TUNE["fat_k"] * np.maximum(sp - s.cs, 0.)) * (1.35 - .035 * s.attr["stamina"]) * s.heat, 0, 1)
+        else:
+            s.stam = clip(s.stam - dt * (1.5e-5 + 6e-4 * (sp / s.vmax) ** 3) * (1.35 - .035 * s.attr["stamina"]) * s.heat, 0, 1)
 
     def _ball_z(s):
         """Ball height in metres: parabola for lofted passes and shots, zero otherwise."""
@@ -551,6 +561,8 @@ class Match:
         s.frames.append(np.concatenate([[s.t, *s.ball, s.carrier, -1 if s.last_ctrl_team is None else s.last_ctrl_team],
                                         s.pos.ravel(), [s._ball_z()], np.round(np.arctan2(s.head[:, 1], s.head[:, 0]), 2)]))
         s.jobs.append(np.concatenate(s.job_prev))  # ground truth for the duty reader (analytics/tools.py): each defender's job, logged only, never read back
+        if len(s.frames) % 5 == 1:
+            s.stam_log.append(np.round(s.stam, 3))  # ground truth for the fatigue reader, 1 Hz: logged only
 
     # ------------------------------------------------------------------ possession
     def _dwell(s, i):
@@ -1991,6 +2003,8 @@ class Match:
                       score=s.score, dead_log=[[round(a, 1), round(b if b is not None else s.t, 1), k] for a, b, k in s.dead_log], ball_in_play=round(1 - s.state_ticks["dead"] / max(sum(s.state_ticks.values()), 1), 3), half_time=s.h1, added_time=s.added, duration=round(s.t, 1), info=s.info,
                       frame_cols=["t", "ball_x", "ball_y", "carrier", "poss"] + [f"{c}{i}" for i in range(22) for c in "xy"] + ["ball_z"] + [f"head{i}" for i in range(22)]),
             events=s.events, frames=fr.tolist(), jobs=np.array(s.jobs, int).tolist(),
+            stamina=np.array(s.stam_log).tolist(), stamina_note="per second (every 5th frame from the first), per slot: the engine's match fatigue, 1 fresh .. 0 spent; "
+                                                              "top speed is cut by 15 % x (1 - stamina); logged only",
             jobs_note="per frame, per slot (home 0-10, away 11-21): the job the defending team's matching gave him when it last ran: -1 none (holds his place "
                       "in the block), 0-10 mark the opponent in that slot of his team, 100 lane to goal, 102 cut-back space, 200/201 press, 210 cover, 300+ open space cell; "
                       "only meaningful while his team is out of possession")

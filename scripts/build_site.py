@@ -227,7 +227,7 @@ def build(src, keep_agents=False):
     old = json.loads((dest / "match.json").read_text(encoding="utf-8")) if keep_agents else {}
     doc = dict(meta=meta, n_frames=len(q), events=events, team_stats=timeline, players=players, leaders=leaders,
                newsroom=old.get("newsroom") or asyncio.run(newsroom(packs)), recaps=old.get("recaps") or asyncio.run(recaps(match)), reading=reading(match), board=board(match),
-               breakdowns=breakdowns(match), profiles=profiles(match), tags=MatchView(match).player_tags(), milestones=MatchView(match).milestones(), duties=duties(match), clips=clips(match["events"], {k: v["name"] for k, v in players.items()}, meta["duration"]))
+               breakdowns=breakdowns(match), profiles=profiles(match), tags=MatchView(match).player_tags(), milestones=MatchView(match).milestones(), duties=duties(match), fatigue=[MatchView(match).fatigue(t) for t in (0, 1)], clips=clips(match["events"], {k: v["name"] for k, v in players.items()}, meta["duration"]))
     (dest / "match.json").write_text(json.dumps(doc, separators=(",", ":")), encoding="utf-8")
     print(dest, f"{sum(f.stat().st_size for f in dest.iterdir()) / 1e6:.1f} MB,", len(packs), "moments,", len(doc["clips"]), "clips")
     return dict(id=name, home=meta["home"]["name"], away=meta["away"]["name"], home_code=meta["home"]["code"], away_code=meta["away"]["code"], score=meta["score"])

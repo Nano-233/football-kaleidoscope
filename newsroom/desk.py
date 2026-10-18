@@ -20,7 +20,8 @@ from typing import Annotated
 from agent_framework import Agent
 
 from analytics.tools import MatchView
-from matchsim.whatif import cached_what_if, t_at_minute
+from matchsim.teams import FORMATIONS
+from matchsim.whatif import TACTIC_KEYS, cached_what_if, snapshot, t_at_minute
 from newsroom.agents import _run, _verdict, unsupported_numbers, wrong_leader, wrong_ppda, wrong_team
 from newsroom.clients import traced
 
@@ -39,7 +40,7 @@ without_ball_changes (those describe how the side defended; mention them only as
 (the score from find_moments with goals, red cards, substitutions) is what a manager reacts to. Look for causes: changes of shape, pressing height and PPDA by period, momentum
 spells, where attacks start, substitutions. For who presses, who tracks whom and who holds which space (and when that changed), use
 defensive_duties: its numbers are shares of the opponents' possession, read from tracking. For whether a side controlled the game
-or it was chaotic, and the rhythm (tempo, stoppages), use control_and_rhythm. For why goals were scored or conceded, find every one of
+or it was chaotic, and the rhythm (tempo, stoppages), use control_and_rhythm; for who is tiring, fatigue. For why goals were scored or conceded, find every one of
 those goals so far with find_moments and call moment_breakdown on each: say how each move was built and where it beat the defence (who lost the ball,
 the pass that broke the line, who was free), not general trends. For a "what if" question (a different instruction or formation from a minute on), use what_if
 and report both columns, as it was and with the change, as chances out of the runs; say the runs are simulations. Use only numbers your tools returned. Reply with concise findings (bullet points), each with
@@ -55,6 +56,20 @@ alone), and when you need both, call them in the same step so they work at the s
 the basic facts. Then reply with the combined findings exactly as the specialists gave them (bullet points, numbers and minutes kept).
 Do not add numbers of your own. If a specialist returns an error or no evidence, call it again; if it still has none, say the
 data could not be read rather than answering without it."""
+
+MANAGER = """You are the manager's assistant on the bench. Investigate the team's game with your tools first (match_summary, formation_changes,
+team_shape, pressing, defensive_duties, control_and_rhythm, fatigue, momentum): what is going wrong, or what is working and must be protected, given the
+score and the minute. Then propose exactly two different changes the manager could make now, each one instruction or a formation, each aimed at
+the biggest problem you found. Reply with JSON only, no prose around it:
+[{"change": {"press": 0.8}, "why": "one sentence naming the finding it answers"}, {"change": {"formation": "4-4-2"}, "why": "..."}]
+Instructions are numbers from 0 to 1 (press: passive-aggressive, line_height: deep-high, compactness: stretched-tight, width: narrow-wide,
+directness: patient-direct, risk: safe-adventurous, shoot: shot-shy-shot-happy); the CURRENT values are given: move one by at least 0.2.
+A formation must be one of the FORMATIONS listed and different from the current one."""
+
+ADVICE = ("Write the bench advice for the {team} manager at {clock} ({score}). In order: what the analysis found (the findings), the two changes "
+          "that were tried and why, what the simulations showed for each (win / draw / loss chances as it was against with the change, and xG "
+          "after the change), and the recommendation: {rec}. Say the test is {runs} paired replays of the rest of the match for each change "
+          "(the same random numbers with and without it), so a difference of one replay can be chance.")
 
 CHECKER = """You are the fact-checker. Compare the ANSWER with the FINDINGS the analysts produced from their tools. Reject it if a number is
 attached to the wrong player, team, metric or minute, a metric is described wrongly (PPDA: lower means a harder press), or a claim is not
@@ -120,6 +135,20 @@ def _duty_words(obj):
     if isinstance(obj, list):
         return [_duty_words(x) for x in obj]
     return obj
+
+
+def _first_json_list(text):
+    """The first JSON list in a reply (models sometimes wrap it in prose or a code fence)."""
+    dec = json.JSONDecoder()
+    for i, ch in enumerate(text):
+        if ch == "[":
+            try:
+                out, _ = dec.raw_decode(text[i:])
+                if isinstance(out, list):
+                    return [x for x in out if isinstance(x, dict)]
+            except ValueError:
+                continue
+    return []
 
 
 def _until(match, t):
@@ -259,6 +288,11 @@ class Desk:
             (control: <team>, chaos, stop-start, even) and the spells of control or chaos."""
             return mv.rhythm()
 
+        def fatigue(team: Annotated[str, "home, away or the team name"]) -> dict:
+            """Who is tiring, read from tracking: each player's high-intensity running (metres a minute above 19.8 km/h) by 15 minutes, his drop
+            against his own first 30 minutes and against his team-mates' (a side protecting a lead runs less as a whole), and who is tiring."""
+            return mv.fatigue(team_ix(team))
+
         def momentum() -> dict:
             """xG, shots and field tilt for both teams by 5 minutes, cumulative xG, and the spells when one side dominated."""
             return mv.momentum()
@@ -312,14 +346,15 @@ class Desk:
             self.trail.append(dict(agent="tactics_analyst", tool="what_if", args=kw))
             return json.dumps(out, default=str)
 
-        tt = [team_shape, formation_changes, pressing, defensive_duties, control_and_rhythm, momentum, passing_network, moment_breakdown, find_moments, match_summary]
-        st = [player_report, defensive_duties, find_moments, moment_breakdown, list_players, match_summary]
+        tt = [team_shape, formation_changes, pressing, defensive_duties, control_and_rhythm, fatigue, momentum, passing_network, moment_breakdown, find_moments, match_summary]
+        st = [player_report, defensive_duties, fatigue, find_moments, moment_breakdown, list_players, match_summary]
         self.tactics = Agent(client, TACTICS, name="tactics_analyst", tools=[logged("tactics_analyst", f) for f in tt] + [what_if])
         self.scout = Agent(client, SCOUT, name="scout", tools=[logged("scout", f) for f in st])
         self.orchestrator = Agent(client, ORCHESTRATOR, name="orchestrator", tools=[
             self.tactics.as_tool(name="tactics_analyst", description="Investigates teams, shapes, pressing, who closes down or tracks whom, momentum and why things happened.", arg_name="task"),
             self.scout.as_tool(name="scout", description="Investigates players: reports, strengths, weaknesses, moments.", arg_name="task"),
             logged("orchestrator", match_summary), logged("orchestrator", list_players)])
+        self.manager = Agent(client, MANAGER, name="manager_assistant", tools=[logged("manager_assistant", f) for f in tt])
         self.writer = Agent(client, _writer_text(self.profile), name="writer")
         self.checker = Agent(client, CHECKER, name="fact_checker")
 
@@ -368,6 +403,15 @@ class Desk:
         n0, f0 = len(self.trail), len(self.facts)
         self._say("orchestrator", "reading the question")
         found = (await _run(self.orchestrator, f"QUESTION: {question}")).text.strip()
+        last, attempts = await self._write_checked(question, found)
+        moments = {m["clock"]: m for f in self.facts if isinstance(f, dict) for m in f.get("moments", [])}
+        watch = [dict(clock=c, t=m["t"], type=m["type"], player=m["player"]) for c, m in moments.items() if re.search(rf"(?<![\d+]){re.escape(c)}", last["answer"])][:6]
+        views = self._views(self.trail[n0:], self.raw[f0:])
+        return dict(question=question, views=views, answer=last["answer"] if last["approved"] else None, held=None if last["approved"] else last["answer"],
+                    approved=last["approved"], rewrites=len(attempts) - 1, findings=found, steps=self.trail[n0:], attempts=attempts, watch=watch)
+
+    async def _write_checked(self, question, found):
+        """The writer drafts from the findings; the LLM fact-checker and the deterministic checks judge it; up to MAX_REWRITES rewrites."""
         facts = {"facts": self.facts}
         brief = f"QUESTION: {question}\nFINDINGS:\n{found}\n"
         attempts, ask = [], brief
@@ -386,12 +430,57 @@ class Desk:
                 break
             self._say("fact_checker", "rejected", {"issues": "; ".join(issues)[:200]})
             ask = brief + f"Your previous answer was rejected by the fact-checker.\nPREVIOUS: {answer}\nISSUES: {issues}\nRewrite it, fixing these issues.\n"
-        last = attempts[-1]
-        moments = {m["clock"]: m for f in self.facts if isinstance(f, dict) for m in f.get("moments", [])}
-        watch = [dict(clock=c, t=m["t"], type=m["type"], player=m["player"]) for c, m in moments.items() if re.search(rf"(?<![\d+]){re.escape(c)}", last["answer"])][:6]
-        views = self._views(self.trail[n0:], self.raw[f0:])
-        return dict(question=question, views=views, answer=last["answer"] if last["approved"] else None, held=None if last["approved"] else last["answer"],
-                    approved=last["approved"], rewrites=len(attempts) - 1, findings=found, steps=self.trail[n0:], attempts=attempts, watch=watch)
+        return attempts[-1], attempts
+
+    async def advise(self, team, runs=12):
+        """The bench assistant: the manager-assistant agent reads the game and proposes two changes; each is tested by replaying the rest of the
+        match `runs` times with and without it (matchsim.whatif, paired); the pick is made here from the results, not by the model (expected
+        points gain of 0.15 or more, and the change altered at least two results); the writer explains it and the fact-checker checks it."""
+        recipe = self.full["meta"].get("recipe")
+        if not recipe:
+            raise ValueError("this match cannot be replayed (no recipe)")
+        mv, t = self.mv, float(self.mv.meta["duration"])
+        tm = 0 if str(team).lower() in ("0", "home", mv.team_names[0].lower(), mv.meta["home"]["code"].lower()) else 1
+        loop = asyncio.get_running_loop()
+        self._say("manager_assistant", "reading the game")
+        snap = await loop.run_in_executor(None, snapshot, recipe, t)
+        cur = {k: round(float(getattr(snap.tact[tm], k)), 2) for k in TACTIC_KEYS}
+        form = snap.formation[tm]
+        clock = snap.events[-1]["clock"] if snap.events else "1'"
+        score = f"{mv.team_names[0]} {snap.score[0]}-{snap.score[1]} {mv.team_names[1]}"
+        self.facts.append(dict(current_instructions=cur, current_formation=form, minute=clock, score=score))
+        task = (f"TEAM: {mv.team_names[tm]} ({('home', 'away')[tm]}), minute {clock}, {score}.\nCURRENT: {json.dumps(cur)}, formation {form}.\n"
+                f"FORMATIONS: {', '.join(sorted(FORMATIONS))}")
+        found = (await _run(self.manager, task)).text.strip()
+        props = _first_json_list(found)
+        if not props:  # one more go, asking for the JSON alone
+            found = (await _run(self.manager, task + "\nReply with the JSON list only.")).text.strip()
+            props = _first_json_list(found)
+        tests = []
+        for pr in props[:2]:  # checked here: known keys, in range, a real move from the current value
+            ch = {k: round(float(min(max(v, 0.), 1.)), 2) for k, v in (pr.get("change") or {}).items() if k in TACTIC_KEYS and abs(float(v) - cur[k]) >= .15}
+            if (pr.get("change") or {}).get("formation") in FORMATIONS and pr["change"]["formation"] != form:
+                ch["formation"] = pr["change"]["formation"]
+            if not ch or any(ch == x["change"] for x in tests):
+                continue
+            self._say("manager_assistant", "what_if", dict(team=mv.team_names[tm], **ch))
+            out = await loop.run_in_executor(None, cached_what_if, recipe, t, tm, ch, runs)
+            pts = lambda r: round(3 * r["win"] + r["draw"], 2)
+            tests.append(dict(change=ch, why=str(pr.get("why", ""))[:300], points_as_it_was=pts(out["as_it_was"]), points_with_change=pts(out["with_change"]),
+                              points_gain=round(pts(out["with_change"]) - pts(out["as_it_was"]), 2), **{k: out[k] for k in ("as_it_was", "with_change", "runs", "runs_with_a_different_result")}))
+        self.facts.append(dict(simulations=tests))
+        if not tests:  # nothing was tested: say so plainly rather than let the writer describe changes that never ran
+            return dict(team=mv.team_names[tm], minute=clock, score=score, current=cur, formation=form, proposals=props, tests=[], recommendation=None,
+                        answer="The assistant could not turn its reading of the game into a change to test this time.", held=None, approved=True, rewrites=0, steps=self.trail)
+        best = max(tests, key=lambda x: x["points_gain"], default=None)
+        keep = not best or best["points_gain"] < .15 or best["runs_with_a_different_result"] < 2
+        rec = ("keep things as they are: neither change did better in the replays" if keep else
+               f"make the change {json.dumps(best['change'])}: expected points {best['points_as_it_was']} -> {best['points_with_change']}")
+        last, attempts = await self._write_checked(ADVICE.format(team=mv.team_names[tm], clock=clock, score=score, rec=rec, runs=runs),
+                                                   found + "\nSIMULATIONS:\n" + json.dumps(tests))
+        return dict(team=mv.team_names[tm], minute=clock, score=score, current=cur, formation=form, proposals=props, tests=tests,
+                    recommendation=None if keep else best["change"], answer=last["answer"] if last["approved"] else None,
+                    held=None if last["approved"] else last["answer"], approved=last["approved"], rewrites=len(attempts) - 1, steps=self.trail)
 
 
 if __name__ == "__main__":

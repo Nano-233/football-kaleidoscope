@@ -38,11 +38,14 @@ BUDGET = dict(ask=int(os.environ.get("ASKS_PER_DAY", "300")), live=int(os.enviro
 _spent = {}  # ponytail: in memory, one replica (deploy.ps1 max 1); a restart or scale to zero resets it, the Azure budget alert is the backstop
 
 
+WHAT = dict(ask="questions", live="live runs", translate="translations", speak="spoken lines")
+
+
 def spend(kind, n=1):
     """Count n model-backed requests of this kind against today's allowance, or refuse with 429."""
     key = (time.strftime("%Y-%m-%d", time.gmtime()), kind)
     if _spent.get(key, 0) + n > BUDGET[kind]:
-        raise web.HTTPTooManyRequests(text=f"The free demo has used today's allowance of new {dict(ask="questions", live="live runs", translate="translations", speak="spoken lines")[kind]}; cached answers, the replay and the stored "
+        raise web.HTTPTooManyRequests(text=f"The free demo has used today's allowance of new {WHAT[kind]}; cached answers, the replay and the stored "
                                            "newsroom still work. It resets at midnight UTC.")
     _spent[key] = _spent.get(key, 0) + n
 
@@ -191,6 +194,55 @@ async def live(request):
 _sim_gate = asyncio.Semaphore(1)  # a what-if uses every core for about a minute
 
 
+async def assistant(request):
+    """POST {"match": "match_7", "t": 3600, "team": 1} -> server-sent events: each step of the bench assistant (reading the game, every what-if
+    it runs), then the advice: two changes tested by replaying the rest of the match with and without each, the pick made from the results."""
+    global _client
+    body = await request.json()
+    m = match(str(body.get("match", "")))
+    if not m["meta"].get("recipe"):
+        raise web.HTTPBadRequest(text="this match cannot be replayed")
+    t = max(300., min(float(body.get("t", 300)), m["meta"]["duration"] - 300))
+    team = 1 if int(body.get("team", 0)) else 0
+    key = hashlib.sha1(json.dumps(["assistant", body.get("match"), [m["meta"]["duration"], len(m["events"])], team, int(t // 60)]).encode()).hexdigest()
+    hit = CACHE / f"{key}.json"
+    resp = web.StreamResponse(headers={"Content-Type": "text/event-stream", "Cache-Control": "no-cache"})
+    if hit.exists():
+        await resp.prepare(request)
+        await resp.write(f"event: advice\ndata: {json.dumps(dict(json.loads(hit.read_text(encoding='utf-8')), cached=True), default=str)}\n\n".encode())
+        await resp.write_eof()
+        return resp
+    spend("ask")
+    if _sim_gate.locked():
+        raise web.HTTPConflict(text="the simulator is busy with another what-if; try again in a minute")
+    await resp.prepare(request)
+    send = lambda kind, data: resp.write(f"event: {kind}\ndata: {json.dumps(data, default=str)}\n\n".encode())
+    q_ = asyncio.Queue()
+
+    async def run():
+        global _client
+        async with _sim_gate, _gate:
+            _client = _client or make_client()
+            return await Desk(_client, m, {"persona": "analyst", "depth": "standard"}, until=t, on_step=q_.put_nowait).advise(team)
+    job = asyncio.create_task(run())
+    while not job.done() or not q_.empty():
+        try:
+            await send("step", await asyncio.wait_for(q_.get(), timeout=.5))
+        except asyncio.TimeoutError:
+            pass
+    try:
+        out = job.result()
+    except Exception as ex:
+        await send("error", dict(error=str(ex)))
+        await resp.write_eof()
+        return resp
+    CACHE.mkdir(parents=True, exist_ok=True)
+    hit.write_text(json.dumps(out, default=str), encoding="utf-8")
+    await send("advice", dict(out, cached=False))
+    await resp.write_eof()
+    return resp
+
+
 async def whatif(request):
     """POST {"match": "match_7", "t": 3600, "team": 1, "change": {"press": .8, "formation": "3-4-3"}} -> as it was / with the change."""
     body = await request.json()
@@ -272,6 +324,7 @@ def app():
     a.router.add_post("/api/whatif", whatif)
     a.router.add_post("/api/speak", speak)
     a.router.add_get("/api/live", live)
+    a.router.add_post("/api/assistant", assistant)
     a.router.add_get("/", index)
     a.router.add_static("/", WEB)
     return a

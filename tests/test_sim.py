@@ -24,6 +24,11 @@ def test_deterministic_and_consistent():
     subs = [e for e in a["events"] if e["type"] == "substitution"]
     assert len(subs) <= 10 and all(sum(e["team"] == t for e in subs) <= 5 for t in (0, 1))
     assert all(e["type"] != "shot" or e.get("why") is None or e["why"]["options"] for e in a["events"])
+    # the game keeps flowing: a loose ball that nobody fetches stalls a match (it once ended with 385 events instead of about 4000)
+    assert len(a["events"]) > 2000 and sum(e["type"] == "pass" for e in a["events"]) > 600
+    # fatigue bites: stamina falls over the match (logged at 1 Hz), and the logs cover every frame
+    st = np.array(a["stamina"])
+    assert len(a["jobs"]) == len(a["frames"]) and abs(len(st) - len(a["frames"]) / 5) <= 1 and st[-1][1:11].mean() < .85
 
 
 if __name__ == "__main__":
