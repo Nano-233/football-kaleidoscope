@@ -12,7 +12,7 @@ from newsroom.moments import moments  # noqa: E402
 
 _SRV = pathlib.Path(__file__).resolve().parents[1] / "server" / "data" / "match_7.json.gz"
 match = json.load(gzip.open(_SRV, "rt", encoding="utf-8")) if not (_OUT := pathlib.Path(__file__).resolve().parents[1] / "out" / "match_7.json").exists() else json.load(open(_OUT, encoding="utf-8"))  # the committed demo match when out/ is not there (CI)
-packs = [p for p in moments(match) if p["moment"]["type"] == "goal"]
+packs = [p for p in moments(match) if p["moment"]["type"] in ("goal", "own_goal")]  # match_7 (engine-v5.1) has only an own goal
 assert packs
 item = asyncio.run(cover(ScriptedClient(), packs[0]))
 assert item["approved"] and packs[0]["player"] in item["line"], item
