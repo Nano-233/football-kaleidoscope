@@ -78,6 +78,7 @@ class MatchView:
         self.jobs = np.asarray(match["jobs"], int) if match.get("jobs") else None  # the engine's own defensive jobs: only for scoring the duty reader, never read by it
         self.stamina = np.asarray(match["stamina"], float) if match.get("stamina") else None  # the engine's fatigue: only for scoring the fatigue reader
         self._duty_cache = {}
+        self.read_attack = True  # formation reader: the shape with the ball is read only from possession in the opposition half
         self.dt = self.meta["dt"]
         self.players = {}
         for t, side in enumerate(("home", "away")):
@@ -210,6 +211,11 @@ class MatchView:
         if sel.sum() < 25:
             return {}
         fr = fr[sel]
+        if phase == "in" and self.read_attack:  # the shape with the ball is the attacking shape: read where the side has it in the opposition half
+            att = (fr[:, 1] if team == 0 else L - fr[:, 1]) > L / 2
+            if att.sum() < 25:
+                return {}
+            fr = fr[att]
         P = []
         for k in range(11 * team, 11 * team + 11):
             xy = fr[:, [5 + 2 * k, 6 + 2 * k]]
@@ -221,7 +227,8 @@ class MatchView:
 
     def formation_timeline(self, team, window=420., step=210., margin=2., scan=300., every=60., confirm=120., hold=1200.):
         """The shape in possession and the shape out of possession, each read from the data and tracked on its own: the two can differ,
-        and which shape a team defends in is whatever its players do, not assumed from the system. The starting shape is read from the
+        and which shape a team defends in is whatever its players do, not assumed from the system. With the ball the shape is read from
+        possession in the opposition half (the attacking organisation; build-up and goal kicks drop the wingers and blur it). The starting shape is read from the
         first `window` seconds; then a `scan`-second window slides forward `every` seconds, and a change is reported where the window
         starting there fits another layout better than the current one by `margin`, and so does the window starting `confirm` seconds
         later (cut short at the final whistle, so a change in the last minutes can still be seen). Two names for one layout

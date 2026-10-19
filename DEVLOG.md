@@ -1480,6 +1480,22 @@ chances. Built the narrower thing those entries point at:
   The 48-match source probe (one pairing, default tactics) put all big chances at 0.32 against 0.50 before: 48 matches swing about
   0.1 at this rate, so the 96 unseen matches decide.
 
+### Formation reader: the shape with the ball is the attacking shape (2026-10-18)
+`formation_eval.py 24` on engine-v5.1: starting shapes 40/48, changes found 34/59, false alarms 37. `scripts/formation_misses.py`
+and a pairwise probe: the change is in the data (after a true change the new system fits better than the old in 0.81 of 5-minute
+windows, before it the old one fits better 0.78), but the best label overall is often a neighbour, and the reader's current label
+had often drifted already: 9 false alarms were 4-3-3 <-> 4-1-4-1 flips with nothing happening, so a later real 4-3-3 -> 4-5-1 looked
+like no change (4-5-1 and 4-1-4-1 are one layout).
+- Fixed (logic): "with the ball" pooled every possession frame (goal kicks, build-up in our own half, counters), where wingers drop
+  to receive. The attacking shape is now read from possession in the opposition half (`MatchView.read_attack`). Tuning matches
+  (9300+): found 34 -> 31, false alarms 37 -> 16. Unseen matches (9500+, nothing chosen on them): found 27 -> 30 of 50, false alarms
+  59 -> 24. The fit margin stays at 2 (1.7: 34 / 29; 1.5: 35 / 43; 1.3: 34 / 67 on the tuning matches).
+- Tried, not kept: accumulated evidence (CUSUM on log fit ratios, k 0.2-0.4, h 2-4): found 18-25, false alarms 24-57; positions
+  relative to the team centre per frame (Shaw & Glickman): identical (min-max normalisation already removes a translation), and
+  also scaled by the team's spread per frame: worse (26 found, 43 false alarms, starts 37/48); scoring the shape without the ball:
+  22 found, 58 false alarms (the with-ball reading is the better one to score).
+- Still open: 3-4-3 read as 5-4-1 when wing-backs and wingers sit deep; starting shapes 40/48 (the engine's 4-3-3 played as 4-1-4-1).
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
