@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="app.css">
+<script type="importmap">{"imports": {"three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 </head>
 <body>
 <header class="top">
@@ -52,6 +53,10 @@
       <button class="icon-btn" id="play" aria-label="Play"><svg viewBox="0 0 16 16"><path id="play-icon" d="M4 2.5v11l9-5.5z"/></svg></button>
       <button class="text-btn" id="next" title="Next key moment (N)">Next moment</button>
       <button class="text-btn" id="voice" aria-pressed="false" title="Read the commentary out loud">Voice</button>
+      <button class="text-btn" id="v3d" aria-pressed="false" title="Watch in 3D (the analysis overlays stay on the 2D pitch)">3D</button>
+      <label class="speed" id="cam3d-wrap" hidden>Camera
+        <select id="cam3d"><option value="tv">Broadcast</option><option value="tactical">Tactical</option><option value="goal">Behind the goal</option><option value="follow">Follow player</option><option value="free">Free (drag)</option></select>
+      </label>
       <button class="text-btn" id="live" aria-pressed="false" title="Stream the match from here and run the newsroom live on Microsoft Foundry">Live run</button>
       <label class="speed">Speed
         <select id="speed"><option value="1">1×</option><option value="2">2×</option><option value="5" selected>5×</option><option value="10">10×</option><option value="30">30×</option></select>
@@ -72,5 +77,6 @@
 
 <div class="toast" id="toast" role="status" hidden></div>
 <script src="app.js"></script>
+<script type="module" src="view3d.js"></script>
 </body>
 </html>

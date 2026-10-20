@@ -128,7 +128,8 @@ async function boot() {
 async function load(id) {
   $('loading').hidden = false; S.playing = false; stopLive();
   const base = `data/${encodeURIComponent(id)}/`;
-  const [D, fb, hb] = await Promise.all([fetch(base + 'match.json').then(r => r.json()), fetch(base + 'frames.bin').then(r => r.arrayBuffer()), fetch(base + 'heads.bin').then(r => r.arrayBuffer())]);
+  const [D, fb, hb, zb] = await Promise.all([fetch(base + 'match.json').then(r => r.json()), fetch(base + 'frames.bin').then(r => r.arrayBuffer()), fetch(base + 'heads.bin').then(r => r.arrayBuffer()),
+    fetch(base + 'ball_z.bin').then(r => (r.ok ? r.arrayBuffer() : null)).catch(() => null)]);  // ball height (cm), for the 3D view; older builds have none
   const q = new Int16Array(fb), h = new Int8Array(hb), n = D.n_frames, F = new Float32Array(n * 72);
   for (let i = 0; i < n; i++) {  // layout of scripts/build_site.py pack_frames: ball xy, carrier, poss, 22 x (x, y) as int16 at 0.05 m; facing int8 at 1/40 rad
     const o = i * 72, k = i * 48;
@@ -136,7 +137,8 @@ async function load(id) {
     for (let j = 0; j < 44; j++) F[o + 5 + j] = q[k + 4 + j] / 20;
     for (let j = 0; j < 22; j++) F[o + 50 + j] = h[i * 22 + j] / 40;
   }
-  Object.assign(S, { D, F, n, dt: D.meta.dt, id, t: 0, player: null, clip: null, bd: null, custom: loadCustom(id), panelKey: '' });
+  Object.assign(S, { D, F, n, dt: D.meta.dt, id, t: 0, player: null, clip: null, bd: null, custom: loadCustom(id), panelKey: '', Z: zb ? new Int16Array(zb) : null });
+  if (S.v3) teams3d();
   S.info = {};
   for (const side of ['home', 'away']) for (const p of [...D.meta[side].players, ...D.meta[side].bench]) S.info[p.id] = { ...p, team: side === 'home' ? 0 : 1 };
   S.slots = [...D.meta.home.players, ...D.meta.away.players].map(p => p.id);
@@ -200,6 +202,28 @@ function drawPitch() {
   }
 }
 
+// ---------------------------------------------------------------- 3D view (web/view3d.js, three.js): the same interpolated frame
+function teams3d() {
+  const shade = c => { const n = parseInt(c.slice(1), 16), d = v => Math.round(v * .55).toString(16).padStart(2, '0'); return '#' + d(n >> 16) + d((n >> 8) & 255) + d(n & 255); };
+  View3D.setTeams([{ shirt: COL.home, shorts: shade(COL.home), keeper: '#e8c547' }, { shirt: COL.away, shorts: shade(COL.away), keeper: '#7bd389' }]);
+}
+function draw3d(t, f) {
+  const i = Math.max(0, Math.min(S.n - 1, Math.round(t / S.dt)));
+  for (let j = 0; j < 22; j++) f[50 + j] = S.F[i * 72 + 50 + j];  // facing from the nearest frame
+  const fi = Math.min(S.n - 1.001, Math.max(0, t / S.dt)), i0 = Math.floor(fi), u = fi - i0;
+  const z = S.Z ? (S.Z[i0] + (S.Z[Math.min(i0 + 1, S.n - 1)] - S.Z[i0]) * u) / 100 : 0;
+  const sel = S.persona === 'scout' && S.player ? slotOf(S.player, t) : -1, fol = S.profile.playerId ? slotOf(S.profile.playerId, t) : -1;
+  View3D.update(f, t, z, k => who(k, t), { highlight: sel >= 0 ? sel : fol, follow: sel >= 0 ? sel : fol >= 0 ? fol : f[3], accent: COL.accent });
+}
+function toggle3d() {
+  if (!window.View3D) return toast('The 3D view is still loading (it needs the three.js library from the internet).');
+  S.v3 = !S.v3;
+  if (S.v3 && !$('pitch3d')) { View3D.init(cv.parentElement); View3D.setMode($('cam3d').value); }
+  if (S.v3) teams3d();
+  $('v3d').setAttribute('aria-pressed', String(S.v3)); $('cam3d-wrap').hidden = !S.v3;
+  draw();
+}
+
 const FS = new Float32Array(72);
 function frame(t) {  // 5 Hz tracking, drawn interpolated (Catmull-Rom for players, linear for the ball), as in viewer/index.html
   const fi = Math.min(S.n - 1.001, Math.max(0, t / S.dt)), i = Math.floor(fi), u = fi - i, F = S.F, at = (k, j) => F[Math.max(0, Math.min(S.n - 1, k)) * 72 + j];
@@ -215,6 +239,11 @@ function draw() {
   if (!S.D) return;
   const t = S.t, f = frame(t);
   HITS.length = 0;
+  const three = S.v3 && window.View3D && !boardOn() && !S.bd && !viewOn();  // the analysis overlays (board, breakdowns, shapes) are drawn on the 2D pitch
+  cv.style.display = three ? 'none' : '';
+  const c3 = $('pitch3d');
+  if (c3) c3.style.display = three ? '' : 'none';
+  if (three) { draw3d(t, f); hud(t); return; }
   drawPitch();
   if (S.persona === 'scout' && S.player) drawActions(t);
   const sel = S.persona === 'scout' && S.player ? slotOf(S.player, t) : -1, fol = S.profile.playerId ? slotOf(S.profile.playerId, t) : -1;
@@ -1367,6 +1396,8 @@ $('live').onclick = () => {  // start; stop (the live feed stays); then back to 
   if (S.live.src.readyState !== EventSource.CLOSED) { stopLive(true); return toast('Live run stopped. Click again for the stored feed.'); }
   stopLive(); toast('Back to the stored newsroom feed.');
 };
+$('v3d').onclick = toggle3d;
+$('cam3d').onchange = e => { if (window.View3D) View3D.setMode(e.target.value); };
 $('voice').onclick = () => { voiceOn = !voiceOn; $('voice').setAttribute('aria-pressed', String(voiceOn)); if (!voiceOn && speaking) speaking.pause(); toast(voiceOn ? 'Commentary will be read out as the lines appear.' : 'Voice off.'); };
 $('lang').innerHTML = LANGS.map(l => `<option${l === S.profile.language ? ' selected' : ''}>${l}</option>`).join('');
 $('metric').innerHTML = Object.entries(METRICS).map(([k, l]) => `<option value="${k}"${k === S.profile.metric ? ' selected' : ''}>${l}</option>`).join('');

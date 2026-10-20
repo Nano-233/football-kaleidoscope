@@ -222,6 +222,7 @@ def build(src, keep_agents=False):
     q, hd = pack_frames(match["frames"])
     (dest / "frames.bin").write_bytes(q.tobytes())
     (dest / "heads.bin").write_bytes(hd.tobytes())
+    (dest / "ball_z.bin").write_bytes((np.asarray(match["frames"])[:, 49] * 100).round().clip(0, 32000).astype(np.int16).tobytes())  # ball height, cm (the 3D view)
     packs = sorted(moments(match) + alerts(match), key=lambda p: p["moment"]["t"])  # moments, and the shifts the readers flag unasked
     timeline, players, leaders = stats_timeline(match)
     events = [{k: v for k, v in e.items() if k not in ("freeze_frame", "why", "players", "bench")} for e in match["events"]]

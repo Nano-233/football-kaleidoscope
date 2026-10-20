@@ -59,6 +59,7 @@ button { cursor: pointer; }
 .layout { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 0; height: calc(100vh - 52px - 71px); min-height: 520px; }
 .stage { display: flex; flex-direction: column; min-width: 0; padding: 16px 20px; gap: 12px; }
 .pitch-wrap { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+#pitch3d { max-width: 100%; border-radius: var(--r); display: block; }
 #pitch { max-width: 100%; max-height: 100%; aspect-ratio: 1100 / 720; border-radius: var(--r); background: var(--pitch); display: block; }
 .loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--text-2); }
 .lower-third { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); width: min(86%, 760px); background: rgba(12, 13, 14, .92); border-left: 4px solid var(--accent); border-radius: 0 var(--r) var(--r) 0; padding: 10px 14px 11px; }

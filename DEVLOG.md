@@ -1541,6 +1541,17 @@ real-time intelligence that explains why a moment matters.
   70', duties for one player, and ask_newsroom ("who tracked whom for Oakhaven after half-time?" at 75': the tactics analyst called
   defensive_duties twice, approved). `tests/test_mcp.py` in CI (offline).
 
+### A 3D view (2026-10-20)
+Looked for something to reuse first: no open three.js viewer for football tracking data (the nearest are a Unity viewer for SkillCorner
+data and a three.js viewer for a browser game with no repo); CC0 animated humanoids exist as glTF (Quaternius Universal Animation
+Library, KayKit) but need a download from itch.io and have no kick; the three.js sample Soldier / Xbot models come from Mixamo with
+no clear licence, so not used. Built from primitives instead (`web/view3d.js`, three.js 0.160.0 from jsDelivr through an import map):
+the pitch drawn to a canvas texture with the real markings and mowing stripes, goals with wire nets, stepped stands, players as simple
+figures in team colours (keepers in their own colour) turned to the logged facing, legs and arms swinging with their speed, a number
+tag over each, the ball at the height the engine logged (`ball_z.bin`, new in the site build) with a blob shadow. Cameras: broadcast,
+tactical, behind the goal, follow the player (the scout's player or the followed one), free orbit. The 2D pitch stays for the board,
+the breakdowns and the shapes (the 3D view hands back to it for those). About 0.8 ms of CPU a frame.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
