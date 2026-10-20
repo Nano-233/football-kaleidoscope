@@ -1666,8 +1666,8 @@ Tried, none kept:
 - pressers closing at a hard run instead of a sprint (`press_hard`): pressed share 0.24 unchanged, loss +5.8.
 Next: why the passer is pressed so often when the hold time is real and the defenders are about as near at the reception (wide_press:
 middle third within 4 m at reception 0.30 vs 0.24 centrally): the press radius and the number of men sent (one or two per carrier,
-plus the receiver-closing rule) against real pressing counts per possession; and the passer's view of short options (the policy
-scores only team-mates more than 8 m away: `vis` needs dist > 8).
+plus the receiver-closing rule) against real pressing counts per possession. (Checked: open-play options start at 3.5 m; the 8 m
+floor in `vis` is for goal kicks only.)
 
 ## Is the tuner machine learning?
 
