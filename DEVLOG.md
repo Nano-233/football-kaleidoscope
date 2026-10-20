@@ -1585,6 +1585,36 @@ well per xG (1.08 / 0.92, 178 shots): players choose when to use it.
 - 3D view: the kick uses the event's foot (left or right leg); the scout's player card shows the preferred foot and weak-foot rating;
   player_report gives them to the agents.
 
+### Take-ons: one judgement to pass, a take-on priced at its own odds (engine, 2026-10-20; tag engine-v5.3)
+Saw: take-ons 3.5 per team-match against 17.5 real (10.5 on Oct 12, "the chosen dribble is too rare"), success 0.51 (0.57).
+Measured (`scripts/takeon_where.py`, StatsBomb PL 2015/16 against 12 sim matches, plus the decision audit):
+- Every real take-on is under pressure; the sim chose a carry line through a man about 3 times a match, though the best carry
+  line was a take-on 20 times. Real per zone: final third 4.5 central + 4.5 wide, middle 3.4 + 3.2, own third 1.0 + 0.9.
+- The decision priced a take-on at p_beat x (0.4 + 0.6 facing) although p_beat already holds the facing term, so it counted
+  facing twice, and it counted a lost duel that ends in a foul for us as a lost ball.
+- Bug: every pass option got its own misjudgement draw against one draw for the single best carry line. With about ten passes the
+  best noisy pass wins by luck (the expected max of ten draws is +0.7 to +1.0 at the noise of a pressed player), and the pass
+  played is then re-drawn by the learned policy anyway, so the lucky draw was not even the ball he plays.
+- Not the cause: the full-back's permission to engage (`BACK_PRESS`; a carrier level with or past him now may be engaged,
+  `level_press`, no measurable effect, kept as the right rule), the carry's value at the byline (below).
+Fixed: a take-on line is priced at p_beat (plus the foul won when it is lost) times surviving the others (`to_price`); whether to
+pass is one judgement, one noise draw for all pass options (`one_pass_nz`); a carry's chance term counts the best ball he could
+put on a team-mate in the box from where it ends, as well as his own shot (`xg_set`). Then the shot willingness was recalibrated
+(it had been fitted with the bug in): one coordinate round on 32 matches over ten shot and carry weights, `shoot_ref` 0.168 -> 0.303,
+`shoot_slope` 2.05 -> 2.95, `shoot_hold` 0.98 -> 0.5, `patience` 0.2 -> 0.38, `drive` 0.1 -> 0 (the others unchanged).
+Effect, 96 unseen matches: loss 122.7 -> 118.8 (take-on pricing) -> 121.1 (one pass judgement: shots 15.3 -> 18.1, long shots from
+central carries) -> 115.0 after the recalibration. Take-ons 3.5 -> 19.4 (17.5), success 0.47 (0.57), passes 487 (484), shots 14.6
+(12.9), goals 1.28 (1.24), big chances 0.48 (0.86); tackles 27 -> 34.7 (20.5) and dispossessed 18.8 (13.8) rose with the duels.
+Still open: the zones. Too many central take-ons (final third 8.7 vs 4.5, own third 3.0 vs 1.0), too few wide (final third 2.0 vs 4.5):
+wide, the carrier has a man within 4 m in 34 % of decisions against 81 % centrally, so a line through a man rarely exists there.
+
+### Cut-backs re-measured (2026-10-20)
+`cutback_outcome.py` 48 (now prints where the ball is played to and the shot's distance, blockers and nearest defender), sim | real:
+1.39 per team-match | 124 in 51 Euro 2020 matches (about 1.2): volume is not the gap. Reached 0.38 | 0.44, a shot follows 0.26 |
+0.31, played to 11.8 | 10.8 m from goal, shot from 10.0 | 11.2 m, defenders in the way at the shot 1.47 | 1.38, nearest 1.9 | 2.4 m,
+xG 0.117 | 0.144, big chance per cut-back 0.01 | 0.06 (real: 7 of 124). At the moment of the pass the receiving spot is as free as
+real; by the shot the defenders are closer than real. The reaction delay is on the dead-end list (Oct 8), so not retried.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

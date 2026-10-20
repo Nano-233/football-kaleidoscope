@@ -246,7 +246,8 @@ def defend_assign(m, t, zone, urgent, role, P, O, Ov, C, Cv, ci, tc, tgt1, cover
     m._press_pts = press_pts
     n_press = 1 + (tc.press > .8)
     back = (role == CB) | (role == FB)
-    ok_press = (d_ball < np.where(back & ~in_range, np.minimum(R_press, BACK_PRESS), R_press))
+    level = (C[0] - P[:, 0] < TP.get("level_press", 3.)) if TP.get("level_press", 3.) > 0 else np.zeros(len(P), bool)  # a carrier level with him or past him: going to him does not take him out of the line (the full-back's 1 v 1 with the winger)
+    ok_press = (d_ball < np.where(back & ~in_range & ~level, np.minimum(R_press, BACK_PRESS), R_press))
     for k in range(n_press if with_press else 0):
         add(tgt1 if k == 0 else tgt1 + _unit(GOAL - C) * 3. + np.array([0., side * 2.]), TP.get("press_v", 7.) * (1. if k == 0 else .5), 200 + k, "press", ok_press)
     if cover_ok and with_press:

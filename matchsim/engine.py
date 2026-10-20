@@ -21,12 +21,13 @@ from .movement import _tf, _unit, nrm, clip, XT
 
 DT = 0.2
 # Single tuning table (calibrated by scripts/calibrate.py against real-football norms).
-TUNE = dict(xg_z0=-2.08, xg_d=-.07, xg_a=1.89, xg_h=-.2, xg_b=.72, xg_c=.25, clear_xg=.1, sprint_need=0., dp_on=1., cs0=3.5, cs_k=.9, dp0=120., dp_k=100., dp_tau=450., dp_floor=.15, ft_free=1., wait_on=0., wait_gate=.88, wait_max=8., clear_ev=1., policy_on=1., cal_on=0., cal_ga=.07, cal_gb=.77, cal_la=.18, cal_lb=.38, air_exact=1., carry_prog_xt=1., clear_keep=.4, lazy_thr=.04, tgt_every=2, catch_slack=2.0, catch_t=3.4, blk_a=.60, blk_sig=1.0, blk_lam=10.6, blk_b0=.035, xt_k=0., xt_opp=.6, risk_pow_xt=1.0, fk_cross=.5, head_shot_set=.4, head_set_z=1., head_ref=.08, free_dwell=.5, ball_v0=8.5, ball_v1=.25, read_press=.8, tackle_sel=8., exposed_k=1.2, surv_k=0.4, gk_shoot=1.4, contact_r=2.05, press_len=4.1, close_t=.5, hurry_k=.3, exec_k=2.0, exec_floor=.15, dec_noise=0.45, windup_k=.35, hold_sigma=.7, fade_up=2.2, fade_dn=1.4, lazy_k=.6, xg_run=8., own_goal_cone=.0, head_run=4.2, head_rate=2.5, mom_k=.75, carry_v0=.9, carry_v1=.9, cruise_k=0.42, burst_hold=0.4, run_frac=-1., press_dist=1.75, air_base=0., head_on=0.28, head_clear=0.5, air_k=0.5, gk_air=0.6, block_base=0.125, block_nb=0.12, ft_shot=0.1, turn_cost=0.55, turn_rate=3.2, face_k=1.05, pot=1.54, relief=1.0, ft_slow=.0, drive=0.1,  cong_k=0.5, risk_pow=2.2, first_touch=0., wide_v=0.0, ctrl_marked=0.305, shoot_hold=0.98, shoot_slope=2.05, shoot_ref=0.168, shoot_press=0.56, adv_lin=.6, pack=.04, shoot_min=.12, react=1.84, patience=0.2, pass_sigma=1.0, intercept=0.309, shot_mid=1.82, usage=0.76, fk_bonus=0.05, long_bonus=0.163, prog_base=0.5, prog_dir=0.63, keep=0.455, loss=1.0, gk_long=.5, box_foul=1., home_edge=1.7, shot_cost=1.3, shot_k=3.15, shot_k_dir=5.0,
+TUNE = dict(xg_z0=-2.08, xg_d=-.07, xg_a=1.89, xg_h=-.2, xg_b=.72, xg_c=.25, clear_xg=.1, sprint_need=0., dp_on=1., cs0=3.5, cs_k=.9, dp0=120., dp_k=100., dp_tau=450., dp_floor=.15, ft_free=1., wait_on=0., wait_gate=.88, wait_max=8., clear_ev=1., policy_on=1., cal_on=0., cal_ga=.07, cal_gb=.77, cal_la=.18, cal_lb=.38, air_exact=1., carry_prog_xt=1., clear_keep=.4, lazy_thr=.04, tgt_every=2, catch_slack=2.0, catch_t=3.4, blk_a=.60, blk_sig=1.0, blk_lam=10.6, blk_b0=.035, xt_k=0., xt_opp=.6, risk_pow_xt=1.0, fk_cross=.5, head_shot_set=.4, head_set_z=1., head_ref=.08, free_dwell=.5, ball_v0=8.5, ball_v1=.25, read_press=.8, tackle_sel=8., exposed_k=1.2, surv_k=0.4, gk_shoot=1.4, contact_r=2.05, press_len=4.1, close_t=.5, hurry_k=.3, exec_k=2.0, exec_floor=.15, dec_noise=0.45, windup_k=.35, hold_sigma=.7, fade_up=2.2, fade_dn=1.4, lazy_k=.6, xg_run=8., own_goal_cone=.0, head_run=4.2, head_rate=2.5, mom_k=.75, carry_v0=.9, carry_v1=.9, cruise_k=0.42, burst_hold=0.4, run_frac=-1., press_dist=1.75, air_base=0., head_on=0.28, head_clear=0.5, air_k=0.5, gk_air=0.6, block_base=0.125, block_nb=0.12, ft_shot=0.1, turn_cost=0.55, turn_rate=3.2, face_k=1.05, pot=1.54, relief=1.0, ft_slow=.0, drive=0.0,  cong_k=0.5, risk_pow=2.2, first_touch=0., wide_v=0.0, ctrl_marked=0.305, shoot_hold=0.5, shoot_slope=2.95, shoot_ref=0.303, shoot_press=0.56, adv_lin=.6, pack=.04, shoot_min=.12, react=1.84, patience=0.38, pass_sigma=1.0, intercept=0.309, shot_mid=1.82, usage=0.76, fk_bonus=0.05, long_bonus=0.163, prog_base=0.5, prog_dir=0.63, keep=0.455, loss=1.0, gk_long=.5, box_foul=1., home_edge=1.7, shot_cost=1.3, shot_k=3.15, shot_k_dir=5.0,
             carry_base=0.22, carry_prog=.2, carry_streak=.3, dwell_base=0.9, dwell_shape=2.4, dwell_scale=1.61,
             tackle_rate=1.2, wide_error=4.0, off_miss=.2, off_mult=.02, off_lag=.25, head_keep=.7, safe_out_x=.12, card_thr=.85, adv_sev=.14, clear_dir_sd=1.2, rec_sprint=3., fk_xg=2.2, fk_over0=.45, fk_over_d=.02, fk_shot_k=.5, fk_shot_d=27.2, foul_risk=6., box_avoid=.2, tackle_risk=2.2, tackle_danger=.7)
 TUNE.update(burst_gain=-1e9, block_v=.8, push_k=1., pol_space=0., follow_poss=0.5, pin_from=.35, recover_on=1., cover_margin=3., threat_depth=.34, threat_ball=25., mark_base=4., mark_reach=19., layer_bias=.9, space_cover=0., space_k=100., n_space=3, assign_on=1., press_v=4.3, cover_v=3.5, mark_k=100., lane_job_k=35., post_v=5., space_v=4.8, job_hyst=1.5, press_hyst=2.0, templ_w=.9, busy_gate=.6, flat_gate=.6, run_gate=.95, mark_sprint_d=3.0, box_start=38., wn_end=42., lag_k=1., drop_k=1., mark_gap=1.1, box_gate=.85, dang_far=38., dang_gate=1.0, react_def=.35, close_gap=1.5, jock_k=1., press_k=1., open_w=1., lane_w=1., slot_gate=.5, lean_r=24., lean_min=.35, shoot_close=28., shot_gap=.7, jobs_on=1., jobs_d=38., jobs_att=40., jobs_w=.9, job_mark=3., job_lane=12., job_post=1.4, job_wv=4., way_pen=0., way_r=2.2, run_k=1., ball_side=.9, hover=.3)  # block shape (read by movement.py through TP)
 TUNE.update(wf_on=1., wf_base=.025, wf_k=.3, wf_hurry=1.8, wf_select=1., wf_shot=1.5, wf_err=.25, wf_fin=3., wf_spd=.06)  # the weaker foot: how often (base + k x (rating/20)^2, more when hurried, less for a hard pass he has time to set), and what it costs
 TUNE.update(rec_far=10., hard_v=6.5)  # recovery: flat out only when beaten by 10 m or more, a hard run (6.5 m/s, 23 km/h) when a few metres out
+TUNE.update(to_price=1., xg_set=1., one_pass_nz=1.)  # the take-on is priced with the odds the duel is played at
 TUNE.update(fat_on=1., fat_base=1.5e-5, fat_k=1.1e-3, fat_cs=.1)
 TUNE.update(body_sep=.7, area_run=1., area_slide=.25, mark_lat=8., area_half=13.75, area_ball=.8, far_free=1., far_dy=14., of_mask=13., cross_sigma=1.6, threat_xg=.15, tackle_floor=.5, cover_k=.04, behind_k=1.5, foul_miss=.35, duel_reach=1.4, gk_reach=1.6, stop_a=15., touch_sd=.9, pin_d=4., pin_p=.6, pin_r=1.5, slide_c=1., lat_def_c=1., fb_up=6., far_tuck=1., tackle_dir_sd=.5, tackle_v0=2.5, tackle_v1=6., body_r=.5, contact_mu=.35, contact_e=.3, loose_k=.07, loose_v0=5., touch_r=.9, take_tau=.35, take_k=.04, take_v0=10.)  # a player's body as the ball meets it: radius with a leg out (m), friction that takes pace off a glancing ball, how much a head-on ball comes back
 movement.TP = TUNE
@@ -1185,6 +1186,19 @@ class Match:
             rel = O - C
             rel[0] = 99.  # the keeper is not an obstacle to a run at goal: it ends in a shot or a dribble round him, and the shot terms price him in
             best_c = None
+            s._lines = []
+            O_out = O[s.role[s._opp(t)] > 0]
+            box_m = [i for i in range(11) if i != ci and P[i][0] > L - 24 and abs(P[i][1] - W / 2) < 22 and not s.off[11 * t + i]]
+
+            def setup(at):  # the best chance he could give a team-mate in the box from here: the mate's xG x how open the ball to him is
+                if not TUNE["xg_set"] or not box_m:
+                    return 0.
+                sg_ = P[box_m] - at
+                sl_ = np.maximum((sg_ ** 2).sum(-1), 1e-6)
+                q_ = clip(((O_out[None] - at) * sg_[:, None]).sum(-1) / sl_[:, None], 0, 1)
+                open_ = clip(nrm(O_out[None] - (at + q_[..., None] * sg_[:, None]), axis=-1).min(-1) / 3., 0, 1)
+                return float(max(o_ * s._xg(P[i], O_out)[0] for o_, i in zip(open_, box_m)))
+            set_C = setup(C)
             for ang in (0., -35., 35., -70., 70.):  # he looks at several lines to run: straight on, either side of a man, wide; the best by progress and by the risk of the duel geometry
                 ca, sa = np.cos(np.radians(ang)), np.sin(np.radians(ang))
                 dirv = _unit(np.array([dirv0[0] * ca - dirv0[1] * sa, dirv0[0] * sa + dirv0[1] * ca]))
@@ -1212,10 +1226,13 @@ class Match:
                 if o >= 0:
                     lam_c[o - 11 * (1 - t)] = 0.  # the man he is taking on is priced by p_beat; p_surv is for everyone else on the way (the next man)
                 p_surv = float(np.prod(1. - (1. - np.exp(-lam_c * 1.0)) * .5))
-                p_keep = p_beat * (.4 + .6 * fg) * p_surv ** TUNE["surv_k"] * float(np.exp(-TUNE["cong_k"] * max(float(np.exp(-nrm(O[1:] - cpos, axis=1) / 3.).sum()) - 1., 0)))  # a dribbler avoids walking into a crowd
+                p_hold = (p_beat + (1. - p_beat) * .25 * s._foul_scale(c)) if (o >= 0 and TUNE["to_price"]) else p_beat * (.4 + .6 * fg)  # a take-on is decided by p_beat, which already holds his facing; a lost one dragged down is our free kick
+                p_keep = p_hold * p_surv ** TUNE["surv_k"] * float(np.exp(-TUNE["cong_k"] * max(float(np.exp(-nrm(O[1:] - cpos, axis=1) / 3.).sum()) - 1., 0)))  # a dribbler avoids walking into a crowd
                 u_c = (p_keep * ((0. if TUNE["xt_k"] > 0 else TUNE["carry_base"]) + (TUNE["carry_prog_xt"] if TUNE["xt_k"] > 0 else TUNE["carry_prog"]) * prog_w * (Tf(cpos) - TC)) - (1 - p_keep) * loss_eff - TUNE["carry_streak"] * s.carry_streak * (1. - .8 * open_) + s.mod["carry"][c] + CARRY_ROLE[s.role[c]]
                        + TUNE["patience"] * np.exp(-(s.t - s.ctrl_t) / 2.0) * (1 - pr) * (dnear > 4) + TUNE["drive"] * open_ * (1 - pr)
-                       + (0. if TUNE["xt_k"] > 0 else TUNE["xg_run"] * p_keep * max(s._xg(cpos, [])[0] - s._xg(C, [])[0], 0.)))  # running at goal is worth the chance it creates (xg_run term above)
+                       + (0. if TUNE["xt_k"] > 0 else TUNE["xg_run"] * p_keep * max(s._xg(cpos, [])[0] - s._xg(C, [])[0], setup(cpos) - set_C, 0.)))  # running at goal is worth the chance it creates: his own shot, or the ball he can put on a team-mate from there (a winger past his man at the byline)
+                if s.audit is not None:
+                    s._lines.append((ang, float(u_c), int(o), float(p_keep), float(p_surv), float(open_), float(Tf(cpos) - TC), cpos.tolist()))
                 if best_c is None or u_c > best_c[0]:
                     best_c = (u_c, cpos, o, p_beat, p_keep)
             U.append(best_c[0]); K.append("carry"); X.append(best_c[1:])
@@ -1235,7 +1252,10 @@ class Match:
             U, K, X = [0.], ["carry"], [(clip(C + 7 * np.array([1., 0.]), [1, 1], [L - 1, W - 1]), -1, 1.)]
         tau = .02 + .04 * (1 - a["composure"][c] / 20)
         U = np.array(U)
-        U = U + (U < 50) * s.rng.normal(0., TUNE["dec_noise"] * (.25 + 1.5 * pe) * (1.3 - .03 * a["composure"][c]), len(U))  # misjudging the options: rare with time, common when hurried
+        nz = s.rng.normal(0., TUNE["dec_noise"] * (.25 + 1.5 * pe) * (1.3 - .03 * a["composure"][c]), len(U))  # misjudging the options: rare with time, common when hurried
+        if TUNE["one_pass_nz"] and pol_sc is not None:  # whether to pass is one judgement (the policy then picks the ball): ten passes are not ten lottery tickets against one carry
+            nz[pol_first:pol_first + len(pol_sc)] = nz[pol_first]
+        U = U + (U < 50) * nz
         pr_ = np.exp((U - U.max()) / tau)
         k = s.rng.choice(len(U), p=pr_ / pr_.sum())
         if pol_sc is not None and pol_first <= k < pol_first + len(pol_sc):  # he has decided to pass: to whom, and how (ground, air, into his path), is the learned choice
@@ -1320,7 +1340,7 @@ class Match:
         out = O[s.role[s._opp(t)] > 0]
         s.audit.append(dict(t=round(s.t, 1), team=t, c=int(c - 11 * t), role=int(s.role[c]), pos=C.tolist(), rk=rk, press=float(pr), dnear=float(dnear),
                             ahead=int((out[:, 0] > C[0]).sum()), ahead_close=int(((out[:, 0] > C[0] - 1) & (np.abs(out[:, 1] - C[1]) < 10)).sum()),
-                            hold=round(float(s.t - s.ctrl_t), 2), line=float(s.line_hist[t][0]), chosen=int(k), opts=opts))
+                            hold=round(float(s.t - s.ctrl_t), 2), line=float(s.line_hist[t][0]), chosen=int(k), opts=opts, lines=list(getattr(s, "_lines", []))))
 
     # ------------------------------------------------------------------ actions
     def _pass(s, c, rcv, aim, lofted, spd, est, kind="pass", sigma_scale=1.0, why=None, source=None, hands_ok=True, body="foot"):

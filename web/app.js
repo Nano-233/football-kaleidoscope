@@ -212,7 +212,8 @@ function draw3d(t, f) {
   const i = Math.max(0, Math.min(S.n - 1, Math.round(t / S.dt)));
   for (let j = 0; j < 22; j++) f[50 + j] = S.F[i * 72 + 50 + j];  // facing from the nearest frame
   const fi = Math.min(S.n - 1.001, Math.max(0, t / S.dt)), i0 = Math.floor(fi), u = fi - i0;
-  const z = S.Z ? (S.Z[i0] + (S.Z[Math.min(i0 + 1, S.n - 1)] - S.Z[i0]) * u) / 100 : 0;
+  const zk = k => S.Z[Math.max(0, Math.min(S.n - 1, k))], z0 = zk(i0 - 1), z1 = zk(i0), z2 = zk(i0 + 1), z3 = zk(i0 + 2);  // Catmull-Rom through the 5 Hz heights: a smooth arc, no corner at the top
+  const z = S.Z ? Math.max(0, z1 + .5 * u * (z2 - z0 + u * (2 * z0 - 5 * z1 + 4 * z2 - z3 + u * (3 * (z1 - z2) + z3 - z0)))) / 100 : 0;
   const sel = S.persona === 'scout' && S.player ? slotOf(S.player, t) : -1, fol = S.profile.playerId ? slotOf(S.profile.playerId, t) : -1;
   // who is kicking: a pass, cross, shot or clearance whose moment falls inside the kick (the foot meets the ball at the event's time)
   const kicks = new Map(), ev = S.D.events, span = View3D.KICK_S, hit = View3D.KICK_HIT * span;

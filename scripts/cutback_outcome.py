@@ -20,11 +20,15 @@ is_cb = lambda o, e: o[0] > L - 8 and abs(o[1] - W / 2) < 25 and L - 18 < e[0] <
 def tally(c, end, opp, reached, shot):
     c["n"] += 1
     c["reached"] += reached
+    c["end_d"] += float(np.hypot(L - end[0], W / 2 - end[1]))
     nd = min((np.hypot(*(o - end)) for o in opp), default=99)
     c[("free at the spot", 0 if nd < 2 else 1 if nd < 4 else 2)] += 1
     if shot is not None:
-        xg, first, dt = shot
+        xg, first, dt, sd, nb, nd_s = shot
         c["shot"] += 1
+        c["shot_d"] += sd
+        c["nb"] += nb
+        c["nd_s"] += min(nd_s, 6.)
         c["xg"] += xg
         c["big"] += xg >= .25
         c["first"] += first
@@ -48,7 +52,7 @@ def real():
                     bx = np.array(b["location"]) * [L / 120, W / 80]
                     o2 = [P(p) for p in ff[b["id"]] if not p["teammate"] and not p["keeper"]] if b["id"] in ff else []
                     xg = Match._xg(None, bx, o2, header=b["shot"].get("body_part", {}).get("name") == "Head")[0] if b["id"] in ff else b["shot"].get("statsbomb_xg", 0)
-                    shot = (xg, bool(b["shot"].get("first_time")), 0)
+                    shot = (xg, bool(b["shot"].get("first_time")), 0, float(np.hypot(L - bx[0], W / 2 - bx[1])), Match._xg(None, bx, o2)[1], min((float(np.hypot(*(q - bx))) for q in o2), default=6.))
                     break
                 if b["team"]["id"] != e["team"]["id"] and b["type"]["name"] in ("Pass", "Clearance", "Ball Recovery", "Interception", "Block"):
                     break
@@ -79,7 +83,10 @@ def one(seed):
         shot = None
         for b in ev[i + 1:i + 25]:
             if b["type"] == "shot" and b["team"] == e["team"] and b["t"] - e["t"] < 3.5:
-                shot = (b.get("xg", 0), bool(b.get("first_time")), b["t"] - e["t"]); break
+                bx = fl(b["x"], b["y"])
+                fs = F[min(int(round(b["t"] / dt)), len(F) - 1)]
+                o2 = [fl(*fs[5 + 2 * q:7 + 2 * q]) for q in (range(11) if flip else range(11, 22)) if q not in gk and fs[6 + 2 * q] > -5]
+                shot = (b.get("xg", 0), bool(b.get("first_time")), b["t"] - e["t"], float(np.hypot(L - bx[0], W / 2 - bx[1])), Match._xg(None, bx, o2)[1], min((float(np.hypot(*(q - bx))) for q in o2), default=6.)); break
             if b["type"] == "possession_change" or b["t"] - e["t"] > 3.5:
                 break
         tally(c, en, opp, e.get("outcome") == "complete", shot)
@@ -105,6 +112,8 @@ if __name__ == "__main__":
     print(f"cut-backs: {S} sim ({S / n / 2:.2f} per team-match), {R} real (360 sample):   sim | real")
     print(f"  reached a team-mate   {sim['reached'] / S:.2f} | {rl['reached'] / R:.2f}")
     print(f"  a shot follows        {sim['shot'] / S:.2f} | {rl['shot'] / R:.2f}    first time {sim['first'] / max(sim['shot'], 1):.2f} | {rl['first'] / max(rl['shot'], 1):.2f}")
+    print(f"  played to (m from goal) {sim['end_d'] / S:.1f} | {rl['end_d'] / R:.1f}    shot from {sim['shot_d'] / max(sim['shot'], 1):.1f} | {rl['shot_d'] / max(rl['shot'], 1):.1f}")
+    print(f"  at the shot: defenders in the way {sim['nb'] / max(sim['shot'], 1):.2f} | {rl['nb'] / max(rl['shot'], 1):.2f}    nearest {sim['nd_s'] / max(sim['shot'], 1):.1f} | {rl['nd_s'] / max(rl['shot'], 1):.1f} m")
     print(f"  its mean xG           {sim['xg'] / max(sim['shot'], 1):.3f} | {rl['xg'] / max(rl['shot'], 1):.3f}    big chance per cut-back {sim['big'] / S:.2f} | {rl['big'] / R:.2f}")
     print(f"  in the air (high pass) {sim['lofted'] / S:.2f} | {rl['lofted'] / R:.2f}   sim kinds: " + ", ".join(f"{k[1]} {v}" for k, v in sim.items() if isinstance(k, tuple) and k[0] == "kind"))
     print("  cut out where along the pass (quarters): " + " ".join(f"{sim[('cut at', k)] / max(sim['lost'], 1):.2f}" for k in range(4)) + "   by: " + ", ".join(f"{k[1]} {v / max(sim['lost'], 1):.2f}" for k, v in sim.items() if isinstance(k, tuple) and k[0] == "cut by"))

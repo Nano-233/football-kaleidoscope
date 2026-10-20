@@ -20,7 +20,15 @@ const FACE = 0;  // the model's own forward is +z; heading 0 points along +x
 // at KICK_HIT; thigh swing and knee bend in degrees at each key (backswing, contact, follow-through)
 const KICK_S = .55, KICK_HIT = .55, KICK_KEYS = [[0, 0, 0], [.4, -38, 85], [.55, 35, 25], [.75, 60, 5], [1, 0, 0]];
 const KICK_SIGN = { thigh: -1, calf: 1 };
-const _q = new THREE.Quaternion(), _x = new THREE.Vector3(1, 0, 0);
+const _q = new THREE.Quaternion(), _x = new THREE.Vector3(1, 0, 0), _roll = new THREE.Vector3();
+const BALL_R = .2;  // twice a real ball's radius, so it reads from the broadcast camera
+
+function ballTexture() {  // white with dark panels, so the roll shows
+  const c = document.createElement('canvas'); c.width = 128; c.height = 64;
+  const g = c.getContext('2d'); g.fillStyle = '#f4f4f4'; g.fillRect(0, 0, 128, 64); g.fillStyle = '#222';
+  for (const [x, y] of [[16, 16], [48, 40], [80, 16], [112, 40], [16, 56], [80, 56], [48, 6], [112, 6]]) { g.beginPath(); g.arc(x, y, 7, 0, 2 * Math.PI); g.fill(); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
 const camPos = new THREE.Vector3(0, 30, 60), camLook = new THREE.Vector3();
 
 function pitchTexture() {
@@ -176,7 +184,7 @@ function init(container) {
   const apron = new THREE.Mesh(new THREE.PlaneGeometry(L + 60, W + 50), new THREE.MeshStandardMaterial({ color: 0x1d3a20, roughness: 1 }));
   apron.rotation.x = -Math.PI / 2; apron.position.y = -.02; scene.add(apron);
   scene.add(goal(0, -1), goal(L, 1), stands());
-  ball = new THREE.Mesh(new THREE.SphereGeometry(.2, 20, 14), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .35 }));
+  ball = new THREE.Mesh(new THREE.SphereGeometry(BALL_R, 20, 14), new THREE.MeshStandardMaterial({ map: ballTexture(), roughness: .35 }));
   ballShadow = blob(.3, .35); scene.add(ball, ballShadow);
   camera = new THREE.PerspectiveCamera(30, 16 / 9, .5, 600);
   controls = new OrbitControls(camera, renderer.domElement);
@@ -239,7 +247,12 @@ function update(f, t, z, who, opts = {}) {
     }
     p.label.material.color.set(k === opts.highlight ? (opts.accent || '#5aa9ff') : '#ffffff');
   }
-  ball.position.copy(P(f[1], f[2], .2 + Math.max(0, z || 0)));
+  const nb = P(f[1], f[2], BALL_R + Math.max(0, z || 0)), step = Math.hypot(nb.x - ball.position.x, nb.z - ball.position.z);
+  if (step > 1e-4 && step < 5) {  // it rolls: turned about the axis across its path by the distance over its radius (a seek jumps without spinning)
+    _roll.set(nb.z - ball.position.z, 0, ball.position.x - nb.x).normalize();
+    ball.rotateOnWorldAxis(_roll, step / BALL_R);
+  }
+  ball.position.copy(nb);
   ballShadow.position.copy(P(f[1], f[2], .01));
   ballShadow.scale.setScalar(1 / (1 + (z || 0) * .25));
   last = Float32Array.from(f); lastT = t;
