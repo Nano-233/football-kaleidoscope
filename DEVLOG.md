@@ -1615,6 +1615,38 @@ wide, the carrier has a man within 4 m in 34 % of decisions against 81 % central
 xG 0.117 | 0.144, big chance per cut-back 0.01 | 0.06 (real: 7 of 124). At the moment of the pass the receiving spot is as free as
 real; by the shot the defenders are closer than real. The reaction delay is on the dead-end list (Oct 8), so not retried.
 
+### Wide take-ons and the shape that looks wrong (2026-10-20)
+Wide take-ons (`scripts/wide_press.py`, Euro 2020 360 at on-ball events and receptions against sim frames and the job log): in the
+wide final third the sim's carrier has nobody within 7 m 34-38 % of the time (real 20 %) and at the moment he receives 53 % (36 %);
+the middle third and the centre are real-like. Three defending rules were wrong, all fixed in `movement.py`:
+- the press radius (3 + 9 x press, about 7.5 m) only rose to 12 m within shooting range (28 m), so a winger 30-40 m out in our third
+  was left alone by a low-pressing side; now anyone on the ball in our third gets the same 12 m (`engage_x`);
+- a full-back could only go out to a carrier within 6 m (`BACK_PRESS`); now the winger on his side of our third is his (`fb_out`);
+  a first version (a carrier level with him, `level_press`) never fired, because the full-back stands goal-side, and was replaced;
+- marking skipped a man near our goal on either touchline, though its comment meant the far one only (`ball_wing`).
+Effect: no presser 36 -> 25 %, marked at reception 0.53 -> 0.61, nobody within 7 m at reception 0.53 -> 0.49; wide final-third
+take-ons only 1.5 -> 1.9 (4.5). Tried, not kept: a man counted as in the way of a carry if he can get a leg to the line in time
+(`to_reach`): central take-ons 8 -> 12.7, wide 1.9 -> 2.2.
+The user's report (defenders clumping into the box, attackers played onside, odd attacking positions, a static build-up) measured
+first (`scripts/shape_probe.py`, open-play passes, real 360 against the sim through the same camera window, `scripts/camera.py`):
+- attackers offside at the pass 0.27 per pass (real 0.28): real-like, not a fault;
+- defenders in their box with the ball 40 m+ out 0.24 (0.13), 20-40 m slightly fewer than real;
+- the deepest defender more than 3 m behind the next 19-23 % (6 %), mean gap 2.0-2.2 m (1.1): the line is not flat;
+- build-up (passer in his own third): nearest team-mate 6.8 m (10.7), 3.3 team-mates within 15 m (2.2). Split by time since the
+  possession began: 10 s+ is real (1.52 vs 1.69 within 15 m, nearest 11.5 vs 11.8 m), but 58 % of the sim's own-third passes come
+  within 4 s of a change (real 24 %; the sim logs a change on any touch, StatsBomb on established control, so part of that is the
+  definition), and at 4-10 s the shape is still crowded (3.07 vs 1.92). This is the Oct 13 "ping-pong" entry again: the shape is
+  right once a possession settles; the possessions do not settle.
+The line, traced (`team_targets` wrapped, concrete frames): the deepest man stands where the real law puts the last defender (18.9 m
+with the ball 31 m out, real 18.6); the others are above their own deeper targets (a centre-back pressing, one covering, the
+full-back marking 4 m above his target and drifting down at 0.8 m/s while moving 3.6 m/s across). Built: the back line's deepest
+man steps up to within 1.5 m of the others' line unless an attacker is running in behind, at a hard run (`flat_line`); offsides
+1.40 -> 2.06 (1.98) but the gap measure hardly moves (0.21 -> 0.19). Tried, not kept: feed-forward of the target's own velocity
+in the steering (a man closing a gap alone trails a moving spot by speed / 1.1 m): running 10.8 -> 12.1 km, shape unchanged.
+96 unseen matches with what is kept: loss 116.3 (115.0 at v5.3, noise about 2), take-ons 19.4, offsides 2.09 (1.98), running 10.84 km.
+Open, ranked: the line drops too slowly as a unit after the ball comes forward; contested balls change hands too often, so
+possessions do not settle (the crowded build-up); wide final-third take-ons 1.9 (4.5).
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
