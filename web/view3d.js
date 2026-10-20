@@ -1,14 +1,21 @@
 // 3D match view: the same tracking frames the 2D pitch draws (5 Hz, interpolated by app.js), rendered with three.js. Everything is built
 // from primitives here: the pitch is drawn to a canvas texture with the real markings, the players are simple figures in their team's
 // colours turned to their logged facing, legs and arms swinging with their speed, and the ball flies at the height the engine logged.
-// No downloaded models. Exposed as window.View3D for the classic-script app.
+// Players are the CC0 Quaternius mannequin (web/assets/player.glb, trimmed to five clips by scripts/trim_glb.py), one cloned rig each,
+// idle / walk / jog / sprint blended by the player's real speed; the primitive figures stay as the fallback if it cannot load.
+// Exposed as window.View3D for the classic-script app.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
 const L = 105, W = 68;
 const P = (x, y, z = 0) => new THREE.Vector3(x - L / 2, z, y - W / 2);  // pitch metres -> scene (x along the length, z across, y up)
 
-let renderer, scene, camera, controls, wrap, players = [], ball, ballShadow, mode = 'tv', last = null, lastT = 0, follow = -1;
+let renderer, scene, camera, controls, wrap, players = [], ball, ballShadow, mode = 'tv', last = null, lastT = 0, follow = -1, model = null, teamsNow = null;
+// locomotion clips and the speed (m/s) each is played at its own rate; weights are blended linearly between neighbours
+const GAIT = [['Idle_Loop', 0], ['Walk_Loop', 1.5], ['Jog_Fwd_Loop', 3.8], ['Sprint_Loop', 7.2]];
+const FACE = 0;  // the model's own forward is +z; heading 0 points along +x
 const camPos = new THREE.Vector3(0, 30, 60), camLook = new THREE.Vector3();
 
 function pitchTexture() {
@@ -91,6 +98,50 @@ function figure(shirt, shorts) {  // a player built from primitives, about 1.8 m
   return { g, legs, arms, torso, phase: Math.random() * 6 };
 }
 
+async function loadModel() {
+  try {
+    const g = await new GLTFLoader().loadAsync('assets/player.glb');
+    // height from the skeleton (a skinned mesh's own box is the unskinned geometry in its armature's units): feet to head bone, the head's
+    // top a little above it
+    g.scene.updateMatrixWorld(true);
+    const ys = []; g.scene.traverse(o => { if (o.isBone) ys.push(new THREE.Vector3().setFromMatrixPosition(o.matrixWorld).y); });
+    const h = (Math.max(...ys) - Math.min(...ys)) * 1.07;
+    model = { scene: g.scene, clips: g.animations, scale: 1.8 / Math.max(h, .01) };  // its forward is +z (toe ahead of the foot bone)
+    if (teamsNow) setTeams(teamsNow);
+  } catch (e) { console.warn('3D players: using simple figures', e); }
+}
+
+function figureModel(shirt, shorts) {  // the CC0 mannequin, recoloured: its main material for the shirt, the joints for the shorts and socks
+  const g = new THREE.Group(), root = SkeletonUtils.clone(model.scene);
+  root.scale.setScalar(model.scale); root.rotation.y = Math.PI / 2 + FACE;  // its forward (+z) turned to the group's +x
+  let main = null;
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    o.frustumCulled = false;
+    o.material = o.material.clone();
+    if (/main/i.test(o.material.name)) { o.material.color.copy(shirt); main = o.material; } else o.material.color.copy(shorts);
+    o.material.roughness = .75;
+  });
+  g.add(root, blob(.38, .28));
+  const mixer = new THREE.AnimationMixer(root);
+  const acts = GAIT.map(([name]) => { const c = model.clips.find(c => c.name === name); const a = mixer.clipAction(c); a.play(); a.setEffectiveWeight(0); return a; });
+  acts[0].setEffectiveWeight(1);
+  mixer.update(Math.random() * 2);  // not all in step
+  return { g, mixer, acts, torso: { material: main || new THREE.MeshStandardMaterial(), rotation: {} } };
+}
+
+function gait(p, sp, dt) {  // blend the clips for this speed, each played at the rate that makes its stride match it
+  const v = Math.min(sp, 9);
+  let i = GAIT.length - 2;
+  while (i > 0 && v < GAIT[i][1]) i--;
+  const [a, b] = [GAIT[i], GAIT[i + 1]], w = THREE.MathUtils.clamp((v - a[1]) / (b[1] - a[1]), 0, 1);
+  p.acts.forEach((act, k) => {
+    act.setEffectiveWeight(k === i ? 1 - w : k === i + 1 ? w : 0);
+    if (GAIT[k][1] > 0) act.setEffectiveTimeScale(THREE.MathUtils.clamp(v / GAIT[k][1], .6, 1.5));
+  });
+  p.mixer.update(dt);
+}
+
 function init(container) {
   wrap = container;
   renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -116,6 +167,7 @@ function init(container) {
   controls.enabled = false; controls.maxPolarAngle = Math.PI / 2.1;
   new ResizeObserver(resize).observe(container);
   resize();
+  loadModel();
 }
 
 function resize() {
@@ -128,11 +180,12 @@ function resize() {
 
 // teams: [{shirt, shorts, keeper}, {...}] as CSS colours
 function setTeams(teams) {
+  teamsNow = teams;
   for (const p of players) scene.remove(p.g);
   players = [];
   for (let k = 0; k < 22; k++) {
     const t = teams[k < 11 ? 0 : 1];
-    const f = figure(new THREE.Color(t.shirt), new THREE.Color(t.shorts));
+    const f = (model ? figureModel : figure)(new THREE.Color(t.shirt), new THREE.Color(t.shorts));
     f.label = null; f.labelText = ''; f.team = k < 11 ? 0 : 1; f.colors = t;
     scene.add(f.g); players.push(f);
   }
@@ -155,12 +208,15 @@ function update(f, t, z, who, opts = {}) {
     p.g.position.copy(P(x, y));
     p.g.rotation.y = -f[50 + k];
     const sp = last ? Math.hypot(x - last[5 + 2 * k], y - last[6 + 2 * k]) / dt : 0;
-    const amp = Math.min(sp / 7, 1);
-    p.phase += dt * (2.2 + sp * 1.1);
-    const sw = Math.sin(p.phase) * (.15 + .75 * amp);
-    p.legs[0].rotation.z = sw; p.legs[1].rotation.z = -sw;
-    p.arms[0].rotation.z = -sw * .8; p.arms[1].rotation.z = sw * .8;
-    p.torso.rotation.z = -.18 * amp;  // leans into the run
+    if (p.mixer) gait(p, sp, last ? dt : 0);
+    else {
+      const amp = Math.min(sp / 7, 1);
+      p.phase += dt * (2.2 + sp * 1.1);
+      const sw = Math.sin(p.phase) * (.15 + .75 * amp);
+      p.legs[0].rotation.z = sw; p.legs[1].rotation.z = -sw;
+      p.arms[0].rotation.z = -sw * .8; p.arms[1].rotation.z = sw * .8;
+      p.torso.rotation.z = -.18 * amp;  // leans into the run
+    }
     p.label.material.color.set(k === opts.highlight ? (opts.accent || '#5aa9ff') : '#ffffff');
   }
   ball.position.copy(P(f[1], f[2], .2 + Math.max(0, z || 0)));

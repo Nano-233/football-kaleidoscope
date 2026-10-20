@@ -1,0 +1,4 @@
+player.glb: the mannequin and five animations (Idle_Loop, Walk_Loop, Jog_Fwd_Loop, Sprint_Loop, Jump_Loop) from the
+Universal Animation Library [Standard] by Quaternius (https://quaternius.com/packs/universalanimationlibrary.html),
+trimmed with scripts/trim_glb.py. Licence: CC0 1.0 Universal (public domain dedication),
+https://creativecommons.org/publicdomain/zero/1.0/ . Models by @Quaternius.

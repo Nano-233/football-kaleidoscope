@@ -1551,6 +1551,14 @@ figures in team colours (keepers in their own colour) turned to the logged facin
 tag over each, the ball at the height the engine logged (`ball_z.bin`, new in the site build) with a blob shadow. Cameras: broadcast,
 tactical, behind the goal, follow the player (the scout's player or the followed one), free orbit. The 2D pitch stays for the board,
 the breakdowns and the shapes (the 3D view hands back to it for those). About 0.8 ms of CPU a frame.
+- Animated players (user's go-ahead to download): Quaternius Universal Animation Library [Standard] (itch.io, free, CC0 1.0; the
+  zip's License.txt says so). It is one mannequin (8.5k vertices, 65 bones) and 43 clips, 7.6 MB; `scripts/trim_glb.py` keeps the
+  mesh, the skin and five clips (Idle, Walk, Jog, Sprint, Jump) in `web/assets/player.glb`, 1.46 MB, with the licence note beside it.
+  Each player is a SkeletonUtils clone with its own AnimationMixer; idle / walk / jog / sprint are blended by his real speed and each
+  played at the rate that matches its stride (1.5 / 3.8 / 7.2 m/s), so the feet do not slide; the main material takes the shirt
+  colour, the joints the shorts. Sized from the skeleton (feet to head bone), not the mesh box: the box is the unskinned geometry in
+  the armature's units and made them crossbar-high. Forward is +z (the toe bone ahead of the foot). No kick clip in the pack: passes
+  and shots show in the ball's flight. About 4 ms of CPU a frame with 22 rigs; the primitive figures stay as the fallback.
 
 ## Is the tuner machine learning?
 
