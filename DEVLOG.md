@@ -1559,6 +1559,10 @@ the breakdowns and the shapes (the 3D view hands back to it for those). About 0.
   colour, the joints the shorts. Sized from the skeleton (feet to head bone), not the mesh box: the box is the unskinned geometry in
   the armature's units and made them crossbar-high. Forward is +z (the toe bone ahead of the foot). No kick clip in the pack: passes
   and shots show in the ball's flight. About 4 ms of CPU a frame with 22 rigs; the primitive figures stay as the fallback.
+- A kick posed on the skeleton (the pack has none): for a pass, cross, shot or clearance with the foot, the passer's right thigh and
+  calf swing through keys over 0.55 s on top of the running clip (backswing, contact at the event's moment, follow-through). The
+  rotation directions were set by measuring the foot against the hip along his facing (the first try kicked backwards): backswing
+  foot 0.43 m behind and curled up to hip height, contact 0.41 m ahead and low, follow-through 0.73 m ahead and rising.
 
 ## Is the tuner machine learning?
 

@@ -203,6 +203,7 @@ function drawPitch() {
 }
 
 // ---------------------------------------------------------------- 3D view (web/view3d.js, three.js): the same interpolated frame
+const KICKS = new Set(['pass', 'cross', 'shot', 'clearance']);
 function teams3d() {
   const shade = c => { const n = parseInt(c.slice(1), 16), d = v => Math.round(v * .55).toString(16).padStart(2, '0'); return '#' + d(n >> 16) + d((n >> 8) & 255) + d(n & 255); };
   View3D.setTeams([{ shirt: COL.home, shorts: shade(COL.home), keeper: '#e8c547' }, { shirt: COL.away, shorts: shade(COL.away), keeper: '#7bd389' }]);
@@ -213,7 +214,15 @@ function draw3d(t, f) {
   const fi = Math.min(S.n - 1.001, Math.max(0, t / S.dt)), i0 = Math.floor(fi), u = fi - i0;
   const z = S.Z ? (S.Z[i0] + (S.Z[Math.min(i0 + 1, S.n - 1)] - S.Z[i0]) * u) / 100 : 0;
   const sel = S.persona === 'scout' && S.player ? slotOf(S.player, t) : -1, fol = S.profile.playerId ? slotOf(S.profile.playerId, t) : -1;
-  View3D.update(f, t, z, k => who(k, t), { highlight: sel >= 0 ? sel : fol, follow: sel >= 0 ? sel : fol >= 0 ? fol : f[3], accent: COL.accent });
+  // who is kicking: a pass, cross, shot or clearance whose moment falls inside the kick (the foot meets the ball at the event's time)
+  const kicks = new Map(), ev = S.D.events, span = View3D.KICK_S, hit = View3D.KICK_HIT * span;
+  for (let j = lastBefore(ev, t + span - hit); j >= 0 && ev[j].t > t - hit; j--) {
+    const e = ev[j];
+    if (!KICKS.has(e.type) || !e.player || e.body_part === 'head' || e.body_part === 'hands') continue;
+    const k = slotOf(e.player, e.t);
+    if (k >= 0 && !kicks.has(k)) kicks.set(k, (t - (e.t - hit)) / span);
+  }
+  View3D.update(f, t, z, k => who(k, t), { highlight: sel >= 0 ? sel : fol, follow: sel >= 0 ? sel : fol >= 0 ? fol : f[3], accent: COL.accent, kicks });
 }
 function toggle3d() {
   if (!window.View3D) return toast('The 3D view is still loading (it needs the three.js library from the internet).');

@@ -16,6 +16,11 @@ let renderer, scene, camera, controls, wrap, players = [], ball, ballShadow, mod
 // locomotion clips and the speed (m/s) each is played at its own rate; weights are blended linearly between neighbours
 const GAIT = [['Idle_Loop', 0], ['Walk_Loop', 1.5], ['Jog_Fwd_Loop', 3.8], ['Sprint_Loop', 7.2]];
 const FACE = 0;  // the model's own forward is +z; heading 0 points along +x
+// the kick, posed on the skeleton over the running clip (the pack has no kick): u runs 0 -> 1 over KICK_S seconds, the foot meets the ball
+// at KICK_HIT; thigh swing and knee bend in degrees at each key (backswing, contact, follow-through)
+const KICK_S = .55, KICK_HIT = .55, KICK_KEYS = [[0, 0, 0], [.4, -38, 85], [.55, 35, 25], [.75, 60, 5], [1, 0, 0]];
+const KICK_SIGN = { thigh: -1, calf: 1 };
+const _q = new THREE.Quaternion(), _x = new THREE.Vector3(1, 0, 0);
 const camPos = new THREE.Vector3(0, 30, 60), camLook = new THREE.Vector3();
 
 function pitchTexture() {
@@ -127,7 +132,17 @@ function figureModel(shirt, shorts) {  // the CC0 mannequin, recoloured: its mai
   const acts = GAIT.map(([name]) => { const c = model.clips.find(c => c.name === name); const a = mixer.clipAction(c); a.play(); a.setEffectiveWeight(0); return a; });
   acts[0].setEffectiveWeight(1);
   mixer.update(Math.random() * 2);  // not all in step
-  return { g, mixer, acts, torso: { material: main || new THREE.MeshStandardMaterial(), rotation: {} } };
+  return { g, mixer, acts, thigh: root.getObjectByName('thigh_r'), calf: root.getObjectByName('calf_r'), torso: { material: main || new THREE.MeshStandardMaterial(), rotation: {} } };
+}
+
+function kick(p, u) {  // swing the right leg through the keys, on top of whatever the mixer posed this frame
+  if (!p.thigh || !p.calf) return;
+  let a = KICK_KEYS[0], b = KICK_KEYS[KICK_KEYS.length - 1];
+  for (let i = 0; i < KICK_KEYS.length - 1; i++) if (u >= KICK_KEYS[i][0] && u <= KICK_KEYS[i + 1][0]) { a = KICK_KEYS[i]; b = KICK_KEYS[i + 1]; break; }
+  const w = (u - a[0]) / Math.max(b[0] - a[0], 1e-6), s = .5 - .5 * Math.cos(Math.PI * w);  // eased between keys
+  const th = THREE.MathUtils.degToRad(a[1] + (b[1] - a[1]) * s), kn = THREE.MathUtils.degToRad(a[2] + (b[2] - a[2]) * s);
+  p.thigh.quaternion.multiply(_q.setFromAxisAngle(_x, th * KICK_SIGN.thigh));
+  p.calf.quaternion.multiply(_q.setFromAxisAngle(_x, kn * KICK_SIGN.calf));
 }
 
 function gait(p, sp, dt) {  // blend the clips for this speed, each played at the rate that makes its stride match it
@@ -208,7 +223,11 @@ function update(f, t, z, who, opts = {}) {
     p.g.position.copy(P(x, y));
     p.g.rotation.y = -f[50 + k];
     const sp = last ? Math.hypot(x - last[5 + 2 * k], y - last[6 + 2 * k]) / dt : 0;
-    if (p.mixer) gait(p, sp, last ? dt : 0);
+    if (p.mixer) {
+      gait(p, sp, last ? dt : 0);
+      const ku = opts.kicks && opts.kicks.get(k);
+      if (ku != null) kick(p, ku);
+    }
     else {
       const amp = Math.min(sp / 7, 1);
       p.phase += dt * (2.2 + sp * 1.1);
@@ -255,5 +274,5 @@ function setMode(m) {
   if (m === 'free') { controls.target.copy(camLook); camera.position.copy(camPos); }
 }
 
-window.View3D = { init, setTeams, update, setMode, get mode() { return mode; }, resize };
+window.View3D = { init, setTeams, update, setMode, get mode() { return mode; }, resize, KICK_S, KICK_HIT };
 window.dispatchEvent(new Event('view3d-ready'));
