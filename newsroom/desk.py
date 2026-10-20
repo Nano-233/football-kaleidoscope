@@ -363,6 +363,7 @@ class Desk:
 
         tt = [team_shape, formation_changes, pressing, defensive_duties, control_and_rhythm, fatigue, stat_leaders, momentum, passing_network, moment_breakdown, find_moments, match_summary]
         st = [player_report, stat_leaders, defensive_duties, fatigue, find_moments, moment_breakdown, list_players, match_summary]
+        self.tool_fns = {f.__name__: f for f in tt + st}  # the plain tools (metres, no logging), for the MCP server (server/mcp_server.py)
         self.tactics = Agent(client, TACTICS, name="tactics_analyst", tools=[logged("tactics_analyst", f) for f in tt] + [what_if])
         self.scout = Agent(client, SCOUT, name="scout", tools=[logged("scout", f) for f in st])
         self.orchestrator = Agent(client, ORCHESTRATOR, name="orchestrator", tools=[

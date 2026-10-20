@@ -23,6 +23,7 @@ from newsroom.clients import make_client  # noqa: E402
 from newsroom.desk import Desk  # noqa: E402
 from analytics.tools import MatchView  # noqa: E402
 from newsroom.moments import moments  # noqa: E402
+from newsroom.alerts import alerts  # noqa: E402
 
 PERSONAS = {"fan": "fan", "analyst": "analyst"}  # site persona -> commentator voice (the scout view works from the player data, not commentary)
 TEAM_KEYS = ("goals", "xg", "shots", "shots_on_target", "big_chances", "passes", "pass_accuracy", "ppda", "corners", "fouls", "yellow_cards", "red_cards",
@@ -221,7 +222,7 @@ def build(src, keep_agents=False):
     q, hd = pack_frames(match["frames"])
     (dest / "frames.bin").write_bytes(q.tobytes())
     (dest / "heads.bin").write_bytes(hd.tobytes())
-    packs = moments(match)
+    packs = sorted(moments(match) + alerts(match), key=lambda p: p["moment"]["t"])  # moments, and the shifts the readers flag unasked
     timeline, players, leaders = stats_timeline(match)
     events = [{k: v for k, v in e.items() if k not in ("freeze_frame", "why", "players", "bench")} for e in match["events"]]
     old = json.loads((dest / "match.json").read_text(encoding="utf-8")) if keep_agents else {}

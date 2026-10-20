@@ -36,6 +36,8 @@ def _why(e, names):
 def template_line(f):
     """A plain line built only from the pack: what the newsroom publishes when every agent draft was held by the fact-checker."""
     m = f["moment"]
+    if m["type"] == "alert":
+        return f"{m['clock']} {f['alert']['text']}"
     if m["type"] in ("goal", "own_goal"):
         return f"{m['clock']} Goal for {f['team']}: {f['player']} scores, {f['teams']['home']} {f['score']} {f['teams']['away']}."
     if m["type"] == "full_time":

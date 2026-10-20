@@ -1521,6 +1521,26 @@ like no change (4-5-1 and 4-1-4-1 are one layout).
   three for 7 of 10 teams: it now leads with `most_dropped_first`; the bench miss was the LLM grader taking a tested change for a
   second recommendation: graded deterministically now (`recommends`). Rerun: overall 0.87, passing 5/5, fatigue 6/10, bench 5/5.
 
+### Proactive alerts and an MCP server (2026-10-19)
+Why: the judging criteria name "MCP integration" (Agentic Design) and "Azure MCP" among the hero technologies; the brief asks for
+real-time intelligence that explains why a moment matters.
+- `newsroom/alerts.py`: the newsroom flags shifts nobody asked about. Triggers are deterministic and found from the match cut at each
+  check (every 2 minutes of match time, the readers re-run on the data so far): a side's players closing down more / less / higher /
+  deeper or tracking someone else (one alert per side and check, up to three changes; "holds a different space" is too noisy and stays
+  on the board), the most-dropped player read as tiring when a 15-minute window completes from the hour on, a spell of chaos or of one
+  side's control starting (two 5-minute windows), and 4 of a side's last 5 final-third entries down one flank. 10 minutes between
+  alerts of a kind for a side. First run raised 23 on one match (8 "tiring" at 51', read from a 5-minute half-window); throttled to
+  6-8 a match. Each alert is a fact pack like a moment's (score and stats as they stood) plus `alert` (its numbers and a plain sentence,
+  the fallback line), so it goes through the same desk; tried on Foundry: duty, spell, tiring and flank alerts, fan and analyst, all
+  approved (one rewrite). Live run streams them with the moments; the site build writes them into the stored feeds; the feed and the
+  lower third label them "Spotted · ...".
+- `server/mcp_server.py` (MCP Python SDK, FastMCP; stdio, or streamable HTTP with --http on :8787/mcp): 17 tools. The 14 analysis
+  tools are the desk's own functions (`Desk.tool_fns`, no second copy), each with `match` and an optional `minute` (as of then) added;
+  plus list_matches, what_if (the paired replays) and ask_newsroom (the whole multi-agent desk on Foundry). `.vscode/mcp.json` makes
+  it a server for GitHub Copilot agent mode. Checked with the SDK's own client: tools listed with argument descriptions, fatigue at
+  70', duties for one player, and ask_newsroom ("who tracked whom for Oakhaven after half-time?" at 75': the tactics analyst called
+  defensive_duties twice, approved). `tests/test_mcp.py` in CI (offline).
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

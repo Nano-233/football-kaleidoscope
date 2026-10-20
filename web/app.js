@@ -24,6 +24,8 @@ const GOOD_T = new Set(['goal', 'interception', 'ball_recovery', 'block', 'keepe
 const verdict = e => GOOD.has(e.outcome) || (!e.outcome && GOOD_T.has(e.type)) ? 1 : BAD.has(e.outcome) || (!e.outcome && BAD_T.has(e.type)) ? -1 : 0;
 const LABEL = { ball_receipt: 'Received', ball_recovery: 'Recovery', fifty_fifty: '50-50', foul_won: 'Foul won', keeper_claim: 'Claim', dribbled_past: 'Dribbled past', take_on: 'Take-on' };
 const HARD = .5;  // a hard pass: difficulty (1 - its completion chance when chosen) of 0.5 or more, as in analytics/stats.py
+const SPOTTED = { duty: 'without the ball', tiring: 'tiring', spell: 'control vs chaos', flank: 'down one flank' };
+const kindLabel = m => (m.type === 'alert' ? `Spotted · ${SPOTTED[m.kind] || m.kind}` : m.type.replace(/_/g, ' '));  // an alert: a shift the newsroom flagged unasked
 const label = ty => LABEL[ty] || ty.charAt(0).toUpperCase() + ty.slice(1).replace(/_/g, ' ');
 const STAT_ROWS = [  // key, label, format, lower-is-better
   ['goals', 'Goals'], ['xg', 'Expected goals (xG)', v => v.toFixed(2)], ['shots', 'Shots'], ['shots_on_target', 'On target'], ['big_chances', 'Big chances'],
@@ -302,7 +304,7 @@ function hud(t) {
   if (item && $('lt-line').dataset.id !== String(item.moment.id)) {
     $('lt-line').dataset.id = item.moment.id; $('lt-line').textContent = tr(item.line);
     if (S.playing && !S.reel) sayLine(tr(item.line));
-    $('lt-kind').textContent = `${item.moment.type.replace(/_/g, ' ')} · ${item.moment.clock}`;
+    $('lt-kind').textContent = `${kindLabel(item.moment)} · ${item.moment.clock}`;
   }
   $('bd').hidden = !S.bd;
   if (S.bd) {
@@ -410,13 +412,13 @@ function feedView(mode) {
   return `<ul class="feed ${mode}">` + items.map(it => {
     if (it.note) return `<li class="note"><div class="meta"><span class="t">${esc(it.moment.clock)}</span><span class="kind">${esc(it.milestone ? tr('Milestone') : S.profile.player)}</span>
       <button class="jump" data-seek="${it.moment.t - 6}">Watch</button></div><p>${esc(tr(it.line))}</p></li>`;
-    if (it.pending) return `<li class="pending"><div class="meta"><span class="t">${esc(it.moment.clock)}</span><span class="kind">${esc(it.moment.type.replace(/_/g, ' '))}</span>
+    if (it.pending) return `<li class="pending"><div class="meta"><span class="t">${esc(it.moment.clock)}</span><span class="kind">${esc(kindLabel(it.moment))}</span>
       <span class="badge live">${it.pending === 'drafting' ? 'Newsroom drafting · checking' : 'Queued for the newsroom'}</span></div><p>${tr('The desk is on it…')}</p></li>`;
     if (!it.approved && mode === 'fan') return '';
     const badge = !it.approved ? `<span class="badge warn">Held by fact-checker</span>`
       : it.fallback ? `<span class="badge warn" title="Every agent draft was held, so a plain line built from the facts went out">Drafts held · plain line</span>`
       : it.rewrites ? `<span class="badge ok">Fact-checked · rewritten ${it.rewrites}×</span>` : `<span class="badge ok">Fact-checked</span>`;
-    return `<li><div class="meta"><span class="t">${esc(it.moment.clock)}</span><span class="kind">${esc(it.moment.type.replace(/_/g, ' '))}</span>${mode === 'analyst' ? badge : ''}${it.latency_s != null ? `<span class="badge live" title="From the moment arriving to the line going out, live on Foundry">Live · ${it.latency_s} s</span>` : ''}
+    return `<li${it.moment.type === 'alert' ? ' class="alert"' : ''}><div class="meta"><span class="t">${esc(it.moment.clock)}</span><span class="kind">${esc(kindLabel(it.moment))}</span>${mode === 'analyst' ? badge : ''}${it.latency_s != null ? `<span class="badge live" title="From the moment arriving to the line going out, live on Foundry">Live · ${it.latency_s} s</span>` : ''}
       <button class="jump" data-share="${it.moment.t}|${esc(it.moment.type)}">Share</button>${bdBtn(it.moment.t)}<button class="jump" data-seek="${it.moment.t - 8}">Watch</button></div>
       <p${it.approved ? '' : ' class="rejected"'}>${esc(tr(it.line))}</p>${mode === 'analyst' ? trail(it) : ''}</li>`;
   }).join('') + '</ul>';

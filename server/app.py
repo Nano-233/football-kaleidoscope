@@ -24,6 +24,7 @@ from newsroom.agents import cover
 from newsroom.clients import make_client
 from newsroom.desk import Desk
 from newsroom.localize import translate
+from newsroom.alerts import alerts
 from newsroom.moments import moments, template_line
 from matchsim.whatif import FORMATIONS, TACTIC_KEYS, cached_what_if
 
@@ -159,7 +160,8 @@ async def live(request):
         loop, gate, jobs = asyncio.get_running_loop(), asyncio.Semaphore(LIVE_SLOTS), []
         w0, dur = loop.time(), m["meta"]["duration"]
         now = lambda: t0 + (loop.time() - w0) * speed
-        packs = [p for p in await loop.run_in_executor(None, moments, m) if p["moment"]["t"] >= t0]
+        packs = sorted((await loop.run_in_executor(None, moments, m)) + (await loop.run_in_executor(None, alerts, m)), key=lambda p: p["moment"]["t"])
+        packs = [p for p in packs if p["moment"]["t"] >= t0]  # moments and the alerts the readers raise, each found from the data up to it
 
         async def one(p):
             arrived = loop.time()

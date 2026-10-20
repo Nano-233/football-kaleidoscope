@@ -17,3 +17,4 @@ jobs:
           python tests/test_tools.py
           python tests/test_newsroom.py
           python -c "import server.app"
+          python tests/test_mcp.py

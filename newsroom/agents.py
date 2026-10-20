@@ -36,7 +36,8 @@ def build(client, persona="veteran"):
     tactics = mk("tactics", "You are the tactics analyst. Explain in one sentence, from FACTS.why, how the moment came about.")
     commentator = mk("commentator", f"You are the commentator, {PERSONAS[persona]}. Write one or two sentences of live commentary using the analysts' points. "
                                     "First say what this moment is (FACTS.moment.type, in plain words: a red card, not red_card): for a shape_change the shape before and after from FACTS.shift and which phase; "
-                                    "for a spell who dominated and when from FACTS.spell; for a substitution who came on and off. Use FACTS.scoreline for the score; "
+                                    "for a spell who dominated and when from FACTS.spell; for a substitution who came on and off; for an alert (a shift the newsroom spotted, "
+                                    "nobody asked) what FACTS.alert shows, then why it matters now given the score and the minute. Use FACTS.scoreline for the score; "
                                     "FACTS.leader is ahead.")
     checker = mk("fact_checker", "You are the fact-checker. Compare the commentary with FACTS line by line. Reject it if any number is attached to the wrong "
                                  "metric or team, the wrong team is said to lead (FACTS.leader is ahead), a metric is described against its FACTS.glossary meaning, the minute differs from FACTS.moment.clock, or a claim "

@@ -108,6 +108,7 @@ button { cursor: pointer; }
 .badge.ok { color: var(--good); }
 .badge.warn { color: #e8c547; }
 .badge.live { color: var(--accent); }
+.feed li.alert { border-left: 3px solid var(--accent); padding-left: 9px; }
 .feed li.pending p { color: var(--text-3); font-style: italic; }
 .feed p { margin: 0; }
 .feed.fan p { font-size: 16px; line-height: 24px; }

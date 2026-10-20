@@ -25,6 +25,7 @@ Team of two: the user (technical) and a partner (football knowledge, no coding).
 | Defensive duties | `MatchView.duties` reads closing down, man tracked, space held from tracking only; scored against the engine job log (`jobs`, logging only, matches identical): frames 0.63-0.69, tracked man 64-81 %. Board "Duties", Scout block, agent tool `defensive_duties`. DEVLOG "Defensive duties". |
 | Rhythm, metric, milestones | `MatchView.rhythm` (control vs chaos by 5 min), "Your metric" (per-minute leaders), `MatchView.milestones`. DEVLOG "Control vs chaos, a metric to follow, milestones". |
 | Bench assistant + fatigue | `Desk.advise` (POST `/api/assistant`, What-if tab "Advise the manager"): reads the game, proposes two changes, tests each with 12 paired replays, the pick is made in code (expected points +0.15 and 2+ changed results), writer + checker explain. About 105 s. `MatchView.fatigue` (tracking only, r 0.50 with true stamina), agent tool `fatigue`, Scout "Running hard". |
+| Alerts + MCP | `newsroom/alerts.py`: deterministic triggers (duty changes, tiring, chaos / control spells, flank overload), found as of each check, written by the desk, in Live run and the stored feeds ("Spotted · ..."). `server/mcp_server.py`: 17 MCP tools (the desk's analysis tools + what_if + ask_newsroom), stdio or `--http` :8787/mcp; `.vscode/mcp.json` for Copilot agent mode. |
 | Deploy | **Ready, not done.** `infra/deploy.ps1` (Azure Container Apps, managed identity, scale to zero). Image verified locally by a copy of exactly what the Dockerfile ships (server loads, replay matches). Needs the user's explicit go-ahead: it creates paid resources. |
 | README / pitch / video | Last. Video < 2 min, public repo, free working test link required by the rules. |
 
@@ -43,6 +44,7 @@ Team of two: the user (technical) and a partner (football knowledge, no coding).
 
 ```
 .venv/Scripts/python.exe -m server.app                      # match centre + API on :8080 (launch.json "newsroom-server" uses :8090)
+.venv/Scripts/python.exe -m server.mcp_server [--http]      # the analysis tools as an MCP server (stdio, or HTTP :8787/mcp)
 .venv/Scripts/python.exe scripts/run_match.py 7             # simulate a match -> out/match_7.json
 .venv/Scripts/python.exe scripts/matchday.py                # the three club demo matches -> out/RED-ASH.json etc.
 .venv/Scripts/python.exe scripts/build_site.py out/X.json   # web/data/X + server/data/X.json.gz (calls the model: ~8 min a match)
