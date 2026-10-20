@@ -220,7 +220,7 @@ function draw3d(t, f) {
     const e = ev[j];
     if (!KICKS.has(e.type) || !e.player || e.body_part === 'head' || e.body_part === 'hands') continue;
     const k = slotOf(e.player, e.t);
-    if (k >= 0 && !kicks.has(k)) kicks.set(k, (t - (e.t - hit)) / span);
+    if (k >= 0 && !kicks.has(k)) kicks.set(k, [(t - (e.t - hit)) / span, e.foot || (S.info[e.player] || {}).foot || 'right']);
   }
   View3D.update(f, t, z, k => who(k, t), { highlight: sel >= 0 ? sel : fol, follow: sel >= 0 ? sel : fol >= 0 ? fol : f[3], accent: COL.accent, kicks });
 }
@@ -673,7 +673,7 @@ function playerView() {
     <button class="btn${following ? ' primary' : ''}" data-follow="${esc(S.player)}">${following ? 'Following' : 'Follow'}</button></div>
     <div class="player-head"><span class="big-num">${p.number}</span><div><h2>${esc(p.name)}</h2>
       <div class="sub">${esc(S.D.meta[side].name)} · ${esc(p.label || p.role)}${(p.traits || []).length ? ' · ' + esc(p.traits.map(x => x.replace(/_/g, ' ')).join(', ')) : ''}</div>
-      <div class="sub">${s.minutes ?? 0} minutes played</div></div><span class="rating" title="Full-match rating">${s.rating ?? '–'}</span></div>
+      <div class="sub">${s.minutes ?? 0} minutes played${p.foot ? ` · ${p.foot === 'left' ? 'Left' : 'Right'}-footed, weak foot ${Math.round(p.weak_foot)}/20` : ''}</div></div><span class="rating" title="Full-match rating">${s.rating ?? '–'}</span></div>
     <div class="label">Full match</div><div class="kv">${kv}</div>
     ${s.passes ? `<div class="label">Pass quality${s.shots ? ' and shooting' : ''}</div><div class="kv"><div><b>${conv('len', s.avg_pass_length_m, 1)}</b><span>Avg pass length</span></div>
       <div><b>${s.avg_pass_difficulty?.toFixed(2) ?? '–'}</b><span>Avg difficulty</span></div><div><b>${s.hard_passes_completed}/${s.hard_passes}</b><span>Hard passes completed</span></div>

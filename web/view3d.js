@@ -132,17 +132,18 @@ function figureModel(shirt, shorts) {  // the CC0 mannequin, recoloured: its mai
   const acts = GAIT.map(([name]) => { const c = model.clips.find(c => c.name === name); const a = mixer.clipAction(c); a.play(); a.setEffectiveWeight(0); return a; });
   acts[0].setEffectiveWeight(1);
   mixer.update(Math.random() * 2);  // not all in step
-  return { g, mixer, acts, thigh: root.getObjectByName('thigh_r'), calf: root.getObjectByName('calf_r'), torso: { material: main || new THREE.MeshStandardMaterial(), rotation: {} } };
+  return { g, mixer, acts, legs3: { right: [root.getObjectByName('thigh_r'), root.getObjectByName('calf_r')], left: [root.getObjectByName('thigh_l'), root.getObjectByName('calf_l')] }, torso: { material: main || new THREE.MeshStandardMaterial(), rotation: {} } };
 }
 
-function kick(p, u) {  // swing the right leg through the keys, on top of whatever the mixer posed this frame
-  if (!p.thigh || !p.calf) return;
+function kick(p, u, foot) {  // swing the kicking leg (the foot the event says) through the keys, on top of whatever the mixer posed this frame
+  const [thigh, calf] = p.legs3[foot === 'left' ? 'left' : 'right'];
+  if (!thigh || !calf) return;
   let a = KICK_KEYS[0], b = KICK_KEYS[KICK_KEYS.length - 1];
   for (let i = 0; i < KICK_KEYS.length - 1; i++) if (u >= KICK_KEYS[i][0] && u <= KICK_KEYS[i + 1][0]) { a = KICK_KEYS[i]; b = KICK_KEYS[i + 1]; break; }
   const w = (u - a[0]) / Math.max(b[0] - a[0], 1e-6), s = .5 - .5 * Math.cos(Math.PI * w);  // eased between keys
   const th = THREE.MathUtils.degToRad(a[1] + (b[1] - a[1]) * s), kn = THREE.MathUtils.degToRad(a[2] + (b[2] - a[2]) * s);
-  p.thigh.quaternion.multiply(_q.setFromAxisAngle(_x, th * KICK_SIGN.thigh));
-  p.calf.quaternion.multiply(_q.setFromAxisAngle(_x, kn * KICK_SIGN.calf));
+  thigh.quaternion.multiply(_q.setFromAxisAngle(_x, th * KICK_SIGN.thigh));
+  calf.quaternion.multiply(_q.setFromAxisAngle(_x, kn * KICK_SIGN.calf));
 }
 
 function gait(p, sp, dt) {  // blend the clips for this speed, each played at the rate that makes its stride match it
@@ -226,7 +227,7 @@ function update(f, t, z, who, opts = {}) {
     if (p.mixer) {
       gait(p, sp, last ? dt : 0);
       const ku = opts.kicks && opts.kicks.get(k);
-      if (ku != null) kick(p, ku);
+      if (ku != null) kick(p, ku[0], ku[1]);
     }
     else {
       const amp = Math.min(sp / 7, 1);

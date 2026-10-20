@@ -25,6 +25,7 @@ TUNE = dict(xg_z0=-2.08, xg_d=-.07, xg_a=1.89, xg_h=-.2, xg_b=.72, xg_c=.25, cle
             carry_base=0.22, carry_prog=.2, carry_streak=.3, dwell_base=0.9, dwell_shape=2.4, dwell_scale=1.61,
             tackle_rate=1.2, wide_error=4.0, off_miss=.2, off_mult=.02, off_lag=.25, head_keep=.7, safe_out_x=.12, card_thr=.85, adv_sev=.14, clear_dir_sd=1.2, rec_sprint=3., fk_xg=2.2, fk_over0=.45, fk_over_d=.02, fk_shot_k=.5, fk_shot_d=27.2, foul_risk=6., box_avoid=.2, tackle_risk=2.2, tackle_danger=.7)
 TUNE.update(burst_gain=-1e9, block_v=.8, push_k=1., pol_space=0., follow_poss=0.5, pin_from=.35, recover_on=1., cover_margin=3., threat_depth=.34, threat_ball=25., mark_base=4., mark_reach=19., layer_bias=.9, space_cover=0., space_k=100., n_space=3, assign_on=1., press_v=4.3, cover_v=3.5, mark_k=100., lane_job_k=35., post_v=5., space_v=4.8, job_hyst=1.5, press_hyst=2.0, templ_w=.9, busy_gate=.6, flat_gate=.6, run_gate=.95, mark_sprint_d=3.0, box_start=38., wn_end=42., lag_k=1., drop_k=1., mark_gap=1.1, box_gate=.85, dang_far=38., dang_gate=1.0, react_def=.35, close_gap=1.5, jock_k=1., press_k=1., open_w=1., lane_w=1., slot_gate=.5, lean_r=24., lean_min=.35, shoot_close=28., shot_gap=.7, jobs_on=1., jobs_d=38., jobs_att=40., jobs_w=.9, job_mark=3., job_lane=12., job_post=1.4, job_wv=4., way_pen=0., way_r=2.2, run_k=1., ball_side=.9, hover=.3)  # block shape (read by movement.py through TP)
+TUNE.update(wf_on=1., wf_base=.025, wf_k=.3, wf_hurry=1.8, wf_select=1., wf_shot=1.5, wf_err=.25, wf_fin=3., wf_spd=.06)  # the weaker foot: how often (base + k x (rating/20)^2, more when hurried, less for a hard pass he has time to set), and what it costs
 TUNE.update(rec_far=10., hard_v=6.5)  # recovery: flat out only when beaten by 10 m or more, a hard run (6.5 m/s, 23 km/h) when a few metres out
 TUNE.update(fat_on=1., fat_base=1.5e-5, fat_k=1.1e-3, fat_cs=.1)
 TUNE.update(body_sep=.7, area_run=1., area_slide=.25, mark_lat=8., area_half=13.75, area_ball=.8, far_free=1., far_dy=14., of_mask=13., cross_sigma=1.6, threat_xg=.15, tackle_floor=.5, cover_k=.04, behind_k=1.5, foul_miss=.35, duel_reach=1.4, gk_reach=1.6, stop_a=15., touch_sd=.9, pin_d=4., pin_p=.6, pin_r=1.5, slide_c=1., lat_def_c=1., fb_up=6., far_tuck=1., tackle_dir_sd=.5, tackle_v0=2.5, tackle_v1=6., body_r=.5, contact_mu=.35, contact_e=.3, loose_k=.07, loose_v0=5., touch_r=.9, take_tau=.35, take_k=.04, take_v0=10.)  # a player's body as the ball meets it: radius with a leg out (m), friction that takes pace off a glancing ball, how much a head-on ball comes back
@@ -56,6 +57,8 @@ PRESS_FLAG = {"pass", "cross", "carry", "shot", "take_on", "clearance", "disposs
 class Match:
     def __init__(s, home, away, seed=0, dt=DT, info=None):
         s.rng = np.random.default_rng(seed)
+        s.foot_rng = np.random.default_rng(seed + 9173)  # which foot: its own stream, so footedness changes a match only through what the foot does
+        s.left, s.weak = np.zeros(22, bool), np.full(22, 10.)
         s.info = info or make_match_info(s.rng, home)
         s.ref = s.info["referee"]["strict"]                      # strict referees whistle and book more
         s.rain = 1.1 if s.info["weather"]["rain"] else 1.0      # wet ball: less accurate passing
@@ -188,6 +191,7 @@ class Match:
             s.anchor[i] = [anchor[0] * L, anchor[1] * W]
         for a in ATTRS:
             s.attr[a][i] = p["attrs"][a]
+        s.left[i], s.weak[i] = p.get("foot") == "left", float(p.get("weak_foot", 10.))
         for k in _MULT:
             s.mod[k][i] = 1.
         for k in _ADD:
@@ -236,6 +240,20 @@ class Match:
         pe = float(np.exp(-(d_eff / TUNE["press_len"]) ** 2))
         hurry = float(clip(1. - (s.t - s.ctrl_t) / 1.0, 0, 1)) if s.carrier == i else .0
         return float(clip(pe * (1. + TUNE["hurry_k"] * hurry), 0, 1))
+
+    def _foot(s, c, hurried, hard=0., shot=False):
+        """Which foot he kicks with. His strong one, unless: the better his weak foot the more he uses it; hurried (first time, or a man on
+        him) he plays it with whichever foot it is on; with time, he moves a hard ball onto his strong foot (real weak-foot passes
+        complete as often as strong-foot ones, because players choose when to use it). Returns (foot, weak)."""
+        strong = "left" if s.left[c] else "right"
+        if not TUNE["wf_on"]:
+            return strong, False
+        w = s.weak[c] / 20.
+        p = (TUNE["wf_base"] + TUNE["wf_k"] * w * w) * (TUNE["wf_hurry"] if hurried else 1. - TUNE["wf_select"] * hard)
+        if shot:  # moving the ball onto the strong foot costs a touch the defender closes in: a shot is struck off whichever foot it is on more often
+            p *= TUNE["wf_shot"]
+        weak = bool(s.foot_rng.random() < min(p, .5))
+        return (("right" if s.left[c] else "left") if weak else strong), weak
 
     def _exec_scale(s, pe):
         """Multiplier on the execution error of a pass: small with time and space, large under pressure."""
@@ -1320,6 +1338,11 @@ class Match:
         al_p = float((1 + s.head[c] @ _unit(aim - start)) / 2)  # 1 = passing the way he faces
         sg = (.5 + .05 * d) * (TUNE["pass_sigma"] * (1 - .0353 * s.attr["passing"][c])) * s._exec_scale(pe) * (1.8 if lofted else 1) * sigma_scale * (1 + .5 * (1 - al_p) * (.4 + .6 * pe))  # with time he turns his body and sets the pass
         sg *= s.rain
+        foot = None
+        if body == "foot" and not hands and source != "throw_in":
+            foot, weak = s._foot(c, s.t - s.ctrl_t < .3 or pe > .5, 1. - float(est))
+            if weak:
+                sg *= 1. + TUNE["wf_err"] * (1. - s.weak[c] / 20.)
         wide = min(aim[1], W - aim[1]) < 9
         if kind in ("pass", "cross") and min(aim[0], L - aim[0]) < 2.5 * sg:  # the passer weights a ball to a team-mate by the goal line short of it, not over it
             aim = aim + np.array([1. if aim[0] < L / 2 else -1., 0.]) * (2.5 * sg - min(aim[0], L - aim[0]))
@@ -1346,7 +1369,7 @@ class Match:
         if rcv is not None and source not in ("short_corner", "throw_in", "goal_kick") and f_(s.pos[rcv])[0] > L / 2:
             margin = float(f_(s.pos[rcv])[0] - max(line, f_(start)[0]))  # how far beyond the last defender and the ball he stands when it is played (the referee's tolerance is 0.3 m)
         ev = s.emit(kind, player=c, pos=start, end=aim, length=d, speed=spd, offside_margin=None if margin is None or margin < -3. else round(margin, 2), lofted=lofted, height="high" if lofted else "ground",
-                    body_part="hands" if (hands or source == "throw_in") else body, technique=technique, hold=round(float(s.t - s.ctrl_t), 2), receiver=None if rcv is None else s.ids[rcv], p_success=est, exec_pressure=round(pe, 2),
+                    body_part="hands" if (hands or source == "throw_in") else body, foot=foot, technique=technique, hold=round(float(s.t - s.ctrl_t), 2), receiver=None if rcv is None else s.ids[rcv], p_success=est, exec_pressure=round(pe, 2),
                     difficulty=1 - est, progressive=bool(fwd >= 10), gain=round(float(fwd), 1), source=source, outcome=None, why=why)
         s._end_spell()
         if offside:
@@ -1389,6 +1412,10 @@ class Match:
         a = s.attr
         f = _tf if t else (lambda x: x)
         fin, gk = a["finishing"][c], a["gk"][s._opp(t)][0]
+        foot, weak = (None, False) if kind == "header" else (("left" if s.left[c] else "right"), False) if kind == "penalty" or wall is not None else \
+            s._foot(c, s.t - s.ctrl_t < .3 or s._exec_pressure(c) > .5, shot=True)
+        if weak:  # off his weaker foot: less finishing, less power
+            fin = fin - TUNE["wf_fin"] * (1. - s.weak[c] / 20.)
         odds = xg / (1 - xg + 1e-9) * np.exp(.05 * (fin - 12.5) + .02 * (a["composure"][c] - 12.5)) * np.exp(-.05 * (gk - 12.5))  # the xG model is for an average finisher / keeper (about 12.5 in this league)
         p_goal = float(odds / (1 + odds)) if kind != "penalty" else .76 * (.9 + .01 * (fin - 2.5)) * (1.1 - .01 * (gk - 2.5))
         u = s.rng.random()
@@ -1426,7 +1453,7 @@ class Match:
                 "off_target": [L + .5, W / 2 + s.rng.choice([-1, 1]) * s.rng.uniform(4, 8)],
                 "blocked": blk_spot}[res]
         end = f(np.array(endt))
-        spd = float(clip(20 + .5 * fin + s.rng.normal(0, 2), 16, 33))
+        spd = float(clip(20 + .5 * fin + s.rng.normal(0, 2), 16, 33)) * (1. - TUNE["wf_spd"] * (1. - s.weak[c] / 20.) if weak else 1.)
         lp = s.last_pass_to.get(t)
         assist_ev = lp[3] if lp and lp[1] == c and s.t - lp[2] <= 8 else None
         if assist_ev is not None:
@@ -1438,7 +1465,7 @@ class Match:
             other = [x for x in ("left", "centre", "right") if x != side]
             pen_kw = dict(placement=side, keeper_dive=side if res == "saved" else (str(s.rng.choice(other)) if s.rng.random() < .85 else side))
         ev = s.emit("shot", player=c, pos=start, end=end, xg=xg, speed=spd, outcome=res, kind=kind, why=why, **pen_kw,
-                    assist=None if assist_ev is None else assist_ev["player"], body_part="head" if kind == "header" else "foot",
+                    assist=None if assist_ev is None else assist_ev["player"], body_part="head" if kind == "header" else "foot", foot=foot,
                     first_time=bool(s.t - s.ctrl_t < .3), hold=round(float(s.t - s.ctrl_t), 2), under_pressure=bool(nd < 2.5), big_chance=bool(xg >= .25),
                     freeze_frame=[[round(float(x), 1), round(float(y), 1)] for x, y in s.pos])
         err_ev = None

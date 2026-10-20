@@ -641,6 +641,7 @@ class MatchView:
         norms = json.loads(ROLE_NORMS.read_text()).get(p["role"], {}) if ROLE_NORMS.exists() else {}
         vs = {k: dict(him=v, role_avg=norms[k]) for k, v in per90.items() if k in norms}
         return dict(player=p["name"], id=pid, number=p["number"], team=self.team_names[team], role=p["role"], traits=p.get("traits", []), star=p.get("star", False),
+                    preferred_foot=p.get("foot"), weak_foot_1_to_20=p.get("weak_foot"),
                     minutes=mins, rating=st.get("rating"), rating_terms=terms, rating_note="6.0 plus the terms; above 8 and below 4 the scale eases off, so the terms can add to more than the rating shows",
                     stats={k: st.get(k) for k in keys + ("goals", "assists", "goals_conceded", "pass_accuracy", "avg_pass_length_m", "avg_pass_difficulty", "hard_passes",
                                                          "hard_passes_completed", "hard_pass_accuracy", "avg_shot_speed_kmh", "top_shot_speed_kmh")},

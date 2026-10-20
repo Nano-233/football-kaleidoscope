@@ -7,6 +7,8 @@ Coordinates: metres, pitch L x W. Anchors are stored in the *team frame*:
 own goal at x=0, attacking towards x=L, for both teams.
 """
 from dataclasses import dataclass, asdict
+import zlib
+
 import numpy as np
 
 L, W = 105.0, 68.0
@@ -138,6 +140,19 @@ def overall(p):
     return round(float(np.mean([p["attrs"][a] for a in _ROLE_KEY[p["role"]]])), 1)
 
 
+# footedness (StatsBomb open data, Premier League 2015/16, scripts/foot_norms.py): 26 % of players are left-footed; the weaker foot plays a
+# median 12 % of open-play passes (quartiles 8-17 %, 5 % of players two-footed at 35 %+) and 24 % of open-play shots. The weak-foot rating
+# (1-20, as Football Manager's) is drawn from its own generator seeded by the player, so it changes nobody's other attributes.
+FOOT_LEFT, TWO_FOOTED, WEAK_MEAN, WEAK_SD = .26, .05, 9., 2.5
+
+
+def _foot(code, num, label):
+    fr = np.random.default_rng(zlib.crc32(f"{code}{num}{label}".encode()))
+    foot = "left" if fr.random() < FOOT_LEFT else "right"
+    weak = fr.uniform(16, 20) if fr.random() < TWO_FOOTED else fr.normal(WEAK_MEAN, WEAK_SD)  # most have a modest weak foot, a few are two-footed
+    return foot, round(float(np.clip(weak, 1, 20)), 1)
+
+
 def _player(code, num, label, role, anchor, q, rng, star=False):
     prof = _PROFILE[role]
     attrs = {a: float(np.clip(q + prof.get(a, 0) + rng.normal(0, 1.4), 1, 20)) for a in ATTRS}
@@ -151,6 +166,7 @@ def _player(code, num, label, role, anchor, q, rng, star=False):
     traits = [str(t) for t in rng.choice(pool, size=min(n, len(pool)), replace=False)] if n else []
     p = dict(id=f"{code}{num:02d}", name=_name(rng), number=num, label=label, role=role, anchor=anchor,
              attrs=attrs, traits=traits, star=star)
+    p["foot"], p["weak_foot"] = _foot(code, num, label)
     p["overall"] = overall(p)
     return p
 
@@ -170,7 +186,7 @@ def make_team(code, formation="4-3-3", tactics=None, quality=None, rng=None):
 
 
 def team_meta(t):
-    keep = ("id", "name", "number", "label", "role", "traits", "star", "overall")
+    keep = ("id", "name", "number", "label", "role", "traits", "star", "overall", "foot", "weak_foot")
     return dict(code=t["code"], name=t["name"], formation=t["formation"], quality=t["quality"],
                 tactics=asdict(t["tactics"]),
                 players=[{k: p[k] for k in keep} for p in t["players"]],

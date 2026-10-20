@@ -1564,6 +1564,27 @@ the breakdowns and the shapes (the 3D view hands back to it for those). About 0.
   rotation directions were set by measuring the foot against the hip along his facing (the first try kicked backwards): backswing
   foot 0.43 m behind and curled up to hip height, contact 0.41 m ahead and low, follow-through 0.73 m ahead and rising.
 
+### Footedness (engine, 2026-10-20; tag engine-v5.2)
+Measured first (`scripts/foot_norms.py`, StatsBomb Premier League 2015/16, 133 players with 150+ open-play foot passes): 26 % left-footed;
+the weaker foot plays a median 12 % of passes (quartiles 8-17 %; 5 % of players two-footed at 35 %+) and 24 % of open-play shots;
+weak-foot passes complete as often as strong-foot ones (0.814 / 0.818, and in every length band) and weak-foot shots convert about as
+well per xG (1.08 / 0.92, 178 shots): players choose when to use it.
+- Built (`teams._foot`, `Match._foot`): every player has a preferred foot and a weak-foot rating 1-20 (Football Manager's scale),
+  drawn from a generator seeded by the player so no other attribute changes; most N(9, 2.5), 5 % two-footed (16-20). Each foot kick
+  (pass, cross, clearance, shot; penalties and free kicks off the strong foot) picks a foot on its own random stream: base 0.025 +
+  0.3 x (rating/20)^2; x 1.8 when hurried (first time or a man on him); with time, less for a hard ball (x (1 - difficulty)), which
+  he moves onto his strong foot; shots x 1.5 (switching feet costs a touch the defender closes). The weak foot costs pass error
+  (x 1 + 0.25 (1 - rating/20)), and for shots finishing (3 x (1 - rating/20)) and pace. Events carry `foot`.
+- `scripts/foot_sim.py` 48: weak-foot share of passes median 0.14 (0.12), quartiles 0.10-0.17 (0.08-0.17), two-footed 3 % (5 %), of
+  shots 0.23 (0.24); completion strong 0.786, weak 0.764 (with every cost off 0.772: most of the gap is that hurried balls are both
+  weak-footed and harder). Weak-foot shot conversion per xG 0.40-0.65 against strong 0.82-0.91 across runs: about 30 goals, noise;
+  first costs (error 0.9, finishing 6) were halved towards the real like-for-like result.
+- Real-data loss on 96 unseen matches 121.6 -> 122.7, big chances 0.54 -> 0.37; but partial versions (no pass cost / no shot cost)
+  gave 125.3 / 124.5 and 0.46 / 0.46: the spread of these figures between near-identical engines is larger than the change itself, so
+  the effect is within the run-to-run noise. Kept: it is a real mechanism matched to real usage.
+- 3D view: the kick uses the event's foot (left or right leg); the scout's player card shows the preferred foot and weak-foot rating;
+  player_report gives them to the agents.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
