@@ -12,9 +12,21 @@ Questions (asked at full time, analyst profile, standard depth), and how each is
   goals      "Who scored, and when?"                                       every scorer named with the right minute
   best       "Who was the best player by rating?"                          the top-rated player named
   pressing   "Which team pressed harder?"                                  a grader agent compares the answer with the computed PPDA
+  duties     "Without the ball, which opponent did <player> track most?"   the engine's job log: the man it gave him most (the player
+             asked about is the one with the clearest marking job in the match)
+  fatigue    "Which <team> player was tiring most by the end?"             the engine's stamina: the named player is among the team's
+             three most tired outfield players still on at the end
+  passing    "Who completed the most hard passes?"                         the events (difficulty is the engine's own estimate)
+  milestones "Did anyone reach a milestone?"                               the events: every brace, hat-trick and goal off the bench named
+             (asked only when the match has one)
+  control    "Which team controlled the game more?"                        a consistency check against the rhythm analytics (settled
+             possession share): there is no engine truth for control
+  bench      the bench assistant at 60' for the side not winning: the sentences of its write-up that recommend name what the code
+             picked from the replays (deterministic); scored on consistency, not on whether the change is right
 Also recorded: fact-checker approval, rewrites, tool calls and seconds per answer.
 """
 import asyncio
+import collections
 import json
 import pathlib
 import re
@@ -30,6 +42,8 @@ from analytics.tools import MatchView  # noqa: E402
 from newsroom.agents import _run, _verdict  # noqa: E402
 from newsroom.clients import make_client  # noqa: E402
 from newsroom.desk import Desk  # noqa: E402
+from matchsim.whatif import t_at_minute  # noqa: E402
+import numpy as np  # noqa: E402
 
 PROFILE = {"persona": "analyst", "depth": "standard"}
 REASONS = """You grade a football newsroom's explanation of a team's changes of system. TRUTH lists each change with the manager's real reason.
@@ -81,6 +95,7 @@ async def one(client, path):
                    changes=len(found), found=sum(found), reasons_right=sum(right), minute_errors=lag)
         rows.append(row)
     if ONLY not in (None, "goals", "best", "pressing"):
+        rows += await new_kinds(client, match, mv, st, ask)
         return dict(match=pathlib.Path(path).stem, rows=rows)
     goals = [e for e in match["events"] if e["type"] in ("goal", "own_goal")]
     r, row = await ask("goals", "Who scored the goals in this match, and at which minutes?")
@@ -100,7 +115,102 @@ async def one(client, path):
     g = _verdict((await _run(Agent(client, GRADER, name="grader"), f"QUESTION: Which team pressed harder?\nTRUTH: {harder} pressed harder (PPDA {ppda[0]} vs {ppda[1]}, lower = harder, home first).\nANSWER: {text}")).text.replace('"correct"', '"approved"'))
     row.update(correct=bool(g["approved"]), detail=f"truth {harder}")
     rows.append(row)
+    rows += await new_kinds(client, match, mv, st, ask)
     return dict(match=pathlib.Path(path).stem, rows=rows)
+
+
+WORDS = dict(press=("press",), line_height=("line",), compactness=("compact",), width=("width",), directness=("direct",), risk=("risk",), shoot=("shoot",))
+KEEP = ("keep", "as they are", "no change", "unchanged", "maintain", "stay with", "stick with")
+
+
+def recommends(text, rec):
+    """Do the sentences that recommend name the code's pick? A formation by name, an instruction by its word; "keep" when nothing was
+    picked. Deterministic: an LLM grader took the description of a change that was tested for a second recommendation."""
+    sents = [x.lower() for x in re.split(r"(?<=[.!?])\s+", text) if "recommend" in x.lower()]
+    if not sents:
+        return False
+    if rec is None:
+        return any(k in x for x in sents for k in KEEP)
+    want = ([rec["formation"]] if "formation" in rec else []) + [WORDS[k][0] for k in rec if k in WORDS]
+    return all(any(w in x for x in sents) for w in want)
+
+
+def true_marker(mv, tm):
+    """The outfield player of team tm with the clearest marking job in the engine's own log, and the opponent it gave him most."""
+    F, J = mv.F, mv.jobs
+    idx = np.nonzero(F[:, 4] == 1 - tm)[0][::5]
+    best = None
+    for k in range(1, 11):
+        occ = {mv._occupant(11 * tm + k, i * mv.dt) for i in idx}
+        if len(occ) != 1:  # substituted: his job is not one man's
+            continue
+        codes = J[idx, 11 * tm + k]
+        mk = idx[(codes >= 0) & (codes <= 10)]
+        if len(mk) < 120:
+            continue
+        tgt = collections.Counter(mv._occupant(11 * (1 - tm) + int(J[i, 11 * tm + k]), i * mv.dt) for i in mk)
+        who, n = tgt.most_common(1)[0]
+        score = len(mk) / len(idx) * n / len(mk)
+        if n / len(mk) >= .5 and (best is None or score > best[0]):
+            best = (score, occ.pop(), who, round(n / len(mk), 2))
+    return best
+
+
+async def new_kinds(client, match, mv, st, ask):
+    rows = []
+    if ONLY in (None, "duties") and mv.jobs is not None:
+        for tm in (0, 1):
+            b = true_marker(mv, tm)
+            if not b:
+                continue
+            _, pid, tgt, share = b
+            r, row = await ask("duties", f"Without the ball, which opponent did {mv.names[pid]} ({mv.team_names[tm]}) track most during the match?")
+            row.update(correct=mv.names[tgt] in row["answer"], detail=f"truth {mv.names[tgt]} ({share:.0%} of his marking time, engine job log)")
+            rows.append(row)
+    if ONLY in (None, "fatigue") and mv.stamina is not None:
+        for tm in (0, 1):
+            end = mv.meta["duration"] - 1
+            on = [(1 - mv.stamina[-1][11 * tm + k], mv._occupant(11 * tm + k, end)) for k in range(1, 11) if mv.F[-1, 6 + 2 * (11 * tm + k)] > -5]
+            top = [pid for _, pid in sorted(on, reverse=True)[:3]]
+            r, row = await ask("fatigue", f"Which {mv.team_names[tm]} player was tiring most by the end of the match?")
+            row.update(correct=any(mv.names[p] in row["answer"] for p in top), detail=f"truth (engine stamina) top 3: {', '.join(mv.names[p] for p in top)}")
+            rows.append(row)
+    if ONLY in (None, "passing"):
+        best = max(st["players"].values(), key=lambda p: p.get("hard_passes_completed") or 0)
+        r, row = await ask("passing", "Who completed the most hard passes in this match (passes the passer was unlikely to complete)?")
+        row.update(correct=best["name"] in row["answer"], detail=f"truth {best['name']} ({best['hard_passes_completed']})")
+        rows.append(row)
+    if ONLY in (None, "milestones"):
+        ms = [r_ for r_ in mv.milestones() if r_["text"] in ("brace", "hat-trick", "scores off the bench")]
+        if ms:
+            r, row = await ask("milestones", "Did any player reach a milestone in this match, such as a brace, a hat-trick or a goal off the bench?")
+            hits = [mv.names[r_["player"]] in row["answer"] for r_ in ms]
+            row.update(correct=all(hits), detail=f"{sum(hits)}/{len(hits)}: " + ", ".join(f"{mv.names[r_['player']]} {r_['text']}" for r_ in ms))
+            rows.append(row)
+    if ONLY in (None, "control"):
+        sh = mv.rhythm()["match"]["settled_by_team_pct"]
+        if abs(sh[0] - sh[1]) >= 10:  # a clear case only
+            more = mv.team_names[0 if sh[0] > sh[1] else 1]
+            r, row = await ask("control", "Which team controlled the game more?")
+            g = _verdict((await _run(Agent(client, GRADER, name="grader"), f"QUESTION: Which team controlled the game more?\nTRUTH: {more} had more of the settled possession ({sh[0]}% v {sh[1]}%, home first).\nANSWER: {row['answer']}")).text.replace('"correct"', '"approved"'))
+            row.update(correct=bool(g["approved"]), detail=f"analytics: {more} ({sh[0]}% v {sh[1]}% of settled possession)")
+            rows.append(row)
+    if ONLY in (None, "bench") and match["meta"].get("recipe"):
+        t = t_at_minute(match["events"], 60, match["meta"]["half_time"])
+        sc = [0, 0]
+        for e in match["events"]:
+            if e["t"] <= t and e["type"] in ("goal", "own_goal"):
+                sc = [e["home"], e["away"]]
+        tm = 0 if sc[0] <= sc[1] else 1  # the side that is not winning, the home side when level
+        t0 = time.time()
+        r = await Desk(client, match, PROFILE, until=t).advise(tm)
+        pick = "keep things as they are" if r["recommendation"] is None else json.dumps(r["recommendation"])
+        text = r["answer"] or r["held"] or ""
+        g = dict(approved=recommends(text, r["recommendation"]))
+        rows.append(dict(kind="bench", question=f"bench assistant for {r['team']} at {r['minute']}", answer=text, approved=r["approved"], rewrites=r["rewrites"],
+                         tool_calls=len(r["steps"]), seconds=round(time.time() - t0, 1), correct=bool(g["approved"]) and bool(r["tests"]),
+                         detail=f"picked {pick} from {len(r['tests'])} tested changes"))
+    return rows
 
 
 async def main(paths):

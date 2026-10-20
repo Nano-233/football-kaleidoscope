@@ -1496,6 +1496,31 @@ like no change (4-5-1 and 4-1-4-1 are one layout).
   22 found, 58 false alarms (the with-ball reading is the better one to score).
 - Still open: 3-4-3 read as 5-4-1 when wing-backs and wingers sit deep; starting shapes 40/48 (the engine's 4-3-3 played as 4-1-4-1).
 
+### The eval covers the new features; three small fixes (2026-10-19)
+- `eval_newsroom.py` asks five more kinds, graded against the engine's own records where there is one: duties (which opponent the
+  player with the clearest marking job in the job log tracked most), fatigue (the named player is among the team's three most tired
+  by the engine's stamina), passing (most hard passes completed, from the events), milestones (every brace, hat-trick and goal off
+  the bench named; asked only when the match has one), control (a consistency check against the rhythm analytics, which have no
+  engine truth); and the bench assistant at 60' for the side not winning, scored on whether its write-up recommends exactly what the
+  code picked from the replays (`BENCH` grader).
+- "High line" for a deep block: the shape tool gave a bare `defensive_line_m`; it now adds `defensive_line_is` (deep under 29 m,
+  high over 36 m, from the ten demo sides without the ball: 25-40 m, median 31.5; the line reading follows the line_height setting:
+  0.25 -> 24.9 m, 0.72 -> 39.8 m).
+- Late formation changes: the two 84-85' misses were not too late. After them the sides had over a minute of attacking possession.
+  In match_1 the switch to 4-5-1 to protect a lead left the shape with the ball a clear 4-3-3 (fit 0.034, its best of the match):
+  the change is in how they defend. Scored over either phase (false alarms still the with-ball reading's, `formation_eval.py
+  either=1`): 48 unseen teams found 30 -> 35 of 49, false alarms 24. The formation tool already gives the agents both lists. `truth()`
+  also drops a change after which the side had under a minute of possession in the opposition half (1 of 50 on the unseen set).
+- Windows (rhythm, duties, fatigue, the duty score) restart at the second-half kick-off (`MatchView._windows`): no window mixes
+  first-half stoppage time with the second half; labels end at the clock just before the window closes ("30'-45+4'", "46'-61'").
+  The board and the scout views pick windows by their end time, not by index.
+- First run of the wider eval (54 answers): overall 0.74; duties, goals, best, pressing, milestones, control all right; passing 2/5,
+  fatigue 4/10, bench 4/5. Causes and fixes: no tool ranked players across the match (the agent could not find the leader without 22
+  player reports): `stat_leaders` (top three for hard passes, key passes, tackles won, interceptions, take-ons won, shots); the fatigue
+  tool led with `tiring` (drop beyond team-mates as well), which the agents named, while the reader's top by drop was in the true top
+  three for 7 of 10 teams: it now leads with `most_dropped_first`; the bench miss was the LLM grader taking a tested change for a
+  second recommendation: graded deterministically now (`recommends`). Rerun: overall 0.87, passing 5/5, fatigue 6/10, bench 5/5.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

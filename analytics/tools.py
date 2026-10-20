@@ -59,6 +59,10 @@ def _hull(P):
 
 SPRINT = 7.0      # m/s (25 km/h), the usual sprint threshold
 nrm = lambda a, axis=-1: np.linalg.norm(a, axis=axis)
+# the defensive line (mean of the four deepest outfield players, metres from his own goal) in words, against the simulated league: without the
+# ball the ten demo sides read 25-40 m (median 31.5), the deep blocks (line_height 0.25-0.4) at 25-28 m and the high lines (0.65-0.72) at 40 m.
+# Agents given the bare number called a 25 m line "high"; with the ball the whole team is further up, so the word is only given without it.
+LINE_WORD = lambda m, phase: (None if phase != "out" else f"{'deep' if m < 29 else 'high' if m > 36 else 'medium'} (sides in these matches defend 25-40 m from their goal)")
 DUTY_PRESS_R, DUTY_APPROACH, DUTY_MARK_R = 8., 2., 8.  # m, m/s, m: closing down (within 8 m and running at the carrier at 2 m/s or more), tracking a man (within 8 m)
 ROLE_NORMS = pathlib.Path(__file__).with_name("role_norms.json")  # per-role per-90 averages over many simulated matches (scripts/role_norms.py)
 GROUPS = {
@@ -93,6 +97,21 @@ class MatchView:
         self.role_now = {pid: p["role"] for pid, p in self.players.items()}
         self._ct = [e["t"] for e in self.events if e.get("clock")]
         self._cc = [e["clock"] for e in self.events if e.get("clock")]
+
+    def _windows(self, window):
+        """(t0, t1) windows of `window` seconds within each half: the second half starts its own at kick-off, so no window mixes the end of
+        the first half (its stoppage time) with the start of the second; a tail under a third of a window joins the one before it."""
+        h2 = next((e["t"] for e in self.events if e["type"] == "half_start" and e.get("period") == 2), None)
+        out = []
+        for a, b in ((0., h2), (h2, self.meta["duration"])) if h2 else ((0., self.meta["duration"]),):
+            w0, part = a, []
+            while w0 < b - 1e-6:
+                part.append((w0, min(w0 + window, b)))
+                w0 += window
+            if len(part) > 1 and part[-1][1] - part[-1][0] < window / 3:
+                part[-2] = (part[-2][0], part[-1][1]); part.pop()
+            out += part
+        return out
 
     def _clock(self, t):
         """The match clock (as on the scoreboard, 45+2', and the second half from 46') at time t in seconds."""
@@ -150,6 +169,7 @@ class MatchView:
             team=self.team_names[team], window=[self._clock(t0), self._clock(t1)], phase=phase,
             formation=reads[0][0], runner_up=reads[1][0] if len(reads) > 1 else None, fit=round(reads[0][1], 3),
             defensive_line_m=round(float(np.mean(line[:4])), 1), block_length_m=round(float(np.ptp(P[:, 0])), 1), block_width_m=round(float(np.ptp(P[:, 1])), 1),
+            defensive_line_is=LINE_WORD(float(np.mean(line[:4])), phase),
             positions=[dict(player=self.names[pid], id=pid, x=round(float(xy[0]), 1), y=round(float(xy[1]), 1)) for pid, xy in rows],
         )
 
@@ -638,12 +658,7 @@ class MatchView:
         sp = nrm(np.diff(xy, axis=0), axis=2) / self.dt
         sp[(sp > 12) | (xy[1:, :, 1] < -5)] = 0.
         ts = self.F[1:, 0]
-        dur, rows, w0 = self.meta["duration"], [], 0.
-        while w0 < dur:
-            rows.append((w0, min(w0 + window, dur)))
-            w0 += window
-        if rows and rows[-1][1] - rows[-1][0] < 300 and len(rows) > 1:  # a short tail joins the window before it
-            rows[-2] = (rows[-2][0], rows[-1][1]); rows.pop()
+        rows = self._windows(window)
         per = {}  # player -> [(window, metres a minute, minutes)]
         for k in range(11):
             for a, b in rows:
@@ -655,7 +670,7 @@ class MatchView:
                     mask = np.nonzero(sel)[0][np.repeat(occ == pid, 25)[:sel.sum()]]
                     mins = len(mask) * self.dt / 60
                     if mins >= 5:
-                        per.setdefault(pid, []).append((f"{self._clock(a)}-{self._clock(b)}", round(float((sp[mask, k] * (sp[mask, k] > hi)).sum() * self.dt / mins), 1), round(mins, 1)))
+                        per.setdefault(pid, []).append((f"{self._clock(a)}-{self._clock(b - 1)}", round(float((sp[mask, k] * (sp[mask, k] > hi)).sum() * self.dt / mins), 1), round(mins, 1)))
         out = {}
         for pid, ws in per.items():
             first = [v for _, v, m in ws[:2]]
@@ -670,6 +685,7 @@ class MatchView:
             q["vs_team_points"] = round(d - team_drop) if d is not None and team_drop is not None else None
             q["tiring"] = bool(d is not None and q["minutes"] >= 45 and d >= 25 and q["vs_team_points"] >= 15)
         return dict(team=self.team_names[team], team_drop_pct=round(team_drop) if team_drop is not None else None,
+                    window_ends={f"{self._clock(a)}-{self._clock(b - 1)}": round(b, 1) for a, b in rows},
                     tiring=[q["name"] for q in sorted(out.values(), key=lambda q: -(q["latest_drop_pct"] or 0)) if q["tiring"]],
                     players={q["name"]: {k: v for k, v in q.items() if k != "name"} for q in out.values()},
                     note="high-intensity running (above 19.8 km/h) in metres a minute; drops against his own first 30 minutes and against the team's median drop")
@@ -814,9 +830,8 @@ class MatchView:
             segs.append((t0, t1, tm, kind, j < n and live[j]))  # the last flag: lost in play (a turnover), not to a stoppage
             i = j
         stops = [a for a, b, k in self.meta.get("dead_log", []) if k != "kickoff" or a > 0]
-        dur, rows, w0 = self.meta["duration"], [], 0.
-        while w0 < dur:
-            w1 = min(w0 + window, dur)
+        rows = []
+        for w0, w1 in self._windows(window):
             part = [(max(a, w0), min(b, w1), tm, k, lost) for a, b, tm, k, lost in segs if b > w0 and a < w1]
             play = sum(b - a for a, b, *_ in part)
             share = {k: sum(b - a for a, b, _, kk, _l in part if kk == k) / play if play else 0. for k in ("settled", "broken")}
@@ -827,11 +842,10 @@ class MatchView:
             state = ("stop-start" if play < .4 * (w1 - w0) else
                      "chaos" if share["settled"] < .45 or (share["broken"] >= .2 and turn >= 5) else
                      f"control: {self.team_names[top]}" if share["settled"] >= .6 and top is not None and mine[top] >= .65 * sum(mine) else "even")
-            rows.append(dict(window=f"{self._clock(w0)}-{self._clock(w1)}", t0=w0, t1=w1, ball_in_play_pct=round(100 * play / max(w1 - w0, 1)),
+            rows.append(dict(window=f"{self._clock(w0)}-{self._clock(w1 - 1)}", t0=w0, t1=w1, ball_in_play_pct=round(100 * play / max(w1 - w0, 1)),
                              settled_pct=round(100 * share["settled"]), broken_pct=round(100 * share["broken"]),
                              settled_by_team_pct=[round(100 * x / sum(mine)) if sum(mine) else None for x in mine],
                              turnovers_per_min=round(turn, 1), passes_per_min=round(tempo, 1), stoppages=sum(1 for a in stops if w0 <= a < w1), state=state))
-            w0 += window
         spells, cur = [], None
         for r in rows:
             if cur and cur["state"] == r["state"]:
@@ -911,11 +925,10 @@ class MatchView:
         idx, duty, tgt = self._duty_frames(team)
         ts = idx * self.dt
         XY = self._team_xy(team, self.F[idx, 5 + 22 * team:5 + 22 * team + 22].reshape(len(idx), 11, 2))
-        dur, rows = self.meta["duration"], []
-        w0 = 0.
-        while w0 < dur:
-            sel = (ts >= w0) & (ts < w0 + window)
-            row = dict(window=f"{self._clock(w0)}-{self._clock(min(w0 + window, dur))}", t0=w0, t1=min(w0 + window, dur), players={})
+        rows = []
+        for w0, w1 in self._windows(window):
+            sel = (ts >= w0) & (ts < w1)
+            row = dict(window=f"{self._clock(w0)}-{self._clock(w1 - 1)}", t0=w0, t1=w1, players={})
             for k in range(1, 11):
                 occ = np.array([self._occupant(11 * team + k, t) for t in ts[sel]])
                 for pid in set(occ):
@@ -940,7 +953,6 @@ class MatchView:
                     rows_p["minutes_defending"] = round(len(on) * 5 * self.dt / 60, 1)  # samples are 1 s apart
                     row["players"][pid] = rows_p
             rows.append(row)
-            w0 += window
         changes = []  # a change counts when the next two windows both show it (one window of four minutes' defending is too noisy to call)
         for a, b, c in zip(rows, rows[1:], rows[2:]):
             for pid, q in b["players"].items():
@@ -1001,9 +1013,8 @@ class MatchView:
         agree = float((out[0] == out[1]).mean())
         ts = idx * self.dt
         rp, tp, hits, n_t = [], [], 0, 0
-        w0 = 0.
-        while w0 < self.meta["duration"]:
-            sel = (ts >= w0) & (ts < w0 + window)
+        for w0, w1 in self._windows(window):
+            sel = (ts >= w0) & (ts < w1)
             if sel.sum() >= 60:
                 for k in range(1, 11):
                     rp.append(float((duty[sel, k] == 2).mean())); tp.append(float((true[sel, k] == 2).mean()))
@@ -1011,7 +1022,6 @@ class MatchView:
                     rm = tgt[sel, k][duty[sel, k] == 1]
                     if len(tj) >= .25 * sel.sum() and len(rm):
                         n_t += 1; hits += int(np.bincount(tj, minlength=11).argmax() == np.bincount(rm, minlength=11).argmax())
-            w0 += window
         XY = self._team_xy(team, self.F[idx, 5 + 22 * team:5 + 22 * team + 22].reshape(len(idx), 11, 2))[:, 1:, 0]
         h_read, h_true = XY[out[1] == 2], XY[out[0] == 2]
         return dict(frame_agreement=round(agree, 3),
@@ -1053,8 +1063,11 @@ class MatchView:
         ev = [e for e in self.events if e.get("team") == team]
         start = next((e["formation"] for e in ev if e["type"] == "lineup"), self.meta[("home", "away")[team]]["formation"])
         ch = [dict(at=e["clock"], t=e["t"], formation=e["formation"], previous=e["previous"], reason=e["reason"]) for e in ev if e["type"] == "formation_change"]
-        # a change nobody could see is not scored: one to the same layout (3-5-2 to 5-3-2), or with under 2.5 minutes left to show it
-        seen = lambda c: not self.same_shape(c["formation"], c["previous"]) and self.meta["duration"] - c["t"] >= 150
+        # a change nobody could see is not scored: one to the same layout (3-5-2 to 5-3-2), with under 2.5 minutes left to show it, or after which
+        # the side hardly had the ball in the opposition half (under a minute), where its shape with the ball is read
+        att = (self.F[:, 4] == team) & ((self.F[:, 1] if team == 0 else L - self.F[:, 1]) > L / 2)
+        att_after = lambda t: float(att[int(t / self.dt):].sum() * self.dt) if self.read_attack else 1e9
+        seen = lambda c: not self.same_shape(c["formation"], c["previous"]) and self.meta["duration"] - c["t"] >= 150 and att_after(c["t"]) >= 60
         return dict(team=self.team_names[team], starting=start,
                     formation_changes=[c for c in ch if seen(c)], unseeable_changes=[c for c in ch if not seen(c)],
                     tactic_changes=[dict(at=e["clock"], t=e["t"], reason=e["reason"], changes=e["changes"]) for e in ev if e["type"] == "tactic_change"])

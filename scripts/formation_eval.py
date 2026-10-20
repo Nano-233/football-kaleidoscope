@@ -14,6 +14,7 @@ from analytics.tools import MatchView
 KW = {k: float(v) for k, v in (a.split("=") for a in sys.argv[2:])}
 SEED0 = int(KW.pop("seed0", 9300))  # seed0=9500: matches the thresholds were not chosen on
 BOTH = bool(KW.pop("both", 0))
+EITHER = bool(KW.pop("either", 0))  # either=1: found in either phase (a lead protected by dropping the wingers shows without the ball), false alarms with it
 ATT = KW.pop("attack", None)  # attack=0: read the shape with the ball from all possession (the reader before 2026-10-18)
 PHASE = {0: "in_possession", 1: "out_of_possession"}.get(int(KW.pop("out", 0)))  # out=1: score the changes read without the ball
 
@@ -29,6 +30,9 @@ def one(seed):
     for tm in (0, 1):
         tl = mv.formation_timeline(tm, **KW)
         sc = mv.score_reading(tm, [c for c in tl["changes"] if BOTH or c["phase"] == PHASE])
+        if EITHER:  # a change is found when it shows in either phase; false alarms are still the with-ball reading's
+            sa = mv.score_reading(tm, tl["changes"])
+            sc = dict(sc, found=sa["found"], detail=sa["detail"])
         out.append((mv.same_shape(tl["starting"]["in_possession"], mv.truth(tm)["starting"]), sc["true_changes"], sc["found"], sc["false_alarms"], [d["lag_s"] for d in sc["detail"] if d["found"]], mv.window_agreement(tm, tl)))
     return out
 

@@ -599,7 +599,7 @@ function profileBlocks(pid, p) {
 function fatigueBlock(pid, tm) {  // high-intensity running by 15 minutes (analytics/tools.py fatigue), completed windows only
   const F_ = (S.D.fatigue || [])[tm], q = F_ && Object.values(F_.players).find(x => x.id === pid);
   if (!q) return '';
-  const ws = Object.entries(q.hi_m_per_min_by_window).filter(([w]) => clockMin(w.split('-')[1]) <= clockMin(clockAt(S.t)));
+  const ws = Object.entries(q.hi_m_per_min_by_window).filter(([w]) => (F_.window_ends || {})[w] <= S.t);  // completed windows only
   if (ws.length < 2) return '';
   const mx = Math.max(...ws.map(([, v]) => v), 1);
   return `<div class="label">Running hard · metres a minute above ${conv('spd', 19.8, 1)}</div>
@@ -805,7 +805,7 @@ function paintNetwork(tm, row) {
   }
 }
 // out of possession, read from tracking (analytics/tools.py duties): where each man holds his space, how much he closes the ball down, whom he tracks
-const dutyRow = tm => { const D_ = (S.D.duties || [])[tm]; return D_ ? lastWin(D_.rows, D_.window) : null; };
+const dutyRow = tm => { const D_ = (S.D.duties || [])[tm]; return D_ ? D_.rows.filter(r => r.t1 <= S.t).pop() || null : null; };  // windows restart at the second-half kick-off
 const pct = v => (v == null ? '–' : Math.round(v * 100) + '%');
 function dutyTip(id, q) {
   return `${pname(id)}\ncloses the ball down ${pct(q.press)} of their possession${q.press_height_m != null ? `, ${conv('len', q.press_height_m)} from his goal` : ''}`

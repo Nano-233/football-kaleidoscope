@@ -212,6 +212,18 @@ class Desk:
         t_from = lambda m: t_at_minute(mv.events, m, mv.meta["half_time"]) if m and mv.events else 0.
         t_to = lambda m: t_at_minute(mv.events, m + 1, mv.meta["half_time"]) if mv.events else 0.
 
+        def stat_leaders() -> dict:
+            """The top three players of the match so far, both teams, for: hard passes completed (passes he was unlikely to complete),
+            key passes, tackles won, interceptions, take-ons won and shots."""
+            from analytics.stats import StatsAccumulator
+            acc = StatsAccumulator(mv.meta)
+            for e in mv.events:
+                acc.update(e)
+            st = acc.players()
+            keys = ("hard_passes_completed", "key_passes", "tackles_won", "interceptions", "take_ons_won", "shots")
+            return {k: [dict(player=p["name"], team=mv.team_names[p["team"]], value=p.get(k) or 0) for p in sorted(st.values(), key=lambda p: -(p.get(k) or 0))[:3] if p.get(k)]
+                    for k in keys}
+
         def match_summary() -> dict:
             """Score, goals (minute, scorer, team), cards, substitutions, milestones (brace, hat-trick, off the bench, 50 passes, clean sheet...) and the starting formations so far."""
             ev = mv.events
@@ -291,7 +303,10 @@ class Desk:
         def fatigue(team: Annotated[str, "home, away or the team name"]) -> dict:
             """Who is tiring, read from tracking: each player's high-intensity running (metres a minute above 19.8 km/h) by 15 minutes, his drop
             against his own first 30 minutes and against his team-mates' (a side protecting a lead runs less as a whole), and who is tiring."""
-            return mv.fatigue(team_ix(team))
+            f = mv.fatigue(team_ix(team))
+            ranked = sorted(((q["latest_drop_pct"], nm) for nm, q in f["players"].items() if q["latest_drop_pct"] is not None), reverse=True)
+            return dict(most_dropped_first=[dict(player=nm, drop_pct=d) for d, nm in ranked[:5]], **f,
+                        reading="most_dropped_first ranks who is tiring most (high-intensity running now against his first 30 minutes); tiring also requires a drop well beyond his team-mates'")
 
         def momentum() -> dict:
             """xG, shots and field tilt for both teams by 5 minutes, cumulative xG, and the spells when one side dominated."""
@@ -346,8 +361,8 @@ class Desk:
             self.trail.append(dict(agent="tactics_analyst", tool="what_if", args=kw))
             return json.dumps(out, default=str)
 
-        tt = [team_shape, formation_changes, pressing, defensive_duties, control_and_rhythm, fatigue, momentum, passing_network, moment_breakdown, find_moments, match_summary]
-        st = [player_report, defensive_duties, fatigue, find_moments, moment_breakdown, list_players, match_summary]
+        tt = [team_shape, formation_changes, pressing, defensive_duties, control_and_rhythm, fatigue, stat_leaders, momentum, passing_network, moment_breakdown, find_moments, match_summary]
+        st = [player_report, stat_leaders, defensive_duties, fatigue, find_moments, moment_breakdown, list_players, match_summary]
         self.tactics = Agent(client, TACTICS, name="tactics_analyst", tools=[logged("tactics_analyst", f) for f in tt] + [what_if])
         self.scout = Agent(client, SCOUT, name="scout", tools=[logged("scout", f) for f in st])
         self.orchestrator = Agent(client, ORCHESTRATOR, name="orchestrator", tools=[
