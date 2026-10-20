@@ -1647,6 +1647,28 @@ in the steering (a man closing a gap alone trails a moving spot by speed / 1.1 m
 Open, ranked: the line drops too slowly as a unit after the ball comes forward; contested balls change hands too often, so
 possessions do not settle (the crowded build-up); wide final-third take-ons 1.9 (4.5).
 
+### Why possessions do not settle (2026-10-20, open; nothing kept)
+`move_end.py` 24: passing moves 130.6 per team-match (79.7); the excess ends are a pass cut out or misplaced 27.0 (12.5), an aerial
+duel lost 24.6 (10.0), tackled 11.5 (6.0). Overall the sim's passes in the air are fewer than real (high share 0.17 vs 0.25) and
+aerials lost near real (25 vs 22), so it is not too many balls in the air in general. `scripts/air_mid.py` (PL 2015/16 events): the
+sim plays 79 passes of 25-40 m a team-match against 43, the surplus sideways and under pressure (middle third 8.9 vs 1.2, final third
+7.0 vs 0.26); in the air 28 vs 14. `shape_probe.py` (now also team-mates by distance ring and pressure, through the camera): a passer
+in the middle third has a man within 3 m 56 % of the time (35 %) and 0.72 team-mates at 10-15 m (1.36), 1.8-2.0 at 15-25 m (2.4-2.7);
+within 5 m the sim has more than real (0.22-0.36 vs 0.06-0.19). Pass hold times are real (median 1.19 vs 1.02 s, mean 1.51 vs 1.52).
+So: the passer is pressed more, his short options are thinner, and the way out is a long sideways ball that is contested or cut out.
+Tried, none kept:
+- the pass policy with air x direction terms (`air_back`, `air_lat`; real passers keep backward and sideways balls on the floor:
+  -0.75, -0.49 per 10 m), refitted: held-out fit as before, the sim's air passes 27.7 -> 29.0, loss 115.3 -> 127.4 on 48 unseen.
+  The mode was never the cause; the long sideways target is;
+- support rings in the space search (every off-ball man may offer at 8-20 m round the ball, scored by the existing open / lane /
+  spacing terms, `ring_c`): ring support 1.24 -> 1.46 within 15 m, but passes +21, running +0.7 km, moves unchanged, loss +3.3:
+  the same signature as the fixed support group (Oct 14-15);
+- pressers closing at a hard run instead of a sprint (`press_hard`): pressed share 0.24 unchanged, loss +5.8.
+Next: why the passer is pressed so often when the hold time is real and the defenders are about as near at the reception (wide_press:
+middle third within 4 m at reception 0.30 vs 0.24 centrally): the press radius and the number of men sent (one or two per carrier,
+plus the receiver-closing rule) against real pressing counts per possession; and the passer's view of short options (the policy
+scores only team-mates more than 8 m away: `vis` needs dist > 8).
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

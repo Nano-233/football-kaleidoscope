@@ -43,6 +43,13 @@ def tally(c, ball, mates, opps, opp_gk_x, since=None):
         c[("off", "n")] += 1
         c[("off", "count")] += len(off)
         c[("off", "any")] += bool(off)
+    th = "own" if ball[0] < L / 3 else "mid" if ball[0] < 2 * L / 3 else "fin"
+    pz = "pressed" if opps and min(np.hypot(*(o - ball)) for o in opps) < 3 else "free"
+    for lo, hi in ((5, 15), (15, 25), (0, 5), (5, 10), (10, 15)):
+        ring = [m for m in mates if lo <= np.hypot(*(m - ball)) < hi]
+        c[("sup", th, pz, "n")] += (lo, hi) == (5, 15)
+        c[("sup", th, pz, f"{lo}-{hi}")] += len(ring)
+        c[("sup", th, pz, f"{lo}-{hi} free")] += sum(1 for m in ring if not opps or min(np.hypot(*(o - m)) for o in opps) > 3)
     if ball[0] < L / 3:
         near = [m for m in mates if np.hypot(*(m - ball)) < 15]
         free = [m for m in near if not opps or min(np.hypot(*(o - m)) for o in opps) > 3]
@@ -129,4 +136,10 @@ if __name__ == "__main__":
           f"of them free {q(rc, ('bu', 'free'), ('bu', 'n')):.2f} | {q(sc, ('bu', 'free'), ('bu', 'n')):.2f}, nearest {q(rc, ('bu', 'nearest'), ('bu', 'n')):.1f} | {q(sc, ('bu', 'nearest'), ('bu', 'n')):.1f} m")
     for b in ("<4", "4-10", "10+"):
         print(f"   {b:5s} s into the possession: share {q(rc, ('bus', b, 'n'), ('bu', 'n')):.2f} | {q(sc, ('bus', b, 'n'), ('bu', 'n')):.2f}, within 15 m {q(rc, ('bus', b, 'near'), ('bus', b, 'n')):.2f} | {q(sc, ('bus', b, 'near'), ('bus', b, 'n')):.2f}, nearest {q(rc, ('bus', b, 'nearest'), ('bus', b, 'n')):.1f} | {q(sc, ('bus', b, 'nearest'), ('bus', b, 'n')):.1f} m")
+    print("team-mates around the passer (5-15 m, of them free | 15-25 m, free), real | sim")
+    for th in ("own", "mid", "fin"):
+        for pz in ("free", "pressed"):
+            k = ("sup", th, pz)
+            f_ = lambda c, x: c[k + (x,)] / max(c[k + ("n",)], 1)
+            print(f"  {th} {pz:7s} n {rc[k + ('n',)]}|{sc[k + ('n',)]}  5-15 {f_(rc, '5-15'):.2f}|{f_(sc, '5-15'):.2f} free {f_(rc, '5-15 free'):.2f}|{f_(sc, '5-15 free'):.2f}   15-25 {f_(rc, '15-25'):.2f}|{f_(sc, '15-25'):.2f} free {f_(rc, '15-25 free'):.2f}|{f_(sc, '15-25 free'):.2f}   0-5 {f_(rc, '0-5'):.2f}|{f_(sc, '0-5'):.2f} 5-10 {f_(rc, '5-10'):.2f}|{f_(sc, '5-10'):.2f} 10-15 {f_(rc, '10-15'):.2f}|{f_(sc, '10-15'):.2f}")
     print(f"samples real | sim: box {sum(rc[k] for k in rc if k[0] == 'box' and k[2] == 'n')} | {sum(sc[k] for k in sc if k[0] == 'box' and k[2] == 'n')}, strag {rc['strag', 'n']} | {sc['strag', 'n']}, build-up {rc['bu', 'n']} | {sc['bu', 'n']}")
