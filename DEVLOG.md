@@ -1678,6 +1678,11 @@ winger, the back man stepping up, somebody always on the ball in our third). Two
   that moment): only about 18 % of a side's attacking frames qualify (the sim's possessions rarely settle, see above), so the opening
   window holds 18-30 s of data; starting shapes 74 -> 49;
 - leave the defender nearest the ball out of the shape without it: without-ball changes found 37 -> 41, false alarms 127 -> 141.
+Decision (user): the reader is a shipped feature, the fixes' gains were small, so the engine goes back to engine-v5.3. First only the
+three press and marking rules were reverted (`engage_x`, `fb_out`, `ball_wing`; their target, wide take-ons, had moved 1.5 -> 1.9
+only), keeping the flat back line (offsides 1.40 -> 2.06, real 1.98): reader at 48 matches 77/96, 42/90, false alarms 58, still short
+of v5.3 (83/96, 60/104, 38), so the flat line went too (the 24-match ablation had pointed the other way: too noisy to trust). All
+four stay described above for when the reader can tell a man doing a job from a change of system. Site data: the v5.3 build stands.
 
 ## Is the tuner machine learning?
 

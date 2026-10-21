@@ -246,10 +246,8 @@ def defend_assign(m, t, zone, urgent, role, P, O, Ov, C, Cv, ci, tc, tgt1, cover
     m._press_pts = press_pts
     n_press = 1 + (tc.press > .8)
     back = (role == CB) | (role == FB)
-    # the winger on his side of our third is the full-back's man: the touchline is behind him and the cover man fills the gap inside, so going out to
-    # him does not open the line the way a centre-back stepping up does
-    wing = (role == FB) & (np.sign(P[:, 1] - W / 2) == np.sign(C[1] - W / 2)) & (abs(C[1] - W / 2) > 20.16) & (C[0] < TP.get("fb_out", .4) * L)
-    ok_press = (d_ball < np.where(back & ~in_range & ~wing, np.minimum(R_press, BACK_PRESS), R_press))
+    level = (C[0] - P[:, 0] < TP.get("level_press", 3.)) if TP.get("level_press", 3.) > 0 else np.zeros(len(P), bool)  # a carrier level with him or past him: going to him does not take him out of the line (the full-back's 1 v 1 with the winger)
+    ok_press = (d_ball < np.where(back & ~in_range & ~level, np.minimum(R_press, BACK_PRESS), R_press))
     for k in range(n_press if with_press else 0):
         add(tgt1 if k == 0 else tgt1 + _unit(GOAL - C) * 3. + np.array([0., side * 2.]), TP.get("press_v", 7.) * (1. if k == 0 else .5), 200 + k, "press", ok_press)
     if cover_ok and with_press:
@@ -276,7 +274,7 @@ def defend_assign(m, t, zone, urgent, role, P, O, Ov, C, Cv, ci, tc, tgt1, cover
         gain = max(xt_a - xt_c, 0.) + TP.get("back_w", .2) * xt_a  # what a pass to him could add to the threat: a man behind the ball only offers a ball back, so he is not worth leaving the goal side of the ball for
         v = TP.get("mark_k", 100.) * gain * (.3 + .7 * lane_open) * (1. + .7 * run) * float(np.exp(-dl / 45.))
         v *= float(np.exp(-max(abs(o[1] - C[1]) - 10., 0.) / TP.get("mark_lat", 1e9)))  # a man far across from the ball: the block can shift while a switch is in the air, so he is not worth pinning a defender wide for
-        near_goal = o[0] <= TP.get("threat_depth", .34) * L and (abs(o[1] - W / 2) <= TP.get("threat_wide", 22.) or (TP.get("ball_wing", 1.) and (o[1] - W / 2) * (C[1] - W / 2) > 0))  # he is dangerous to our goal (about 36 m out, and not on the far touchline: the zone has him until the ball comes across) ...
+        near_goal = o[0] <= TP.get("threat_depth", .34) * L and abs(o[1] - W / 2) <= TP.get("threat_wide", 22.)  # he is dangerous to our goal (about 36 m out, and not on the far touchline: the zone has him until the ball comes across) ...
         near_ball = dl <= TP.get("threat_ball", 25.)  # ... or the carrier can find him with his next pass
         if not (near_goal or near_ball):
             continue
@@ -738,7 +736,7 @@ def team_targets(m, t):
                 if rg < rh:
                     tgt1 = GOAL + _unit(tgt1 - GOAL) * rh
             in_range = float(nrm(C - GOAL)) < TP.get("shoot_close", 28.)  # the carrier can shoot: the nearest man, whatever his role, gets tight and stands in the shot lane
-            if in_range or C[0] < TP.get("engage_x", 1 / 3) * L:  # a carrier who can shoot, or anyone on the ball in our third (a winger there crosses or cuts it back): somebody goes to him whatever our pressing style
+            if in_range:
                 R = max(R, 12.)
             cover_pt = tgt1 + gv * COVER_GAP + inside * 2.0
             if TP.get("assign_on", 1.):
@@ -859,20 +857,6 @@ def team_targets(m, t):
                 lim = out_f & ((role != ST) | (Bs[0] < TP.get("recover_st", 0.))) & ~engaged
                 cover_x = Bs[0] - TP.get("cover_margin", 3.)
                 zone[lim, 0] = np.minimum(zone[lim, 0], np.maximum(cover_x, MIN_X[role[lim]]))
-            if TP.get("flat_line", 1.5) > 0 and m.state == "held" and float(nrm(Bs - GOAL)) > 20.:
-                # the back line holds one offside line: its deepest man does not stand more than a metre or two behind the next one, so he does not play the
-                # forwards on (real: the deepest outfield defender is 1.1 m behind the next on average, 6 % of the time more than 3 m). He drops off it only to
-                # track a man running in behind him
-                bk = np.nonzero(((role == CB) | (role == FB)) & ~(m.sprint_hint[sl] | m.chasing[sl]))[0]
-                if len(bk) >= 2:
-                    i0 = bk[int(np.argmin(P[bk, 0]))]  # the man standing deepest
-                    lvl = float(zone[bk[bk != i0], 0].min()) - TP.get("flat_line", 1.5)  # the line the others are holding
-                    runner = ((O[1:, 0] < lvl) & (np.abs(O[1:, 1] - zone[i0, 1]) < 20.) & ((fv(m.vel[osl])[1:] @ np.array([-1., 0.])) > 2.5)).any()
-                    if zone[i0, 0] < lvl and not runner:
-                        zone[i0, 0] = lvl
-                    if P[i0, 0] < lvl - .5 and not runner:  # he is the one holding them on: he steps up at pace ('out!'), not at the stroll a small gap would get
-                        urgent[i0] = True
-                        m.hard[11 * t + i0] = True
             urgent |= (gate > .6) & (nrm(zone - P, axis=1) > 2.5)  # a man-marker in the danger area stays with his man at the man's pace
             behind_m = (gate > .6) & (nrm(zone - P, axis=1) > TP.get("mark_sprint_d", 3.0))  # a marker who is losing his man goes flat out: effort follows need, he does not jog after a sprinting forward
             m.sprint_hint[11 * t + np.nonzero(behind_m)[0]] = bool(TP.get("hint_mark", 1.))
