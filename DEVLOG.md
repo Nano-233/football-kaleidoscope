@@ -1669,6 +1669,16 @@ middle third within 4 m at reception 0.30 vs 0.24 centrally): the press radius a
 plus the receiver-closing rule) against real pressing counts per possession. (Checked: open-play options start at 3.5 m; the 8 m
 floor in `vis` is for goal kicks only.)
 
+### The defending fixes blur the shape the formation reader sees (2026-10-20, open)
+`formation_eval.py 48` (96 teams), engine-v5.3 | with the Oct 20 defending fixes: starting shapes 83 | 74, changes found 60/104 |
+46/99, false alarms 38 | 58. Ablation at 24 matches: no single fix accounts for it (each one off recovers part; the eval swings about
+5 between near-identical engines). The fixes make men leave their system places for football reasons (the full-back out to the
+winger, the back man stepping up, somebody always on the ball in our third). Two reader logic changes tried, neither kept:
+- read the shape with the ball only once a possession has settled (the rhythm reader's definition: 4 completed passes or 15 s, from
+  that moment): only about 18 % of a side's attacking frames qualify (the sim's possessions rarely settle, see above), so the opening
+  window holds 18-30 s of data; starting shapes 74 -> 49;
+- leave the defender nearest the ball out of the shape without it: without-ball changes found 37 -> 41, false alarms 127 -> 141.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
