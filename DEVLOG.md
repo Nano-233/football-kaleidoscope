@@ -1684,6 +1684,16 @@ only), keeping the flat back line (offsides 1.40 -> 2.06, real 1.98): reader at 
 of v5.3 (83/96, 60/104, 38), so the flat line went too (the 24-match ablation had pointed the other way: too noisy to trust). All
 four stay described above for when the reader can tell a man doing a job from a change of system. Site data: the v5.3 build stands.
 
+### Match centre restyled: an IDE's chrome on a match page's layout (2026-10-20)
+The user: the UI looked like a simple web app; wanted a classic dark IDE theme, professional rather than slick, from a real reference.
+Layout from the FotMob match page (measured on the page: a match header with teams either side of the score, the clock and the
+scorers; the main content and a side column). Colours and chrome from Visual Studio Code's default Dark Modern theme (its JSON in the
+vscode repo, MIT): #181818 chrome, #1F1F1F editor, #2B2B2B borders, #313131 inputs, #CCCCCC text, #0078D4 accent; editor tabs with a
+1 px accent top border, 11 px uppercase section headers, 2 px radii, a 22 px status bar (synthetic-data notice, match, clock). One UI
+font (Segoe UI / system) and a monospace for numbers (stats, clock, ratings); the condensed display face is gone. New in the markup:
+the scorers under each side (own goals marked), a header strip over the replay (2D / 3D), the status bar, and `?t=<seconds>&tab=<panel>`
+links to a moment. Checked with headless Edge at 1440x900 on every persona and in phone emulation (no sideways overflow).
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

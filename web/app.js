@@ -123,6 +123,9 @@ async function boot() {
   $('match').value = want;
   setPersona(S.persona);
   await load(want);
+  if (+q.get('t') > 0) S.t = Math.min(+q.get('t'), S.D.meta.duration);  // a link to a moment: ?t=<match seconds>&tab=<panel>
+  if (TABS[S.persona].includes(q.get('tab'))) { S.tab = q.get('tab'); setTabs(); }
+  render(true);
 }
 
 async function load(id) {
@@ -146,6 +149,7 @@ async function load(id) {
   S.goals = D.events.filter(e => e.type === 'goal' || e.type === 'own_goal');
   S.clockEv = D.events.filter(e => e.clock);
   $('h-code').textContent = D.meta.home.code; $('h-name').textContent = D.meta.home.name;
+  $('sb-match').textContent = `${D.meta.home.name} v ${D.meta.away.name}`;
   $('a-code').textContent = D.meta.away.code; $('a-name').textContent = D.meta.away.name;
   $('seek').max = D.meta.duration;
   $('club').innerHTML = '<option value="">Neutral</option>' + ['home', 'away'].map(k => `<option${S.profile.club === D.meta[k].name ? ' selected' : ''}>${esc(D.meta[k].name)}</option>`).join('');
@@ -231,6 +235,7 @@ function toggle3d() {
   if (S.v3 && !$('pitch3d')) { View3D.init(cv.parentElement); View3D.setMode($('cam3d').value); }
   if (S.v3) teams3d();
   $('v3d').setAttribute('aria-pressed', String(S.v3)); $('cam3d-wrap').hidden = !S.v3;
+  $('view-mode').textContent = S.v3 ? '3D · animated players' : '2D · tracking at 5 Hz';
   draw();
 }
 
@@ -336,6 +341,11 @@ function hud(t) {
   if (key !== hudKey) {
     hudKey = key;
     $('h-score').textContent = h; $('a-score').textContent = a; $('clock').textContent = per === 'Full time' ? 'FT' : clock; $('period').textContent = per;
+    $('sb-clock').textContent = `${per === 'Full time' ? 'FT' : clock} · ${per}`;
+    for (const tm of [0, 1]) {  // the scorers under each side, as far as the replay has got (an own goal is listed for the side it counted for)
+      $(tm ? 'a-goals' : 'h-goals').innerHTML = S.D.events.filter(e => (e.type === 'goal' || e.type === 'own_goal') && e.team === tm && e.t <= t)
+        .map(e => `<span>${esc(surname(e.player))} ${esc(e.clock)}${e.type === 'own_goal' ? ' (og)' : ''}</span>`).join('');
+    }
   }
   if (document.activeElement !== $('seek')) $('seek').value = t;
   const item = feed().filter(it => it.approved && t >= it.overlay.t_in && t < it.overlay.t_out).pop();
