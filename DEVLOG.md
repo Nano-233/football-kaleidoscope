@@ -1693,6 +1693,12 @@ vscode repo, MIT): #181818 chrome, #1F1F1F editor, #2B2B2B borders, #313131 inpu
 font (Segoe UI / system) and a monospace for numbers (stats, clock, ratings); the condensed display face is gone. New in the markup:
 the scorers under each side (own goals marked), a header strip over the replay (2D / 3D), the status bar, and `?t=<seconds>&tab=<panel>`
 links to a moment. Checked with headless Edge at 1440x900 on every persona and in phone emulation (no sideways overflow).
+Second pass (user: the page scrolled past one screen; controls small and packed into the header): the page is now a grid exactly one
+window high (title bar, activity bar, match header, content, status bar; the grid row is capped, so the pitch scales to the space and
+the panels scroll inside). VS Code's own structure for the controls: the three views as a labelled activity bar on the left, the match
+picker centred in the title bar where VS Code has its command centre, club / focus metric / language / units in a labelled settings
+flyout off a gear at the foot of the activity bar (closes on an outside click), and the transport as grouped 28 px buttons with icons.
+Checked: 1366x657 (a laptop window) and 1920x1000 with no page scroll, phone emulation with no sideways overflow.
 
 ## Is the tuner machine learning?
 

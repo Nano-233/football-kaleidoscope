@@ -1440,3 +1440,4 @@ cv.addEventListener('click', e => {  // a drawn event or link jumps to it; other
 
 boot().catch(err => { $('loading').textContent = 'Could not load the match data. Run scripts/build_site.py first. (' + err.message + ')'; });
 requestAnimationFrame(tick);
+document.addEventListener('click', e => { const st = $('settings'); if (st.open && !st.contains(e.target)) st.open = false; });  // the settings flyout closes like a menu
