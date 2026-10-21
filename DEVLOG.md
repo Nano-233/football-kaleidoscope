@@ -1699,6 +1699,13 @@ the panels scroll inside). VS Code's own structure for the controls: the three v
 picker centred in the title bar where VS Code has its command centre, club / focus metric / language / units in a labelled settings
 flyout off a gear at the foot of the activity bar (closes on an outside click), and the transport as grouped 28 px buttons with icons.
 Checked: 1366x657 (a laptop window) and 1920x1000 with no page scroll, phone emulation with no sideways overflow.
+Third pass (user: "as it was" on the what-if sliders read like a label or a broken reset; the panel tabs were small; wanted a side
+panel that expands and collapses): each slider's readout is a number (the team's setting), "40 -> 80" once moved (live while dragging),
+with a per-slider undo; a tick on the track marks the team's own setting; the system menu says "Keep the current system"; "Reset" is
+"Reset all". The side panel is a VS Code side bar: drag its edge to resize (300 px to 60 % of the window, double-click for the default
+440 px), a button at the end of the tab strip collapses it to a strip (choosing a tab reopens it), both remembered on the device
+(localStorage, guarded); tabs 42 px high at 13 px. Checked by script: readouts, undo, drag 400 -> 560 px, collapse to 41 px and back,
+no page scroll at 1366x657.
 
 ## Is the tuner machine learning?
 

@@ -88,8 +88,11 @@
     </div>
   </section>
 
+  <div class="sash" id="sash" role="separator" aria-orientation="vertical" title="Drag to resize the panel (double-click: default width)"></div>
   <aside class="panel" id="panel">
-    <nav class="tabs" id="tabs" role="tablist"></nav>
+    <div class="panel-head"><nav class="tabs" id="tabs" role="tablist"></nav>
+      <button class="panel-toggle" id="panel-toggle" aria-expanded="true" aria-controls="panel" title="Hide the panel">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2.5h12v11H2zM10 2.5v11"/></svg></button></div>
     <div class="panel-body" id="panel-body"></div>
   </aside>
 </main>

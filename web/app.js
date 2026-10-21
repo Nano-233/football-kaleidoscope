@@ -1000,7 +1000,9 @@ function whatIfView() {
   const base = Object.assign({ press: .5, line_height: .5, directness: .5, risk: .5 }, rec[side].tactics), now = clockMin(clockAt(S.t));
   const forms = ['4-3-3', '4-4-2', '4-2-3-1', '3-5-2', '3-4-3', '5-3-2', '4-5-1', '5-4-1'];
   const sl = WI_SLIDERS.map(([k, name, lo, hi]) => { const v = w.change[k] ?? base[k];
-    return `<div class="row"><span>${name}</span><input type="range" min="0" max="1" step="0.05" value="${v}" data-wi="${k}" aria-label="${name}"><span class="mono">${v === base[k] ? 'as it was' : (v > base[k] ? '↑ ' : '↓ ') + Math.round(v * 100)}</span></div>
+    const was = Math.round(base[k] * 100), now_ = Math.round(v * 100), changed = v !== base[k];
+    return `<div class="row"><span>${name}</span><div class="wi-track" style="--set:${base[k] * 100}%"><input type="range" min="0" max="1" step="0.05" value="${v}" data-wi="${k}" aria-label="${name}" title="The tick is the team's own setting (${was})"></div>
+      <span class="wi-val${changed ? ' chg' : ''}">${changed ? `${was} → ${now_}<button class="wi-undo" data-wiundo="${k}" title="Back to the team's setting (${was})" aria-label="Undo ${name}">↺</button>` : now_}</span></div>
       <div class="mono wi-scale"><span>${lo}</span><span>${hi}</span></div>`; }).join('');
   const r = w.res;
   const pct = x => Math.round(x * 100) + '%';
@@ -1015,8 +1017,8 @@ function whatIfView() {
   return `<div class="chips">${[0, 1].map(t => `<button class="chip" data-witeam="${t}" aria-pressed="${w.team === t}">${esc(M[t ? 'away' : 'home'].name)}</button>`).join('')}</div>
     ${benchView(side)}
     <div class="editor" style="margin-top:10px"><h3>From ${now}', ${esc(M[side].name)} change to</h3>${sl}
-      <div class="row"><span>System</span><select id="wi-form"><option value="">as it was</option>${forms.map(f => `<option${f === w.formation ? ' selected' : ''}>${f}</option>`).join('')}</select><span></span></div>
-      <div class="bar"><button class="btn primary" data-act="wi-run"${w.busy ? ' disabled' : ''}>Play it out</button><button class="btn" data-act="wi-reset">Reset</button></div></div>
+      <div class="row"><span>System</span><select id="wi-form"><option value="">Keep the current system</option>${forms.map(f => `<option${f === w.formation ? ' selected' : ''}>${f}</option>`).join('')}</select><span></span></div>
+      <div class="bar"><button class="btn primary" data-act="wi-run"${w.busy ? ' disabled' : ''}>Play it out</button><button class="btn" data-act="wi-reset" title="Every setting back to what the team is doing">Reset all</button></div></div>
     ${res}`;
 }
 // the bench assistant (POST /api/assistant): reads the game, proposes two changes, replays the rest of the match with and without each, picks from the results
@@ -1287,7 +1289,28 @@ function setTabs() { for (const b of $('tabs').children) b.setAttribute('aria-se
 
 // ---------------------------------------------------------------- events
 $('persona').onclick = e => { const b = e.target.closest('button'); if (b) setPersona(b.dataset.p); };
-$('tabs').onclick = e => { const b = e.target.closest('button'); if (b) { S.tab = b.dataset.tab; setTabs(); render(true); } };
+$('tabs').onclick = e => { const b = e.target.closest('button'); if (b) { S.tab = b.dataset.tab; setTabs(); render(true); if (document.body.classList.contains('panel-off')) panelOpen(true); } };
+// the side panel, like an IDE's side bar: drag its edge to resize it, collapse it to give the replay the whole width (remembered on this device)
+const PANEL_KEY = 'mn.panel', layoutEl = document.querySelector('.layout');
+const panelSave = v => { try { localStorage.setItem(PANEL_KEY, JSON.stringify(v)); } catch (_) { /* storage blocked: the panel still works */ } };
+const panelPrefs = (() => { try { return JSON.parse(localStorage.getItem(PANEL_KEY)) || {}; } catch (_) { return {}; } })();
+function panelWidth(w) { w = Math.round(Math.max(300, Math.min(w, innerWidth * .6))); layoutEl.style.setProperty('--panel-w', w + 'px'); return w; }
+function panelOpen(on) {
+  document.body.classList.toggle('panel-off', !on);
+  $('panel-toggle').setAttribute('aria-expanded', String(on)); $('panel-toggle').title = on ? 'Hide the panel' : 'Show the panel';
+  panelSave({ ...panelPrefs, off: !on }); panelPrefs.off = !on;
+}
+if (panelPrefs.w) panelWidth(panelPrefs.w);
+if (panelPrefs.off) panelOpen(false);
+$('panel-toggle').onclick = () => panelOpen(document.body.classList.contains('panel-off'));
+$('sash').onpointerdown = e => {
+  if (document.body.classList.contains('panel-off')) return;
+  e.preventDefault(); $('sash').setPointerCapture(e.pointerId); document.body.classList.add('resizing');
+  const move = ev => { panelPrefs.w = panelWidth(innerWidth - ev.clientX); };
+  const up = () => { $('sash').onpointermove = $('sash').onpointerup = null; document.body.classList.remove('resizing'); panelSave(panelPrefs); };
+  $('sash').onpointermove = move; $('sash').onpointerup = up;
+};
+$('sash').ondblclick = () => { panelPrefs.w = panelWidth(440); panelSave(panelPrefs); };
 $('match').onchange = e => load(e.target.value);
 $('play').onclick = () => setPlaying(!S.playing);
 $('next').onclick = () => { const e = S.D.events.find(e => e.t > S.t + 1 && KEY(e)); if (e) seek(e.t - 6); };
@@ -1350,6 +1373,7 @@ $('panel-body').addEventListener('click', e => {
   else if (d.act === 'wi-run') runWhatIf();
   else if (d.act === 'bench') runBench();
   else if (d.act === 'bench-apply') { const rc = S.bench.r.recommendation; S.wi.change = Object.fromEntries(Object.entries(rc).filter(([k]) => k !== 'formation')); S.wi.formation = rc.formation || ''; render(true); }
+  else if (d.wiundo) { delete S.wi.change[d.wiundo]; render(true); }
   else if (d.act === 'wi-reset') { S.wi = { team: S.wi.team, change: {}, formation: '', busy: false, res: null, err: '' }; render(true); }
   else if (d.act === 'wi-explain') {
     const w = S.wi, r = w.res, parts = Object.entries(w.change).map(([k, v]) => `${k.replace('_', ' ')} ${Math.round(v * 100)}%`).concat(w.formation ? [`formation ${w.formation}`] : []);
@@ -1367,6 +1391,11 @@ $('panel-body').addEventListener('click', e => {
     saveProfile(); render(true);
     toast(on ? `Following ${S.info[d.follow].name}: highlighted on the pitch and at the centre of your answers.` : 'Not following anyone.');
   }
+});
+$('panel-body').addEventListener('input', e => {  // the readout follows the slider while it is dragged; the change is taken on release
+  const k = e.target.dataset.wi; if (!k) return;
+  const v = e.target.closest('.row').querySelector('.wi-val'), was = Math.round(parseFloat(e.target.parentElement.style.getPropertyValue('--set')));
+  v.classList.toggle('chg', Math.round(e.target.value * 100) !== was); v.textContent = Math.round(e.target.value * 100) !== was ? `${was} → ${Math.round(e.target.value * 100)}` : String(was);
 });
 $('panel-body').addEventListener('change', e => {
   if (e.target.dataset.wi) { S.wi.change[e.target.dataset.wi] = +e.target.value; render(true); }
