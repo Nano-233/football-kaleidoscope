@@ -14,6 +14,7 @@ import functools
 import json
 import os
 import pickle
+import zlib
 from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
@@ -31,8 +32,38 @@ def build(recipe):
                  make_team(a["code"], a["formation"], Tactics(**a["tactics"]), rng=rng), seed=recipe["seed"])
 
 
+SNAP_EVERY = 60.  # seconds of match time between stored states
+_stored = {}  # recipe -> {t: compressed engine state}, from load_snapshots
+
+
+def write_snapshots(recipe, path):
+    """The engine state at every minute of match time, to a file. Replaying the recipe is exact only on the platform that made the match:
+    Windows and Linux round some float maths differently, and a match is chaotic, so a server starts its what-ifs from these instead."""
+    m, out, nxt = build(recipe), {}, SNAP_EVERY
+    while not m.done:
+        m._step()
+        if m.t >= nxt:  # the state snapshot(recipe, nxt) returns
+            frames, m.frames = m.frames, []
+            blob = zlib.compress(pickle.dumps(m), 6)
+            m.frames = frames
+            while m.t >= nxt:
+                out[nxt] = blob
+                nxt += SNAP_EVERY
+    path.write_bytes(pickle.dumps(out))
+
+
+def load_snapshots(recipe, path):
+    if path.exists():
+        _stored[json.dumps(recipe, sort_keys=True)] = pickle.loads(path.read_bytes())
+
+
 def snapshot(recipe, t):
-    """The match state at time t (seconds), without the tracking recorded so far (the continuations do not need it)."""
+    """The match state at time t (seconds), without the tracking recorded so far (the continuations do not need it). With stored states
+    (load_snapshots), the last one at or before t: the exact match on any platform, from up to a minute earlier than asked."""
+    st = _stored.get(json.dumps(recipe, sort_keys=True), {})
+    k = max((s for s in st if s <= t), default=None)
+    if k is not None:
+        return pickle.loads(zlib.decompress(st[k]))
     m = build(recipe)
     while not m.done and m.t < t:
         m._step()

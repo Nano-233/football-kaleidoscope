@@ -19,7 +19,7 @@ import typing
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 
-from matchsim.whatif import FORMATIONS, TACTIC_KEYS, cached_what_if, t_at_minute
+from matchsim.whatif import FORMATIONS, TACTIC_KEYS, cached_what_if, load_snapshots, t_at_minute
 from newsroom.clients import ScriptedClient, make_client
 from newsroom.desk import Desk
 
@@ -40,6 +40,8 @@ def load(mid):
             raise ValueError(f"no match {mid!r}; call list_matches")
         with gzip.open(path, "rt", encoding="utf-8") as fh:
             _matches[mid] = json.load(fh)
+        if _matches[mid]["meta"].get("recipe"):
+            load_snapshots(_matches[mid]["meta"]["recipe"], DATA / f"{mid}.snaps")
     return _matches[mid]
 
 

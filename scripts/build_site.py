@@ -21,6 +21,7 @@ from analytics.stats import StatsAccumulator  # noqa: E402
 from newsroom.agents import cover  # noqa: E402
 from newsroom.clients import make_client  # noqa: E402
 from newsroom.desk import Desk  # noqa: E402
+from matchsim.whatif import write_snapshots  # noqa: E402
 from analytics.tools import MatchView  # noqa: E402
 from newsroom.moments import moments  # noqa: E402
 from newsroom.alerts import alerts  # noqa: E402
@@ -219,6 +220,8 @@ def build(src, keep_agents=False):
             "frames": np.round(np.asarray(match["frames"]), 2).tolist()}
     with gzip.open(srv / f"{name}.json.gz", "wt", encoding="utf-8") as fh:
         json.dump(full, fh, separators=(",", ":"))
+    if match["meta"].get("recipe"):
+        write_snapshots(match["meta"]["recipe"], srv / f"{name}.snaps")  # the server's what-ifs start from these (exact on any platform)
     q, hd = pack_frames(match["frames"])
     (dest / "frames.bin").write_bytes(q.tobytes())
     (dest / "heads.bin").write_bytes(hd.tobytes())

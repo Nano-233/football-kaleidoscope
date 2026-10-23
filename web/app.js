@@ -1074,6 +1074,7 @@ async function runWhatIf() {
     const r = await fetch('api/whatif', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ match: S.id, t: S.t, team: w.team, change: ch }) });
     if (!r.ok) throw new Error(r.status === 404 || r.status === 405 ? NO_SERVER : await r.text());
     w.res = await r.json();
+    if (w.res.error) { const e = w.res.error; w.res = null; throw new Error(e); }
   } catch (err) { w.err = err.message.startsWith('The ') ? err.message : 'The simulation did not run: ' + err.message; }
   w.busy = false; render(true);
 }

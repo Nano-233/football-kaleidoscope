@@ -26,7 +26,7 @@ from newsroom.desk import Desk
 from newsroom.localize import translate
 from newsroom.alerts import alerts
 from newsroom.moments import moments, template_line
-from matchsim.whatif import FORMATIONS, TACTIC_KEYS, cached_what_if
+from matchsim.whatif import FORMATIONS, TACTIC_KEYS, cached_what_if, load_snapshots
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DATA, CACHE, WEB = ROOT / "server" / "data", ROOT / "server" / "cache", ROOT / "web"
@@ -58,6 +58,8 @@ def match(mid):
             raise web.HTTPNotFound(text=f"no match {mid}")
         with gzip.open(path, "rt", encoding="utf-8") as fh:
             _matches[mid] = json.load(fh)
+        if _matches[mid]["meta"].get("recipe"):
+            load_snapshots(_matches[mid]["meta"]["recipe"], path.with_name(f"{path.name.split('.')[0]}.snaps"))
     return _matches[mid]
 
 
@@ -227,11 +229,15 @@ async def assistant(request):
             _client = _client or make_client()
             return await Desk(_client, m, {"persona": "analyst", "depth": "standard"}, until=t, on_step=q_.put_nowait).advise(team)
     job = asyncio.create_task(run())
+    quiet = time.time()
     while not job.done() or not q_.empty():
         try:
             await send("step", await asyncio.wait_for(q_.get(), timeout=.5))
+            quiet = time.time()
         except asyncio.TimeoutError:
-            pass
+            if time.time() - quiet > 15:  # a comment line keeps the connection open (Container Apps drops one idle for 240 s)
+                await resp.write(b": keepalive\n\n")
+                quiet = time.time()
     try:
         out = job.result()
     except Exception as ex:
@@ -260,10 +266,27 @@ async def whatif(request):
         change["formation"] = ch["formation"]
     if not change:
         raise web.HTTPBadRequest(text="nothing to change")
+    # the replays take minutes on a small server: a space every 15 s keeps the connection open (Container Apps drops one idle for 240 s);
+    # JSON allows leading whitespace, so the client reads the body as usual
+    resp = web.StreamResponse(headers={"Content-Type": "application/json", "Cache-Control": "no-cache"})
+    await resp.prepare(request)
     async with _sim_gate:
-        out = await asyncio.get_running_loop().run_in_executor(None, cached_what_if, recipe, t, team, change)
-    stored = sum(1 for e in m["events"] if e["t"] < out["at"]["t"])
-    return web.json_response(dict(out, replay_matches=abs(stored - out["at"]["events"]) <= 2, team_name=m["meta"][("home", "away")[team]]["name"]))
+        job = asyncio.get_running_loop().run_in_executor(None, cached_what_if, recipe, t, team, change)
+        while True:
+            try:
+                out = await asyncio.wait_for(asyncio.shield(job), timeout=15)
+                break
+            except asyncio.TimeoutError:
+                await resp.write(b" ")
+            except Exception as ex:
+                out = dict(error=str(ex))
+                break
+    if "error" not in out:
+        stored = sum(1 for e in m["events"] if e["t"] < out["at"]["t"])
+        out = dict(out, replay_matches=abs(stored - out["at"]["events"]) <= 2, team_name=m["meta"][("home", "away")[team]]["name"])
+    await resp.write(json.dumps(out).encode())
+    await resp.write_eof()
+    return resp
 
 
 # spoken commentary: Azure AI Speech on the same Foundry resource, signed in with the same identity (no keys)
