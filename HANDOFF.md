@@ -93,7 +93,6 @@ Prize and one category prize; Claude's recommendation (not yet decided by the us
 
 1. Keep the link up until Nov 10 (user): the subscription is a **Free Trial** (spending limit on, quota FreeTrial), which ends 30 days
    after sign-up (about Nov 10) or when the credit runs out; upgrade to pay-as-you-go. Add a budget alert on the resource group.
-   Delete the unused registry `cabd1785b530acr` (left by the first deploy attempt; about $5 a month) on the user's yes.
 2. Recheck the phone layout and the persona walkthrough after the Oct 20 restyle.
 3. Make the repo public (user's call; it is private now). The history was scanned on 2026-10-21 and no keys were found; the
    subscription id in this file and infra is not a secret.
