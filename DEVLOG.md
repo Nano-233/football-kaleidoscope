@@ -1730,6 +1730,23 @@ is the intended trade (a held answer is not published). Run with `python -u` so 
 - Envoy's "stream timeout" is an idle timeout, not a request cap. The what-if writes a space every 15 s before its JSON (JSON allows
   leading whitespace) and the bench stream writes SSE comments, so neither is dropped. On Azure: what-if 198 s, bench 429 s.
 
+### What-if: fan-out to simulation workers, streamed pairs (2026-10-23)
+User: 3-7 minutes is too long for an app. Profile of one continuation (RED-ASH from 50', 15,080 engine steps): 18.1 s on a desktop core,
+62 % in `movement.team_targets` (per-player Python loops at 5 Hz), then `_steer`, `defend_assign`. A what-if is 24 such runs; an Azure
+core is about twice as slow as the desktop's. Options weighed: always-warm workers (about $9 a day for 6 x 2 vCPU idle), dedicated
+workload profiles (trial quota 0), runs in the browser (slower), fewer pairs (noisier), a lower tick rate (a different football model:
+rejected), vectorising `team_targets` (same results, the real gain; deferred past the deadline as engine risk).
+Built: a second Container App, `matchday-newsroom-sim` (internal ingress, 0-12 replicas of 2 vCPU, HTTP scale rule 2 concurrent); the
+front sends each run as one request (`FANOUT_URL`, `_remote` in whatif.py), and `what_if_steps` yields the result over the finished pairs
+after each pair, streamed to the page as SSE `partial` events ("4 of 12 pairs in").
+Measured: warm, 52 s for all 12 pairs and 27 s to the first (was 198 s). Cold, 267 s, then 171 s to the first pair with one run timed
+out: the runs went to the one replica already up and queued in its process pool, and the HTTP scaler took about 90 s to add 11 more
+(started 17 s later) that the queued runs never reached. Fixed: a worker with every slot busy answers 503 and the front retries every
+2 s for up to 7 minutes, so runs land on new replicas as they come up; and `/api/warm` sends 24 holds (a request that sleeps 90 s) to
+the workers when the What-if tab opens, a what-if starts or the bench starts, so the scale-out begins while the viewer sets the change
+(about $0.06 a time: 12 replicas idle for the 5-minute cooldown). Locally (one worker, 8 slots): 8 runs per round, all 24 in 42 s.
+Not yet measured on Azure with the warm-up.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
