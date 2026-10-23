@@ -1295,7 +1295,10 @@ async function sayLine(text) {
 
 let toastTimer;
 function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 2600); }
-function setTabs() { for (const b of $('tabs').children) b.setAttribute('aria-selected', b.dataset.tab === S.tab); }
+function setTabs() {
+  for (const b of $('tabs').children) b.setAttribute('aria-selected', b.dataset.tab === S.tab);
+  if (S.tab === 'What if') fetch('api/warm', { method: 'POST' }).catch(() => {});  // the simulation workers start scaling out while the viewer sets up the change
+}
 
 // ---------------------------------------------------------------- events
 $('persona').onclick = e => { const b = e.target.closest('button'); if (b) setPersona(b.dataset.p); };

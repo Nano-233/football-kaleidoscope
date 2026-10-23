@@ -13,6 +13,8 @@ import dataclasses
 import json
 import os
 import pickle
+import time
+import urllib.error
 import urllib.request
 import zlib
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
@@ -100,14 +102,20 @@ def _remote(url):
     def run(args):
         snap, k, team, change = args
         body = json.dumps(dict(k=k, team=team, change=change)).encode() + b"\n" + zlib.compress(snap, 6)
-        for attempt in (0, 1):  # one retry: a worker can be replaced while it scales
+        end, failures = time.time() + 420, 0
+        while True:
             try:
                 req = urllib.request.Request(url.rstrip("/") + "/api/run", data=body, headers={"Content-Type": "application/octet-stream"})
                 with urllib.request.urlopen(req, timeout=180) as r:
                     return json.loads(r.read())
-            except Exception:
-                if attempt:
+            except urllib.error.HTTPError as ex:
+                if ex.code not in (502, 503, 504) or time.time() > end:  # every worker busy, or a replica starting: try again shortly
                     raise
+            except Exception:
+                failures += 1  # a worker can be replaced while it scales: one more try
+                if failures > 1:
+                    raise
+            time.sleep(2)
     return run
 
 

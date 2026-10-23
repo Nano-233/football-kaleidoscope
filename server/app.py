@@ -218,6 +218,7 @@ async def assistant(request):
         await resp.write_eof()
         return resp
     spend("ask")
+    await warm()
     if _sim_gate.locked():
         raise web.HTTPConflict(text="the simulator is busy with another what-if; try again in a minute")
     await resp.prepare(request)
@@ -271,6 +272,7 @@ async def whatif(request):
     # (Container Apps drops one idle for 240 s)
     resp = web.StreamResponse(headers={"Content-Type": "text/event-stream", "Cache-Control": "no-cache"})
     await resp.prepare(request)
+    await warm()
     loop, q_ = asyncio.get_running_loop(), asyncio.Queue()
 
     def steps():  # in a thread: the replays run in worker processes or on the simulation workers
@@ -301,20 +303,60 @@ async def whatif(request):
     return resp
 
 
-_pool = None
+_pool, _busy = None, 0
+_SLOTS = int(os.environ.get("SIM_WORKERS", 0)) or os.cpu_count() or 1
 
 
 async def run(request):
     """POST one what-if run (a JSON line {k, team, change}, then the compressed engine state) -> its result. Only on the simulation workers
-    (SIM_WORKER=1), which have internal ingress: the body is unpickled, so it must never be reachable from outside the environment."""
-    global _pool
-    head, blob = (await request.read()).split(b"\n", 1)
-    a = json.loads(head)
-    if _pool is None:
-        from concurrent.futures import ProcessPoolExecutor
-        _pool = ProcessPoolExecutor(max_workers=int(os.environ.get("SIM_WORKERS", 0)) or os.cpu_count() or 1)
-    out = await asyncio.get_running_loop().run_in_executor(_pool, _run, (zlib.decompress(blob), int(a["k"]), int(a["team"]), a["change"]))
+    (SIM_WORKER=1), which have internal ingress: the body is unpickled, so it must never be reachable from outside the environment.
+    A worker with every slot busy answers 503 at once, so the run is retried on another replica instead of queueing behind this one."""
+    global _pool, _busy
+    if _busy >= _SLOTS:
+        raise web.HTTPServiceUnavailable(text="busy")
+    _busy += 1
+    try:
+        head, blob = (await request.read()).split(b"\n", 1)
+        a = json.loads(head)
+        if _pool is None:
+            from concurrent.futures import ProcessPoolExecutor
+            _pool = ProcessPoolExecutor(max_workers=_SLOTS)
+        out = await asyncio.get_running_loop().run_in_executor(_pool, _run, (zlib.decompress(blob), int(a["k"]), int(a["team"]), a["change"]))
+    finally:
+        _busy -= 1
     return web.json_response(out)
+
+
+async def hold(request):
+    """A request that just waits (up to 2 minutes): the front end sends a batch of these so the workers scale out before the runs arrive."""
+    await asyncio.sleep(min(float(request.query.get("s", 90)), 120.))
+    return web.Response(text="ok")
+
+
+_warmed, _tasks = 0., set()
+
+
+async def warm(request=None):
+    """Start the simulation workers scaling out (the HTTP scaler counts requests in flight; from zero it takes a minute or two), at most
+    once a minute: called when the What-if tab opens and when a what-if starts."""
+    global _warmed
+    url = os.environ.get("FANOUT_URL")
+    if url and time.time() - _warmed > 60:
+        _warmed = time.time()
+
+        async def batch():
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=150)) as http:
+                async def one():
+                    try:
+                        async with http.get(url.rstrip("/") + "/api/hold?s=90") as r:
+                            await r.read()
+                    except Exception:
+                        pass
+                await asyncio.gather(*(one() for _ in range(24)))
+        task = asyncio.get_running_loop().create_task(batch())
+        _tasks.add(task)
+        task.add_done_callback(_tasks.discard)
+    return web.json_response(dict(warming=bool(url)))
 
 
 # spoken commentary: Azure AI Speech on the same Foundry resource, signed in with the same identity (no keys)
@@ -373,6 +415,7 @@ def app():
     if os.environ.get("SIM_WORKER") == "1":  # a simulation worker: runs what-if replays for the front end and serves nothing else
         a = web.Application(client_max_size=16 * 1024 * 1024)
         a.router.add_post("/api/run", run)
+        a.router.add_get("/api/hold", hold)
         a.router.add_get("/", lambda request: web.Response(text="simulation worker"))
         return a
     a = web.Application(client_max_size=64 * 1024)
@@ -380,6 +423,7 @@ def app():
     a.router.add_post("/api/ask", ask)
     a.router.add_post("/api/translate", tr)
     a.router.add_post("/api/whatif", whatif)
+    a.router.add_post("/api/warm", warm)
     a.router.add_post("/api/speak", speak)
     a.router.add_get("/api/live", live)
     a.router.add_post("/api/assistant", assistant)
