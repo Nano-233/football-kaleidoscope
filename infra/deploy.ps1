@@ -1,4 +1,5 @@
-# Deploy the match centre and newsroom server to Azure Container Apps (builds the image in Azure; no local Docker needed).
+# Deploy the match centre and newsroom server to Azure Container Apps. The image is built by GitHub Actions (.github/workflows/image.yml)
+# and pulled from GitHub Container Registry (a public package), because free-trial subscriptions block ACR Tasks; no local Docker needed.
 #
 #   ./infra/deploy.ps1            # after infra/setup.ps1; re-run to publish a new version
 #
@@ -9,15 +10,16 @@ param(
     [string]$App = "matchday-newsroom",
     [string]$Account = "matchday-newsroom-$((az account show --query id -o tsv).Substring(0, 6))",
     [string]$Project = "newsroom",
-    [string]$Model = "gpt-4.1-mini"
+    [string]$Model = "gpt-4.1-mini",
+    [string]$Image = "ghcr.io/nano-233/matchday-newsroom:latest"
 )
 function Ok { if ($LASTEXITCODE) { Write-Host "Failed (see the error above); fix it and re-run." -ForegroundColor Red; exit 1 } }
 
-foreach ($ns in "Microsoft.App", "Microsoft.OperationalInsights", "Microsoft.ContainerRegistry") { az provider register --namespace $ns --wait; Ok }
+foreach ($ns in "Microsoft.App", "Microsoft.OperationalInsights") { az provider register --namespace $ns --wait; Ok }
 $endpoint = "https://$Account.services.ai.azure.com/api/projects/$Project"
 $resId = az cognitiveservices account show -n $Account -g $Rg --query id -o tsv; Ok
 $aiConn = az monitor app-insights component show -g $Rg --app "$Account-insights" --query connectionString -o tsv --only-show-errors; Ok  # tracing (setup.ps1 made it)
-az containerapp up -n $App -g $Rg -l $Location --source . --ingress external --target-port 8080 --env-vars "FOUNDRY_PROJECT_ENDPOINT=$endpoint" "FOUNDRY_MODEL=$Model" "ASK_SLOTS=2" "SPEECH_ENDPOINT=https://$Account.cognitiveservices.azure.com" "SPEECH_RESOURCE_ID=$resId" "APPLICATIONINSIGHTS_CONNECTION_STRING=$aiConn"; Ok
+az containerapp up -n $App -g $Rg -l $Location --image $Image --ingress external --target-port 8080 --env-vars "FOUNDRY_PROJECT_ENDPOINT=$endpoint" "FOUNDRY_MODEL=$Model" "ASK_SLOTS=2" "SPEECH_ENDPOINT=https://$Account.cognitiveservices.azure.com" "SPEECH_RESOURCE_ID=$resId" "APPLICATIONINSIGHTS_CONNECTION_STRING=$aiConn"; Ok
 az containerapp update -n $App -g $Rg --min-replicas 0 --max-replicas 1 -o none; Ok  # scales to zero when nobody is watching
 $principal = az containerapp identity assign -n $App -g $Rg --system-assigned --query principalId -o tsv; Ok
 $scope = az cognitiveservices account show -n $Account -g $Rg --query id -o tsv; Ok
