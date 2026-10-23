@@ -1707,6 +1707,12 @@ with a per-slider undo; a tick on the track marks the team's own setting; the sy
 (localStorage, guarded); tabs 42 px high at 13 px. Checked by script: readouts, undo, drag 400 -> 560 px, collapse to 41 px and back,
 no page scroll at 1366x657.
 
+### Newsroom eval on the v5.3 demo data (2026-10-22)
+`eval_newsroom.py` on the five committed matches (inputs checked equal to `server/data`): 60 answers, overall 0.92 (0.87 on the
+v5.1 builds), approved 0.82 (0.87), 26.6 s and 2.9 tool calls an answer. Formation 0.8 (changes found 7/9, 5/9 before), fatigue
+0.7 (0.6); every other kind 1.0. The approved share fell while accuracy rose: the checker held more answers after the rewrites, which
+is the intended trade (a held answer is not published). Run with `python -u` so the log shows progress when redirected.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

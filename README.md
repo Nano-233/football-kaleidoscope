@@ -83,9 +83,11 @@ template built only from the fact pack goes out instead, and the held drafts sta
 that loses or changes a number falls back to the original. Calls retry on 429, 5xx and timeouts. Without Azure
 credentials, a scripted client runs the whole pipeline offline, which is how CI tests it.
 
-**Measured accuracy.** `scripts/eval_newsroom.py` grades the answers against engine truth: 54 answers on the five
-demo matches, 0.87 overall, 87 % approved by the fact-checker. Goals, best player, pressing, duties, milestones,
-passing, control and the bench assistant all scored 1.0; formation changes scored 0.7 and fatigue 0.6. The results
+**Measured accuracy.** `scripts/eval_newsroom.py` grades the answers against engine truth: 60 answers on the five
+demo matches, 0.92 overall, 82 % approved by the fact-checker (the rest were held after
+the rewrites rather than published). Goals, best player, pressing,
+duties, milestones, passing, control and the bench assistant all scored 1.0; formation scored 0.8 (7 of 9
+changes found) and fatigue 0.7. The results
 are in `web/data/eval.json` and shown in the app.
 
 ## Microsoft technology used
