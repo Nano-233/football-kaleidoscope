@@ -1713,6 +1713,23 @@ v5.1 builds), approved 0.82 (0.87), 26.6 s and 2.9 tool calls an answer. Formati
 0.7 (0.6); every other kind 1.0. The approved share fell while accuracy rose: the checker held more answers after the rewrites, which
 is the intended trade (a held answer is not published). Run with `python -u` so the log shows progress when redirected.
 
+### Deploying: the what-if on Linux, and the 240 s idle timeout (2026-10-22)
+- `az containerapp up --source` failed with `TasksOperationsNotAllowed`: Free Trial subscriptions block ACR Tasks. No local Docker,
+  so GitHub Actions (`image.yml`) builds the image and publishes it to GHCR (a public package); Container Apps pulls it.
+- A what-if on the default 0.5 vCPU returned 504 "stream timeout" at 240 s. One what-if is 24 replays, 403 s of CPU on one desktop
+  core. Resized to 4 vCPU / 8 GiB, but the pool used only 2 workers: it reserves 2 cores for a desktop (`cpu_count() - 2`), and the
+  container reports 4. `SIM_WORKERS` sets the pool on a server.
+- The replay did not reproduce the match on Linux. Engine-v5.3 RED-ASH at t = 3000 s: 1853 events and 3-0 on Windows, as stored;
+  1875 events and 2-0 on the server. Hash seed: no effect (checked locally). The Windows numpy 2.4.6 wheel dispatches up to X86_V3
+  (AVX2) while the Azure Xeon 8370C has AVX-512, which the Linux wheel uses (X86_V4). `NPY_DISABLE_CPU_FEATURES=X86_V4` changed the
+  replay (1654 events, 3-0) but did not make it exact: the C library's own maths still rounds differently, and a match is chaotic.
+  Fixed by storing the state instead of replaying it: `write_snapshots` saves the engine state at every minute of match time
+  (zlib pickles, 13.5-15.2 MB a match, written by `build_site.py`), and `snapshot()` starts from the last one at or before t (up to a
+  minute earlier than asked). On Azure: `replay_matches` true. The snapshots must be rewritten whenever the engine code changes
+  (pickles hold the engine's own objects).
+- Envoy's "stream timeout" is an idle timeout, not a request cap. The what-if writes a space every 15 s before its JSON (JSON allows
+  leading whitespace) and the bench stream writes SSE comments, so neither is dropped. On Azure: what-if 198 s, bench 429 s.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

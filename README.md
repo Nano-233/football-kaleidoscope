@@ -9,7 +9,7 @@ Framework**, deployed on **Azure Container Apps**.
 > All data is synthetic. Clubs, players and results are fictional and made by our own match engine. No real
 > footage, data, names or badges are used.
 
-**Live demo:** _URL added after deploy_ · **Video:** _link added after upload_
+**Live demo:** https://matchday-newsroom.ashywave-faaedb6c.eastus2.azurecontainerapps.io · **Video:** _link added after upload_
 
 ## Try it (for judges)
 
@@ -26,8 +26,8 @@ it, so the first load after a quiet spell is slow while the container starts.
 5. **Ask** tab: type a question, for example "Why did the away side lose control after the break?". Each answer
    shows its audit trail: which agents ran, which tools they called and what the fact-checker said.
 6. **What-if** tab: change a team's pressing or tempo from any minute and replay the rest of the match against the
-   original. Or press **Advise the manager**: the bench assistant proposes two changes and tests each with 12 paired
-   simulations (about 2 minutes).
+   original (24 simulations: about 3 minutes on the demo server). Or press **Advise the manager**: the bench assistant
+   proposes two changes and tests each with 12 paired simulations (about 7 minutes on the demo server).
 7. **Live run**: streams the match on the server clock while the newsroom covers each moment as it arrives.
 8. **Scout**: click any player to see every touch, a touch map, how hard they are running and their defensive duties.
 9. **Clips**: suggested key moments, adjustable range, export as JSON or as a broadcast pack (timed overlay cues
@@ -98,9 +98,9 @@ are in `web/data/eval.json` and shown in the app.
 | **Microsoft Agent Framework** | Every agent, agents used as tools by the orchestrator, tool calling, per-moment workflow (`agent-framework-*`) |
 | **Foundry tracing / Application Insights** | OpenTelemetry via `azure-monitor-opentelemetry`; agent runs and tool calls appear on Foundry's Tracing page |
 | **Azure AI Speech** | Spoken commentary (`/api/speak`), on the same Foundry resource |
-| **Azure Container Apps** | `infra/deploy.ps1`: built in Azure, scales to zero, system-assigned managed identity with the Foundry User role, so there are **no keys** anywhere |
+| **Azure Container Apps** | `infra/deploy.ps1`: 4 vCPU / 8 GiB, scales to zero, system-assigned managed identity with the Foundry User role, so there are **no keys** anywhere |
 | **MCP + GitHub Copilot agent mode** | `server/mcp_server.py` exposes 17 tools (analysis, `what_if`, `ask_newsroom`), over stdio or HTTP; `.vscode/mcp.json` connects Copilot so an analyst can query a match from VS Code |
-| **GitHub Actions** | `.github/workflows/tests.yml` runs the engine, stats, analytics and newsroom tests offline |
+| **GitHub Actions** | `tests.yml` runs the engine, stats, analytics and newsroom tests offline; `image.yml` builds the server image on every push to main and publishes it to GitHub Container Registry, which Container Apps runs |
 | **GitHub Copilot / Claude Code** | Development tools only. They are not part of the runtime. |
 
 ## Synthetic data: the engine

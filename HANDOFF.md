@@ -29,8 +29,8 @@ Team of two: the user (technical) and a partner (football knowledge, no coding).
 | 3D view | `web/view3d.js` (three.js 0.160.0 via jsDelivr): "3D" toggle and camera picker under the pitch; players are the CC0 Quaternius mannequin (`web/assets/player.glb`, trimmed by `scripts/trim_glb.py`, licence in `web/assets/LICENSE-player.txt`) blended idle/walk/jog/sprint by speed; needs `ball_z.bin` from the site build. |
 | Match centre UI | Restyled 2026-10-20: VS Code Dark Modern chrome on a FotMob-style match page, one window high, activity bar (personas), centred match picker, settings flyout (club, metric, language, units), resizable / collapsible side panel, `?t=<s>&tab=<panel>` moment links. DEVLOG "Match centre restyled". Phone layout checked once (no sideways overflow) in the first pass, not after the second and third. |
 | README | Rewritten 2026-10-21: judge test steps, brief mapping, architecture diagram, agents and failure recovery, Microsoft tech table, local run. Live URL and video link are placeholders. |
-| Deploy | **Ready, not done.** `infra/deploy.ps1` (Azure Container Apps, managed identity, scale to zero). Image verified locally by a copy of exactly what the Dockerfile ships (server loads, replay matches). Needs the user's explicit go-ahead: it creates paid resources. |
-| Pitch / video | Not started. Last, after deploy. |
+| Deploy | **Live** (2026-10-22): https://matchday-newsroom.ashywave-faaedb6c.eastus2.azurecontainerapps.io . GitHub Actions `image.yml` builds the image to `ghcr.io/nano-233/matchday-newsroom` (public package; tags `latest` and the commit sha) because the Free Trial subscription blocks ACR Tasks; `infra/deploy.ps1` runs it on Container Apps, 4 vCPU / 8 GiB, scale 0-1, managed identity with Foundry User, env `SIM_WORKERS=4`, `NPY_DISABLE_CPU_FEATURES=X86_V4` (set by hand, harmless; left from the replay investigation). To ship a new commit: push, wait for the sha tag, then `az containerapp update -n matchday-newsroom -g rg-matchday-newsroom --image ghcr.io/nano-233/matchday-newsroom:<sha>` (re-using `latest` does not start a new revision). Smoke-tested on Azure: static pages (cold start about 13 s), Ask 32 s, translate, speech, Live run (lines published), what-if 198 s with `replay_matches` true, bench assistant 429 s. What-ifs start from `server/data/<id>.snaps` (engine state each minute, written by `build_site.py`; a replay from kickoff is exact only on the platform that made the match). The what-if and bench responses send a heartbeat so the 240 s idle timeout never fires. DEVLOG "Deploying: ...". |
+| Pitch / video | Not started. |
 
 ## Azure
 
@@ -91,9 +91,9 @@ problem it solves), and a free working test link that stays up until judging end
 technical implementation, agentic design, real-world impact, UX and presentation, and category fit. A project can win one Grand
 Prize and one category prize; Claude's recommendation (not yet decided by the user) is Best Multi-Agent as the main category, with Foundry second.
 
-1. Deploy (on go-ahead): `./infra/deploy.ps1` in PowerShell from the repo root; then open the URL, check Ask, What-if, Recap, Live
-   run, translation and voice; put the URL in the README. Add an Azure budget alert on the resource group (the server's daily
-   allowance resets when the app restarts). It must stay up until Nov 10.
+1. Keep the link up until Nov 10 (user): the subscription is a **Free Trial** (spending limit on, quota FreeTrial), which ends 30 days
+   after sign-up (about Nov 10) or when the credit runs out; upgrade to pay-as-you-go. Add a budget alert on the resource group.
+   Delete the unused registry `cabd1785b530acr` (left by the first deploy attempt; about $5 a month) on the user's yes.
 2. Recheck the phone layout and the persona walkthrough after the Oct 20 restyle.
 3. Make the repo public (user's call; it is private now). The history was scanned on 2026-10-21 and no keys were found; the
    subscription id in this file and infra is not a secret.
