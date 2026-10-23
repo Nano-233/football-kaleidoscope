@@ -10,12 +10,12 @@ change: any of press, line_height, compactness, width, directness, risk, shoot (
 instruction for the score and the clock, as he did around the old one), and/or formation (switched at the next stoppage).
 """
 import dataclasses
-import functools
 import json
 import os
 import pickle
+import urllib.request
 import zlib
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 
 import numpy as np
 
@@ -95,15 +95,34 @@ def _run(args):
     return dict(score=list(m.score), xg_after=xg, shots_after=shots)
 
 
-def what_if(recipe, t, team, change, runs=12, workers=None):
+def _remote(url):
+    """A job runner that sends each run to the simulation workers (FANOUT_URL; Container Apps scales them out per request)."""
+    def run(args):
+        snap, k, team, change = args
+        body = json.dumps(dict(k=k, team=team, change=change)).encode() + b"\n" + zlib.compress(snap, 6)
+        for attempt in (0, 1):  # one retry: a worker can be replaced while it scales
+            try:
+                req = urllib.request.Request(url.rstrip("/") + "/api/run", data=body, headers={"Content-Type": "application/octet-stream"})
+                with urllib.request.urlopen(req, timeout=180) as r:
+                    return json.loads(r.read())
+            except Exception:
+                if attempt:
+                    raise
+    return run
+
+
+def what_if_steps(recipe, t, team, change, runs=12, workers=None):
+    """what_if, yielded as it goes: the result over the pairs finished so far after each pair completes (the last one is the full result)."""
     snap_m = snapshot(recipe, t)
     at = dict(score=list(snap_m.score), clock=snap_m.events[-1]["clock"] if snap_m.events else "1'", events=len(snap_m.events), t=round(snap_m.t, 1))
     snap = pickle.dumps(snap_m)
-    jobs = [(snap, k, team, None) for k in range(runs)] + [(snap, k, team, change) for k in range(runs)]
-    workers = workers or int(os.environ.get("SIM_WORKERS", 0)) or min(len(jobs), max(1, (os.cpu_count() or 4) - 2))  # a server sets SIM_WORKERS to all its cores
-    with ProcessPoolExecutor(max_workers=workers) as ex:
-        res = list(ex.map(_run, jobs))
-    base, alt = res[:runs], res[runs:]
+    jobs = [(snap, k, team, ch) for k in range(runs) for ch in (None, change)]  # pairs in order, so the first pairs finish first
+    url = os.environ.get("FANOUT_URL")
+    if url:
+        ex, fn = ThreadPoolExecutor(max_workers=len(jobs)), _remote(url)
+    else:
+        ex, fn = ProcessPoolExecutor(max_workers=workers or int(os.environ.get("SIM_WORKERS", 0)) or min(len(jobs), max(1, (os.cpu_count() or 4) - 2))), _run
+    base, alt = {}, {}
 
     def summary(rs):
         w = [np.sign(r["score"][team] - r["score"][1 - team]) for r in rs]
@@ -111,18 +130,51 @@ def what_if(recipe, t, team, change, runs=12, workers=None):
                     goals_for=round(float(np.mean([r["score"][team] for r in rs])), 2), goals_against=round(float(np.mean([r["score"][1 - team] for r in rs])), 2),
                     xg_for_after=round(float(np.mean([r["xg_after"][team] for r in rs])), 2), xg_against_after=round(float(np.mean([r["xg_after"][1 - team] for r in rs])), 2),
                     shots_for_after=round(float(np.mean([r["shots_after"][team] for r in rs])), 1), shots_against_after=round(float(np.mean([r["shots_after"][1 - team] for r in rs])), 1))
-    changed_results = sum(1 for b, a in zip(base, alt) if b["score"] != a["score"])
-    return dict(at=at, team=team, change=change, runs=runs, as_it_was=summary(base), with_change=summary(alt), runs_with_a_different_result=changed_results)
+    with ex:
+        futs = {ex.submit(fn, j): (j[1], j[3] is not None) for j in jobs}
+        for f in as_completed(futs):
+            k, with_change = futs[f]
+            (alt if with_change else base)[k] = f.result()
+            if k in base and k in alt:  # a pair is complete
+                ks = sorted(set(base) & set(alt))
+                b, a = [base[i] for i in ks], [alt[i] for i in ks]
+                yield dict(at=at, team=team, change=change, runs=len(ks), of=runs, as_it_was=summary(b), with_change=summary(a),
+                           runs_with_a_different_result=sum(1 for x, y in zip(b, a) if x["score"] != y["score"]))
 
 
-@functools.lru_cache(maxsize=64)
-def _cached(recipe_json, t, team, change_json, runs):
-    return what_if(json.loads(recipe_json), t, team, json.loads(change_json), runs)
+def what_if(recipe, t, team, change, runs=12, workers=None):
+    out = None
+    for out in what_if_steps(recipe, t, team, change, runs, workers):
+        pass
+    return out
+
+
+_results = {}  # finished what-ifs for the life of the process (the server's endpoint and the agents' tool share them)
+
+
+def _key(recipe, t, team, change, runs):
+    return json.dumps(recipe, sort_keys=True), round(float(t), 1), int(team), json.dumps(change, sort_keys=True), runs
+
+
+def cached_what_if_steps(recipe, t, team, change, runs=12):
+    """what_if_steps, or the remembered result at once."""
+    key = _key(recipe, t, team, change, runs)
+    if key in _results:
+        yield _results[key]
+        return
+    out = None
+    for out in what_if_steps(recipe, t, team, change, runs):
+        yield out
+    if len(_results) >= 64:
+        _results.pop(next(iter(_results)))
+    _results[key] = out
 
 
 def cached_what_if(recipe, t, team, change, runs=12):
-    """what_if, remembered for the life of the process (the server's endpoint and the agents' tool share it)."""
-    return _cached(json.dumps(recipe, sort_keys=True), round(float(t), 1), int(team), json.dumps(change, sort_keys=True), runs)
+    out = None
+    for out in cached_what_if_steps(recipe, t, team, change, runs):
+        pass
+    return out
 
 
 def t_at_minute(events, minute, half_time):

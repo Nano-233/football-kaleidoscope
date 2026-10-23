@@ -15,6 +15,7 @@ import json
 import os
 import pathlib
 import time
+import zlib
 
 import aiohttp
 from aiohttp import web
@@ -26,7 +27,7 @@ from newsroom.desk import Desk
 from newsroom.localize import translate
 from newsroom.alerts import alerts
 from newsroom.moments import moments, template_line
-from matchsim.whatif import FORMATIONS, TACTIC_KEYS, cached_what_if, load_snapshots
+from matchsim.whatif import FORMATIONS, TACTIC_KEYS, _run, cached_what_if_steps, load_snapshots
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DATA, CACHE, WEB = ROOT / "server" / "data", ROOT / "server" / "cache", ROOT / "web"
@@ -195,7 +196,7 @@ async def live(request):
         return resp
 
 
-_sim_gate = asyncio.Semaphore(1)  # a what-if uses every core for about a minute
+_sim_gate = asyncio.Semaphore(3 if os.environ.get("FANOUT_URL") else 1)  # local replays use every core; the workers scale out for a few at once
 
 
 async def assistant(request):
@@ -266,27 +267,54 @@ async def whatif(request):
         change["formation"] = ch["formation"]
     if not change:
         raise web.HTTPBadRequest(text="nothing to change")
-    # the replays take minutes on a small server: a space every 15 s keeps the connection open (Container Apps drops one idle for 240 s);
-    # JSON allows leading whitespace, so the client reads the body as usual
-    resp = web.StreamResponse(headers={"Content-Type": "application/json", "Cache-Control": "no-cache"})
+    # server-sent events: "partial" after each finished pair of runs, then "result"; a comment every 15 s keeps the connection open
+    # (Container Apps drops one idle for 240 s)
+    resp = web.StreamResponse(headers={"Content-Type": "text/event-stream", "Cache-Control": "no-cache"})
     await resp.prepare(request)
+    loop, q_ = asyncio.get_running_loop(), asyncio.Queue()
+
+    def steps():  # in a thread: the replays run in worker processes or on the simulation workers
+        try:
+            for out in cached_what_if_steps(recipe, t, team, change):
+                loop.call_soon_threadsafe(q_.put_nowait, ("partial", out))
+            loop.call_soon_threadsafe(q_.put_nowait, ("done", None))
+        except Exception as ex:
+            loop.call_soon_threadsafe(q_.put_nowait, ("error", dict(error=str(ex))))
     async with _sim_gate:
-        job = asyncio.get_running_loop().run_in_executor(None, cached_what_if, recipe, t, team, change)
+        job, last = loop.run_in_executor(None, steps), None
         while True:
             try:
-                out = await asyncio.wait_for(asyncio.shield(job), timeout=15)
-                break
+                kind, out = await asyncio.wait_for(q_.get(), timeout=15)
             except asyncio.TimeoutError:
-                await resp.write(b" ")
-            except Exception as ex:
-                out = dict(error=str(ex))
-                break
-    if "error" not in out:
-        stored = sum(1 for e in m["events"] if e["t"] < out["at"]["t"])
-        out = dict(out, replay_matches=abs(stored - out["at"]["events"]) <= 2, team_name=m["meta"][("home", "away")[team]]["name"])
-    await resp.write(json.dumps(out).encode())
+                await resp.write(b": keepalive\n\n")
+                continue
+            if kind == "partial":
+                stored = sum(1 for e in m["events"] if e["t"] < out["at"]["t"])
+                last = dict(out, replay_matches=abs(stored - out["at"]["events"]) <= 2, team_name=m["meta"][("home", "away")[team]]["name"])
+                if last["runs"] < last["of"]:
+                    await resp.write(f"event: partial\ndata: {json.dumps(last)}\n\n".encode())
+                continue
+            await resp.write(f"event: {'result' if kind == 'done' else 'error'}\ndata: {json.dumps(last if kind == 'done' else out)}\n\n".encode())
+            break
+        await job
     await resp.write_eof()
     return resp
+
+
+_pool = None
+
+
+async def run(request):
+    """POST one what-if run (a JSON line {k, team, change}, then the compressed engine state) -> its result. Only on the simulation workers
+    (SIM_WORKER=1), which have internal ingress: the body is unpickled, so it must never be reachable from outside the environment."""
+    global _pool
+    head, blob = (await request.read()).split(b"\n", 1)
+    a = json.loads(head)
+    if _pool is None:
+        from concurrent.futures import ProcessPoolExecutor
+        _pool = ProcessPoolExecutor(max_workers=int(os.environ.get("SIM_WORKERS", 0)) or os.cpu_count() or 1)
+    out = await asyncio.get_running_loop().run_in_executor(_pool, _run, (zlib.decompress(blob), int(a["k"]), int(a["team"]), a["change"]))
+    return web.json_response(out)
 
 
 # spoken commentary: Azure AI Speech on the same Foundry resource, signed in with the same identity (no keys)
@@ -342,6 +370,11 @@ async def _revalidate(request, response):
 
 
 def app():
+    if os.environ.get("SIM_WORKER") == "1":  # a simulation worker: runs what-if replays for the front end and serves nothing else
+        a = web.Application(client_max_size=16 * 1024 * 1024)
+        a.router.add_post("/api/run", run)
+        a.router.add_get("/", lambda request: web.Response(text="simulation worker"))
+        return a
     a = web.Application(client_max_size=64 * 1024)
     a.on_response_prepare.append(_revalidate)
     a.router.add_post("/api/ask", ask)

@@ -1006,14 +1006,14 @@ function whatIfView() {
       <div class="mono wi-scale"><span>${lo}</span><span>${hi}</span></div>`; }).join('');
   const r = w.res;
   const pct = x => Math.round(x * 100) + '%';
-  const res = w.busy ? `<div class="thinking">Replaying the match to ${now}' and playing the rest 24 times (about a minute)</div>`
+  const res = w.busy && !r ? `<div class="thinking">Playing the rest of the match 24 times from ${now}': the first pairs arrive in about half a minute</div>`
     : w.err ? `<div class="empty">${esc(w.err)}</div>`
     : r ? `<div class="label">${esc(r.team_name)} from ${esc(r.at.clock)} (${r.at.score[0]}–${r.at.score[1]} at the time)</div>
       <table class="stats"><thead><tr><th>Rest of the match</th><th>As it was</th><th>With the change</th></tr></thead><tbody>
       ${[['Win', 'win', pct], ['Draw', 'draw', pct], ['Loss', 'loss', pct], ['Goals for', 'goals_for'], ['Goals against', 'goals_against'], ['xG for, after', 'xg_for_after'], ['xG against, after', 'xg_against_after'], ['Shots for, after', 'shots_for_after'], ['Shots against, after', 'shots_against_after']]
         .map(([n, k, f]) => { const a = r.as_it_was[k], b = r.with_change[k]; return `<tr><td>${n}</td><td>${f ? f(a) : a}</td><td class="${b !== a ? 'lead' : ''}">${f ? f(b) : b}</td></tr>`; }).join('')}</tbody></table>
-      <div class="mono" style="margin-top:6px">${r.runs} simulations each way from the same moment, paired so only the change differs; ${r.runs_with_a_different_result} of ${r.runs} pairs ended with a different score.${r.replay_matches ? '' : ' Note: the replay did not reproduce the match exactly.'}</div>
-      <div class="bar" style="margin-top:10px"><button class="btn" data-act="wi-explain">Ask the newsroom to explain</button></div>` : '';
+      <div class="mono" style="margin-top:6px">${r.runs} simulations each way from the same moment, paired so only the change differs; ${r.runs_with_a_different_result} of ${r.runs} pairs ended with a different score.${r.replay_matches === false ? ' Note: the replay did not reproduce the match exactly.' : ''}</div>
+      ${w.busy ? `<div class="thinking">${r.runs} of ${r.of} pairs in; the numbers settle as the rest finish</div>` : '<div class="bar" style="margin-top:10px"><button class="btn" data-act="wi-explain">Ask the newsroom to explain</button></div>'}` : '';
   return `<div class="chips">${[0, 1].map(t => `<button class="chip" data-witeam="${t}" aria-pressed="${w.team === t}">${esc(M[t ? 'away' : 'home'].name)}</button>`).join('')}</div>
     ${benchView(side)}
     <div class="editor" style="margin-top:10px"><h3>From ${now}', ${esc(M[side].name)} change to</h3>${sl}
@@ -1040,27 +1040,33 @@ function benchView(side) {
     <div class="mono" style="margin-top:6px">${r.tests[0] ? `${r.tests[0].runs} paired replays each (same random numbers with and without). ` : ''}${r.recommendation ? `Recommended: ${esc(chText(r.recommendation))}.` : 'Recommended: keep it as it is.'} Points = 3 × win + draw, expected.</div>
     ${r.recommendation ? '<div class="bar" style="margin-top:8px"><button class="btn" data-act="bench-apply">Load it into the sliders</button></div>' : ''}</div>`;
 }
+// server-sent events from a POST response: on(kind, data) for each event (comment lines, the keepalives, are skipped)
+async function readEvents(res, on) {
+  const reader = res.body.getReader(), dec = new TextDecoder();
+  let buf = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let k;
+    while ((k = buf.indexOf('\n\n')) >= 0) {
+      const block = buf.slice(0, k); buf = buf.slice(k + 2);
+      const kind = (block.match(/^event: (.*)$/m) || [])[1];
+      if (kind) on(kind, JSON.parse((block.match(/^data: (.*)$/m) || [])[1] || 'null'));
+    }
+  }
+}
 async function runBench() {
   const side = S.wi.team ? 'away' : 'home', b = S.bench = { side, busy: true, step: '' };
   render(true);
   try {
     const res = await fetch('api/assistant', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ match: S.id, t: S.t, team: S.wi.team }) });
     if (!res.ok) throw new Error(res.status === 404 || res.status === 405 ? NO_SERVER : await res.text());
-    const reader = res.body.getReader(), dec = new TextDecoder();
-    let buf = '';
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buf += dec.decode(value, { stream: true });
-      let k;
-      while ((k = buf.indexOf('\n\n')) >= 0) {
-        const block = buf.slice(0, k); buf = buf.slice(k + 2);
-        const kind = (block.match(/^event: (.*)$/m) || [])[1], data = JSON.parse((block.match(/^data: (.*)$/m) || [])[1] || 'null');
+    await readEvents(res, (kind, data) => {
         if (kind === 'step') { b.step = data.tool === 'what_if' ? `Replaying the rest of the match with: ${chText(Object.fromEntries(Object.entries(data.args).filter(([k_]) => k_ !== 'team')))}` : `${data.agent.replace('_', ' ')}: ${data.tool.replace(/_/g, ' ')}`; render(true); }
         if (kind === 'advice') b.r = data;
         if (kind === 'error') throw new Error(data.error);
-      }
-    }
+    });
     if (!b.r) throw new Error('The assistant did not answer.');
   } catch (err) { b.err = err.message.startsWith('The ') ? err.message : 'The assistant did not answer: ' + err.message; }
   b.busy = false; render(true);
@@ -1073,8 +1079,11 @@ async function runWhatIf() {
   try {
     const r = await fetch('api/whatif', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ match: S.id, t: S.t, team: w.team, change: ch }) });
     if (!r.ok) throw new Error(r.status === 404 || r.status === 405 ? NO_SERVER : await r.text());
-    w.res = await r.json();
-    if (w.res.error) { const e = w.res.error; w.res = null; throw new Error(e); }
+    await readEvents(r, (kind, data) => {  // partial results after each finished pair, then the full result
+      if (kind === 'partial' || kind === 'result') { w.res = data; render(true); }
+      if (kind === 'error') { w.res = null; throw new Error(data.error); }
+    });
+    if (!w.res || w.res.runs < w.res.of) throw new Error('the simulation stopped early');
   } catch (err) { w.err = err.message.startsWith('The ') ? err.message : 'The simulation did not run: ' + err.message; }
   w.busy = false; render(true);
 }
