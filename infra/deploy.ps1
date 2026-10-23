@@ -19,8 +19,8 @@ foreach ($ns in "Microsoft.App", "Microsoft.OperationalInsights") { az provider 
 $endpoint = "https://$Account.services.ai.azure.com/api/projects/$Project"
 $resId = az cognitiveservices account show -n $Account -g $Rg --query id -o tsv; Ok
 $aiConn = az monitor app-insights component show -g $Rg --app "$Account-insights" --query connectionString -o tsv --only-show-errors; Ok  # tracing (setup.ps1 made it)
-az containerapp up -n $App -g $Rg -l $Location --image $Image --ingress external --target-port 8080 --env-vars "FOUNDRY_PROJECT_ENDPOINT=$endpoint" "FOUNDRY_MODEL=$Model" "ASK_SLOTS=2" "SPEECH_ENDPOINT=https://$Account.cognitiveservices.azure.com" "SPEECH_RESOURCE_ID=$resId" "APPLICATIONINSIGHTS_CONNECTION_STRING=$aiConn"; Ok
-az containerapp update -n $App -g $Rg --min-replicas 0 --max-replicas 1 -o none; Ok  # scales to zero when nobody is watching
+az containerapp up -n $App -g $Rg -l $Location --image $Image --ingress external --target-port 8080 --env-vars "FOUNDRY_PROJECT_ENDPOINT=$endpoint" "FOUNDRY_MODEL=$Model" "ASK_SLOTS=2" "SIM_WORKERS=4""SPEECH_ENDPOINT=https://$Account.cognitiveservices.azure.com" "SPEECH_RESOURCE_ID=$resId" "APPLICATIONINSIGHTS_CONNECTION_STRING=$aiConn"; Ok
+az containerapp update -n $App -g $Rg --min-replicas 0 --max-replicas 1 --cpu 4 --memory 8Gi -o none; Ok  # scales to zero when nobody is watching; 4 vCPU so a what-if (24 replays) fits the 240 s ingress timeout
 $principal = az containerapp identity assign -n $App -g $Rg --system-assigned --query principalId -o tsv; Ok
 $scope = az cognitiveservices account show -n $Account -g $Rg --query id -o tsv; Ok
 az role assignment create --assignee-object-id $principal --assignee-principal-type ServicePrincipal --role "Foundry User" --scope $scope -o none; Ok

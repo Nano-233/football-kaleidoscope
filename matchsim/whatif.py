@@ -69,7 +69,8 @@ def what_if(recipe, t, team, change, runs=12, workers=None):
     at = dict(score=list(snap_m.score), clock=snap_m.events[-1]["clock"] if snap_m.events else "1'", events=len(snap_m.events), t=round(snap_m.t, 1))
     snap = pickle.dumps(snap_m)
     jobs = [(snap, k, team, None) for k in range(runs)] + [(snap, k, team, change) for k in range(runs)]
-    with ProcessPoolExecutor(max_workers=workers or min(len(jobs), max(1, (os.cpu_count() or 4) - 2))) as ex:
+    workers = workers or int(os.environ.get("SIM_WORKERS", 0)) or min(len(jobs), max(1, (os.cpu_count() or 4) - 2))  # a server sets SIM_WORKERS to all its cores
+    with ProcessPoolExecutor(max_workers=workers) as ex:
         res = list(ex.map(_run, jobs))
     base, alt = res[:runs], res[runs:]
 
