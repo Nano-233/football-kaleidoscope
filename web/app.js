@@ -131,12 +131,14 @@ async function boot() {
   if (!seen && !q.get('t') && !q.get('tab')) $('welcome').hidden = false;  // first visit to the plain link: say what this is, offer three ways in
 }
 
-// the welcome card's ways in (shown once per browser)
+// the welcome card's ways in (shown once per browser); using anything else on the page counts as "explore on my own"
+function welcomeDone() { $('welcome').hidden = true; try { localStorage.setItem('mn-welcomed', '1'); } catch { /* storage off */ } }
+document.addEventListener('pointerdown', e => { if (!$('welcome').hidden && !e.target.closest('#welcome')) welcomeDone(); }, true);
+document.addEventListener('keydown', () => { if (!$('welcome').hidden) welcomeDone(); }, true);
 $('welcome').addEventListener('click', e => {
   const b = e.target.closest('[data-welcome]');
   if (!b) return;
-  $('welcome').hidden = true;
-  try { localStorage.setItem('mn-welcomed', '1'); } catch { /* storage off */ }
+  welcomeDone();
   const w = b.dataset.welcome;
   if (w === 'highlights') playHighlights(true);
   if (w === 'analyst') {  // the first shape change, on the feed, where the newsroom explains it from the tracking
