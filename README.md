@@ -32,8 +32,9 @@ it, so the first load after a quiet spell is slow while the container starts.
 5. **Ask** tab: type a question, for example "Why did the away side lose control after the break?". Each answer
    shows its audit trail: which agents ran, which tools they called and what the fact-checker said.
 6. **What-if** tab: change a team's pressing or tempo from any minute and replay the rest of the match against the
-   original (24 simulations: about 3 minutes on the demo server). Or press **Advise the manager**: the bench assistant
-   proposes two changes and tests each with 12 paired simulations (about 7 minutes on the demo server).
+   original: 24 simulations run in parallel on scale-out workers, the first pairs appear in about half a minute and all 12 in
+   about a minute (opening the tab wakes the workers). Or press **Advise the manager**: the bench assistant proposes two changes
+   and tests each with 12 paired simulations (one to two minutes).
 7. **Live run**: streams the match on the server clock while the newsroom covers each moment as it arrives.
 8. **Scout**: click any player to see every touch, a touch map, how hard they are running and their defensive duties.
 9. **Clips**: suggested key moments, adjustable range, export as JSON or as a broadcast pack (timed overlay cues
