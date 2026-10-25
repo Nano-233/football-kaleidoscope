@@ -1,4 +1,4 @@
-# Handoff: Matchday Newsroom (state as of 2026-10-25)
+# Handoff: Matchday Newsroom (state as of 2026-10-25, evening)
 
 Read this first in a new session, then DEVLOG.md (newest entries just above "Is the tuner machine learning?") for detail.
 
@@ -93,22 +93,10 @@ Prize and one category prize; Claude's recommendation (not yet decided by the us
 
 1. Keep the link up until Nov 10 (user): the subscription is a **Free Trial** (spending limit on, quota FreeTrial), which ends 30 days
    after sign-up (about Nov 10) or when the credit runs out; upgrade to pay-as-you-go. Add a budget alert on the resource group.
-2. In progress (2026-10-25, paused; DEVLOG "Explanations that match the match"): grounded commentary. Done and committed, **not yet
-   deployed**: shape changes described from observed tracking (`MatchView.change_observed`, words only), `pressing_harder` in every
-   pack, checker rules against invented movement / intent / causes, own goals flagged in `match_summary`, held recaps shown as held
-   (not "Fact-checked") and left out of the broadcast pack, set-piece-aware breakdowns without formation names, Next moment fix,
-   spoiler-free picker / clips / squad, full-width scrubber, fan wording. Stored feeds re-covered with `scripts/refresh_moments.py`
-   (all non-shape moments in all five matches: about 5 % template fallback; shape changes on the latest rules in match_1 and
-   match_7 only). Next, in order: (a) `refresh_moments.py shape_change RED-ASH HAR-STB WMW-OAK`; (b) `refresh_moments.py recaps`
-   on all five (own-goal fix; HAR-STB's fan recap was held for it); (c) `build_site.py --keep-agents server/data/<m>.json.gz` for all
-   five (new breakdown captions; keeps feeds and recaps); (d) re-run `scripts/eval_newsroom.py` (prompts changed) and update the
-   README and Status numbers; (e) push, wait for the image, `az containerapp update` both apps. Never run (a)-(b)-(d) at the same time.
-   Cold what-if with the warm-up measured on Azure 2026-10-24: first pair 31 s, all 12 in 56 s.
-   Earlier note, measure on Azure: a cold what-if after the workers are at zero, with the warm-up (open the What-if tab, wait about 45 s, run) and without
-   (run at once); the bench assistant warm and cold. Then decide on precomputing the bench advice at fixed minutes (30', 45', 60', 75'
-   per demo match and team, shipped in the image; the user said not yet). After the submission: vectorise `movement.team_targets`
-   (62 % of a run) for a 2-3x faster engine with identical results (rebuild snapshots after).
-3. Recheck the phone layout and the persona walkthrough after the Oct 20 restyle.
+2. Done 2026-10-25 and deployed (both apps on the latest main): grounded commentary and recaps, judge walkthrough polish (DEVLOG
+   "Judge walkthrough polish"), welcome card, README screenshots, PITCH.md (pitch text and a 10-shot video plan). Mode now (user):
+   judge-driven polish only, no metric min-maxing.
+3. Phone layout rechecked 2026-10-24/25 (no sideways scroll; welcome card fits).
 4. Make the repo public (user's call; it is private now). The history was scanned on 2026-10-21 and no keys were found; the
    subscription id in this file and infra is not a secret.
 5. Pitch text and the < 2 min video (last, against the live link); put the video link in the README.

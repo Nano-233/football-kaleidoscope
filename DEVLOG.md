@@ -1774,6 +1774,23 @@ User walkthrough (live site, 1366x768 and phone): Next moment stuck (it sought 6
 again) and paused; the match picker showed the final score; the Clips tab listed later goals; the squad listed substitutes (with their
 full-match rating) before they came on; the scrubber was 160 px wide; file paths in user text; fan view in analyst numbers. All fixed.
 
+### Judge walkthrough polish (2026-10-25)
+User: no more min-maxing; use-case driven, best look for the judges. Walked the live site as a judge would; fixed what looked off:
+- Pressing in every line: the packs for goals, substitutions and shape changes no longer carry PPDA or `pressing_harder` (only spells,
+  half-time, full-time do; `moments.focus`). A prompt asking the writers to hold back had not worked. Pressing lines 62/62 -> 29/62.
+- The LLM checker read PPDA backwards and rejected true lines (54 % template fallback at one point): `pressing_harder` is worked
+  out once in code and the checker takes it as given. Fallback 15 % across the five matches (the template is still true).
+- Desk: numbers in the reader's question count as given (an answer quoting the minute asked about was held 3 times); no hedged guesses;
+  own goals flagged in `match_summary` (a recap credited Harlow's own-goaler with Stonebay's equaliser); a held recap was shown with a
+  "Fact-checked" badge, now "Held by the fact-checker" with the draft behind a click and left out of the broadcast pack.
+- A goal straight from a lofted pass (HAR-STB 70', no shot event) gets its breakdown; set-piece shots get one honest stop; mid-move
+  breakdowns no longer name formations (a 4-second read flickers 3-5-2 / 2-4-4 / 3-3-3).
+- Page: welcome card on a first visit (three ways in; any other click dismisses it); recaps in paragraphs; template lines without a
+  repeated clock; win chances >99% / <1% before full time; Ask suggestions fit the match so far; the favourite club shows (its score
+  and chance to win, its moments marked) and does not carry into a match it is not in; fan labels and tab names translated; fan feed
+  keeps only the big milestones; `?t=` links draw the pitch at that moment.
+- Eval after the prompt changes: 0.83 (formation 0.5 is the reader's limit; the answers report it faithfully). Not chased.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
