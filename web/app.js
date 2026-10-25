@@ -732,11 +732,25 @@ function dutyBlock(pid, tm) {  // his job without the ball, window by window (co
     ${ch.length ? `<div class="mono" style="margin-top:6px">${ch.map(c => `${esc(c.at)}: ${esc(c.change)}`).join('<br>')}</div>` : ''}`;
 }
 
+// a fan watching the replay sees a player's numbers so far, from the events up to now; the full-match numbers (and the rating) wait for
+// the final whistle, or they would give away what is still to come. Scouts judge the whole match.
+function soFar(pid) {
+  const ev = S.D.events.filter(e => e.t <= S.t && e.player === pid), n = ty => ev.filter(e => e.type === ty).length;
+  const on = S.D.events.find(e => e.type === 'substitution' && e.on === pid), off = S.D.events.find(e => e.type === 'substitution' && e.off === pid && e.t <= S.t);
+  const starter = S.D.meta[S.info[pid].team ? 'away' : 'home'].players.some(x => x.id === pid), from = starter ? 0 : on && on.t <= S.t ? on.t : null;
+  const cm = t => clockAt(t).replace("'", '').split('+').reduce((a, b) => a + +b, 0);  // the match clock, as minutes (45+2' is 47)
+  return { minutes: from == null ? 0 : Math.max(0, cm(off ? off.t : S.t) - (from ? cm(from) : 0)), goals: n('goal'), shots: n('shot'), xg: ev.filter(e => e.type === 'shot').reduce((a, e) => a + (e.xg || 0), 0),
+    key: ev.filter(e => (e.type === 'pass' || e.type === 'cross') && e.key_pass).length, takeons: ev.filter(e => e.type === 'take_on' && e.outcome === 'won').length,
+    tackles: ev.filter(e => e.type === 'tackle' && e.outcome === 'won').length };
+}
 function playerView() {
   const p = S.info[S.player], s = S.D.players[S.player] || {}, side = p.team ? 'away' : 'home';
-  const kv = kvFor(p.role).map(([k, l, f]) => `<div><b>${s[k] == null ? '–' : f ? f(s[k]) : s[k]}</b><span>${l}</span></div>`).join('');
+  const live = S.persona === 'fan' && S.t < S.D.meta.duration - 1, sf = live ? soFar(S.player) : null;
+  const kv = live ? [['Goals', sf.goals], ['xG', sf.xg.toFixed(2)], ['Shots', sf.shots], ['Key passes', sf.key], ['Take-ons won', sf.takeons], ['Tackles won', sf.tackles]]
+    .map(([l, v]) => `<div><b>${v}</b><span>${l}</span></div>`).join('')
+    : kvFor(p.role).map(([k, l, f]) => `<div><b>${s[k] == null ? '–' : f ? f(s[k]) : s[k]}</b><span>${l}</span></div>`).join('');
   const types = GROUPS[S.group];
-  const acts = S.D.events.filter(e => e.player === S.player && e.type !== 'goal' && (types ? types.includes(e.type) : e.type !== 'pressure'));
+  const acts = S.D.events.filter(e => e.player === S.player && e.type !== 'goal' && (types ? types.includes(e.type) : e.type !== 'pressure') && (!live || e.t <= S.t));
   const rows = acts.map(e => {
     const v = verdict(e), out = e.outcome ? `<span class="${v > 0 ? 'ok' : v < 0 ? 'no' : ''}">${esc(e.outcome.replace(/_/g, ' '))}</span>` : '<span></span>';
     return `<li class="${e.t > S.t ? 'future' : ''}"><span class="clk">${esc(e.clock)}</span><span>${label(e.type)}${e.xg ? ` · xG ${e.xg.toFixed(2)}` : ''}${quality(e) ? ` · ${quality(e)}` : ''}</span>${out}
@@ -748,15 +762,15 @@ function playerView() {
     <button class="btn${following ? ' primary' : ''}" data-follow="${esc(S.player)}">${following ? 'Following' : 'Follow'}</button></div>
     <div class="player-head"><span class="big-num">${p.number}</span><div><h2>${esc(p.name)}</h2>
       <div class="sub">${esc(S.D.meta[side].name)} · ${esc(p.label || p.role)}${(p.traits || []).length ? ' · ' + esc(p.traits.map(x => x.replace(/_/g, ' ')).join(', ')) : ''}</div>
-      <div class="sub">${s.minutes ?? 0} minutes played${p.foot ? ` · ${p.foot === 'left' ? 'Left' : 'Right'}-footed, weak foot ${Math.round(p.weak_foot)}/20` : ''}</div></div><span class="rating" title="Full-match rating">${s.rating ?? '–'}</span></div>
-    <div class="label">Full match</div><div class="kv">${kv}</div>
-    ${s.passes ? `<div class="label">Pass quality${s.shots ? ' and shooting' : ''}</div><div class="kv"><div><b>${conv('len', s.avg_pass_length_m, 1)}</b><span>Avg pass length</span></div>
+      <div class="sub">${live ? sf.minutes : s.minutes ?? 0} minutes played${live ? ' so far' : ''}${p.foot ? ` · ${p.foot === 'left' ? 'Left' : 'Right'}-footed, weak foot ${Math.round(p.weak_foot)}/20` : ''}</div></div><span class="rating" title="${live ? 'The rating comes at full time' : 'Full-match rating'}">${live ? '–' : s.rating ?? '–'}</span></div>
+    <div class="label">${live ? `So far · ${esc(clockAt(S.t))}` : 'Full match'}</div><div class="kv">${kv}</div>
+    ${s.passes && !live ? `<div class="label">Pass quality${s.shots ? ' and shooting' : ''}</div><div class="kv"><div><b>${conv('len', s.avg_pass_length_m, 1)}</b><span>Avg pass length</span></div>
       <div><b>${s.avg_pass_difficulty?.toFixed(2) ?? '–'}</b><span>Avg difficulty</span></div><div><b>${s.hard_passes_completed}/${s.hard_passes}</b><span>Hard passes completed</span></div>
       ${s.shots ? `<div><b>${conv('spd', s.top_shot_speed_kmh)}</b><span>Fastest shot</span></div>` : ''}</div>` : ''}
     <div class="bar" style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
       ${S.persona === 'scout' ? `<button class="btn primary" data-report="${esc(S.player)}">Scout report</button>` : `<button class="btn primary" data-hismatch="${esc(S.player)}">His match</button>`}
       <button class="btn" data-reel="Highlights">Highlights reel</button></div>
-    ${profileBlocks(S.player, p)}${fatigueBlock(S.player, p.team)}${dutyBlock(S.player, p.team)}
+    ${live ? '<div class="mono" style="margin-top:12px">His full-match numbers, rating and heat map come at the final whistle.</div>' : profileBlocks(S.player, p) + fatigueBlock(S.player, p.team) + dutyBlock(S.player, p.team)}
     <div class="label">Actions (${acts.length})</div><div class="chips">${chips}</div>
     <ul class="actions" style="margin-top:10px">${rows || '<li><span></span><span class="empty">No actions in this group.</span></li>'}</ul>
     ${S.group === 'All' ? '<div class="mono" style="margin-top:8px">Pressures are under Defending.</div>' : ''}`;
