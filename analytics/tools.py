@@ -651,12 +651,15 @@ class MatchView:
             gk = [k for k in theirs if self.role_now[self._occupant(k, e0["t"])] == "GK"]
             block = [k for k in on(xy, theirs) if k not in gk and inside(xy[k])]
             d = float(np.hypot(*(goal - xy[s])))
+            between = f"{len(block) or 'no'} defender{'s' * (len(block) != 1)} between him and the goal"
             stops.append(dict(t=e0["t"], kind="shot",
-                              caption=f"{name(e0['player'])} " + {"free_kick_shot": "takes the free kick", "penalty": "takes the penalty", "header": "heads"}.get(e0.get("kind"), "shoots")
-                                      + f" from {d:.0f} m with {len(block) or 'no'} defender{'s' * (len(block) != 1)} between him and the goal (xG {e0.get('xg', 0):.2f}).",
+                              caption=(f"{name(e0['player'])}'s lofted ball from {d:.0f} m goes straight in, with {between}." if e0["type"] != "shot" else  # a cross that drifts in
+                                       f"{name(e0['player'])} " + {"free_kick_shot": "takes the free kick", "penalty": "takes the penalty", "header": "heads"}.get(e0.get("kind"), "shoots")
+                                       + f" from {d:.0f} m with {between} (xG {e0.get('xg', 0):.2f})."),
                               ring=[s] + block, names=[s] + block, cone=[s, round(float(goal[0]), 1)], keeper=gk[:1]))
-        return dict(id=event_id, t=e0["t"], clock=e0["clock"], team=tm, outcome=e0.get("outcome"),
-                    title=f"{e0['clock']} {'goal' if e0.get('outcome') == 'goal' else 'chance'} · {name(e0['player'])}",
+        scored = e0.get("outcome") == "goal" or any(e["type"] == "goal" and 0 <= e["t"] - e0["t"] <= 3 for e in self.events[idx + 1:idx + 4])
+        return dict(id=event_id, t=e0["t"], clock=e0["clock"], team=tm, outcome="goal" if scored else e0.get("outcome"),
+                    title=f"{e0['clock']} {'goal' if scored else 'chance'} · {name(e0['player'])}",
                     start=round(max(0., stops[0]["t"] - 3), 1), end=round(e0["t"] + 3, 1), stops=stops)
 
     # ---------------------------------------------------------------- player

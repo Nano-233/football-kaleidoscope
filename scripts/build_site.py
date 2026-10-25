@@ -195,7 +195,12 @@ def breakdowns(match):
     mv = MatchView(match)
     shots = [e for e in match["events"] if e["type"] == "shot" and e.get("kind") != "penalty" and (e.get("outcome") == "goal" or e.get("xg", 0) >= .25)]
     shots = [e for e, n in zip(shots, shots[1:] + [None]) if not (n and n["team"] == e["team"] and n["t"] - e["t"] <= 3)]  # a rebound: one breakdown, ending on the last shot
-    return [mv.breakdown(e["id"]) for e in shots]
+    ev = match["events"]
+    for i, g in enumerate(ev):  # a goal with no shot before it (a lofted ball that drifts in): break down the pass that scored
+        prev = next((x for x in reversed(ev[max(0, i - 4):i]) if x["type"] in ("shot", "pass", "cross")), None)
+        if g["type"] == "goal" and prev and prev["type"] != "shot":
+            shots.append(prev)
+    return [mv.breakdown(e["id"]) for e in sorted(shots, key=lambda e: e["t"])]
 
 
 def profiles(match):

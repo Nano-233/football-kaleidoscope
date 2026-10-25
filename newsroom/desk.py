@@ -121,7 +121,9 @@ def _writer_text(profile):
     return (f"You are the newsroom's writer. Turn the FINDINGS into the answer to the QUESTION for {who}. Length and style: "
             f"{DEPTH.get(p.get('depth', 'standard'), DEPTH['standard'])}.{side} Write in {lang}; keep player and team names as they are. "
             "Use only facts and numbers from the FINDINGS; never invent one, nor a cause, a motive or a movement the FINDINGS do not show "
-            "(a formation's name says nothing about how the side played; call a formation by the name the findings use). Mention minutes as they appear (e.g. 63'). "
+            "(a formation's name says nothing about how the side played; call a formation by the name the findings use). No hedged guesses ('may have', "
+            "'such as', 'possibly'): say what the findings show, or leave it out; for a goal, tell the move as the findings give it (who won the ball, the pass, the finish). "
+            "Mention minutes as they appear (e.g. 63'). "
             "Shares and rates between 0 and 1 (closing down, tracking, accuracy, success rates) are written as percentages: 0.031 is 3%; xG stays as it is. "
             f"Units: {', '.join(UNIT_WORDS[u] for u in _units(p))}; the FINDINGS already use them, so never convert a number.")
 
@@ -438,7 +440,7 @@ class Desk:
 
     async def _write_checked(self, question, found):
         """The writer drafts from the findings; the LLM fact-checker and the deterministic checks judge it; up to MAX_REWRITES rewrites."""
-        facts = {"facts": self.facts}
+        facts = {"facts": self.facts, "question": [float(n) for n in re.findall(r"\d+(?:\.\d+)?", question)]}  # the reader's own numbers (a minute they asked about) are given
         brief = f"QUESTION: {question}\nFINDINGS:\n{found}\n"
         attempts, ask = [], brief
         for _ in range(1 + MAX_REWRITES):
