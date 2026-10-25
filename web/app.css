@@ -119,7 +119,7 @@ body.panel-off .panel-head { height: 100%; align-items: flex-start; border-botto
 .lt-kind { font-size: 11px; line-height: 16px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--link); }
 
 /* Transport: a toolbar under the view, controls in groups */
-.transport { display: flex; align-items: center; min-height: 48px; padding: 0 8px; border-top: 1px solid var(--line); background: var(--bg); }
+.transport { display: flex; flex-wrap: wrap; align-items: center; min-height: 48px; padding: 0 8px 8px; border-top: 1px solid var(--line); background: var(--bg); }
 .transport .group { display: flex; align-items: center; gap: 6px; padding: 0 10px; border-right: 1px solid var(--line); height: 28px; }
 .icon-btn { width: 32px; height: 28px; display: grid; place-items: center; background: var(--accent); border: 0; border-radius: var(--r); }
 .icon-btn:hover { background: #026ec1; }
@@ -132,7 +132,7 @@ body.panel-off .panel-head { height: 100%; align-items: flex-start; border-botto
 .btn.primary:hover { background: #026ec1; }
 .speed { display: flex; align-items: center; gap: 6px; color: var(--text-2); font-size: 13px; }
 .speed select { height: 28px; }
-.timeline { position: relative; flex: 1; height: 28px; margin: 0 6px 0 14px; }
+.timeline { position: relative; flex: 1 1 100%; order: -1; height: 28px; margin: 4px 6px 2px; }  /* the scrubber on its own row, full width, as in a video player */
 .timeline input { position: absolute; inset: 0; width: 100%; margin: 0; background: none; -webkit-appearance: none; appearance: none; }
 .timeline input::-webkit-slider-runnable-track { height: 3px; background: var(--line-strong); }
 .timeline input::-moz-range-track { height: 3px; background: var(--line-strong); }
@@ -287,7 +287,6 @@ table.stats tr:hover td { background: #2a2d2e; }
   .lower-third { position: static; transform: none; width: 100%; }
   .lower-third p { font-size: 13px; line-height: 20px; }
   .transport { flex-wrap: wrap; gap: 6px; padding: 8px; }
-  .timeline { flex-basis: 100%; order: 5; margin-left: 0; }
   .panel { border-left: 0; border-top: 1px solid var(--line); }
   .panel-body { overflow: visible; }
   .statusbar .opt { display: none; }

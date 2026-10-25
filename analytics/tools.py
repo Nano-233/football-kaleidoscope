@@ -141,13 +141,16 @@ class MatchView:
         return self._team_xy(e["team"], [e["x"], e["y"]]) if "x" in e and e.get("team") in (0, 1) else None
 
     # ---------------------------------------------------------------- shape
-    def shape(self, team, t0=0., t1=None, phase="out"):
+    def shape(self, team, t0=0., t1=None, phase="out", attacking=False):
         """Average positions of the team's outfield players between t0 and t1 (seconds), in or out of possession (phase: in/out/all),
-        and the formation the shape reads as: the template whose normalised layout fits best (Hungarian assignment), with the runner-up."""
+        and the formation the shape reads as: the template whose normalised layout fits best (Hungarian assignment), with the runner-up.
+        attacking: with the ball, only frames with the ball in the opposition half (the formation reader's attacking shape)."""
         t1 = self.meta["duration"] if t1 is None else t1
         fr = self._frame_range(t0, t1)
         poss = fr[:, 4]
         sel = {"in": poss == team, "out": poss == 1 - team, "all": np.ones(len(fr), bool)}[phase]
+        if attacking and phase == "in":
+            sel &= (fr[:, 1] if team == 0 else L - fr[:, 1]) > L / 2
         if sel.sum() < 25:
             return dict(team=self.team_names[team], error="not enough frames in that phase and window")
         fr = fr[sel]
@@ -173,12 +176,65 @@ class MatchView:
             positions=[dict(player=self.names[pid], id=pid, x=round(float(xy[0]), 1), y=round(float(xy[1]), 1)) for pid, xy in rows],
         )
 
+    def shape_profile(self, team, t0, t1, phase, back="4"):
+        """What the shape looked like on the pitch between t0 and t1 in one phase (in/out), in numbers a viewer could check: the
+        height of the back line, the block's length and width, and, for a back line of `back` (four or more), how far the two widest men in
+        it stood above the others (wing-backs or full-backs pushed up, or not); `back` is a formation name whose first number is the back
+        line. Frames as the formation reader uses them, so the numbers
+        describe the shape it named. None if the phase has too few frames."""
+        s = self.shape(team, t0, t1, phase, attacking=self.read_attack)
+        if "error" in s:
+            return None
+        P = sorted(([p["x"], p["y"]] for p in s["positions"] if self.role_now.get(p["id"]) != "GK"), key=lambda q: q[0])
+        k = int(back.split("-")[0])
+        back = sorted(P[:k], key=lambda q: q[1])
+        out = dict(back_line_m=s["defensive_line_m"], block_length_m=s["block_length_m"], block_width_m=s["block_width_m"])
+        if k >= 4:
+            out["wide_backs_above_others_m"] = round(float(np.mean([back[0][0], back[-1][0]]) - np.mean([q[0] for q in back[1:-1]])), 1)
+        return out
+
+    def change_observed(self, team, c):
+        """What the players did around a change from formation_timeline: shape_profile over the five minutes before it against the time
+        since (to when it was confirmed), in its phase. Behind a back three the widest two of the five deepest are the wing-backs."""
+        ph, k = ("in" if c["phase"] == "in_possession" else "out"), max(int(c["previous"][0]), int(c["formation"][0]))
+        k = 5 if k == 3 else k
+        before, since = self.shape_profile(team, c["t"] - 300, c["t"], ph, str(k)), self.shape_profile(team, c["t"], c["confirmed_t"], ph, str(k))
+        if not (before and since):
+            return None
+        d = lambda key: round(since[key] - before[key], 1)
+        # in plain words only, every number already worked out, so no writer has to subtract or guess which way a number runs
+        words = []
+        b = since["back_line_m"]
+        words.append(f"back line about the same height, {b} m from their own goal" if abs(d("back_line_m")) < 2 else
+                     f"back line {abs(d('back_line_m'))} m {'higher up the pitch' if d('back_line_m') > 0 else 'deeper'}, now {b} m from their own goal")
+        for key, up, down, what in (("block_length_m", "longer", "shorter", "length"), ("block_width_m", "wider", "narrower", "width")):
+            words.append(f"block about the same {what} ({since[key]} m)" if abs(d(key)) < 2 else f"block {abs(d(key))} m {up if d(key) > 0 else down}, now {since[key]} m")
+        if "wide_backs_above_others_m" in since:
+            v, was = since["wide_backs_above_others_m"], before.get("wide_backs_above_others_m")
+            now_ = f"{v} m above the rest of the back line" if v >= 2 else f"{-v} m behind the rest of the back line" if v <= -2 else "level with the rest of the back line"
+            moved = round(v - was, 1) if was is not None else 0
+            words.append(f"the two widest of the back {k} now {now_}" + (f", {abs(moved)} m {'further forward' if moved > 0 else 'further back'} than before" if abs(moved) >= 2 else ""))
+        return dict(phase=c["phase"].replace("_", " "), in_words=words, compared="the five minutes before the change against the time since")
+
     @staticmethod
     def _norm(P):
         lo, span = P.min(0), np.maximum(np.ptp(P, 0), 1.)
         return (P - lo) / span
 
     def _read_formation(self, P):
+        """Template fits for the average positions P (outfield), best first. 3-5-2 and 5-3-2 are one layout to the fit (0.003 apart), so
+        which name it is comes from the players: the two widest of the five deepest 4 m or more above the other three are wing-backs
+        (3-5-2), level with them a back five (5-3-2)."""
+        cand = self._fits(P)
+        names = [c[0] for c in cand[:2]]
+        if sorted(names) == ["3-5-2", "5-3-2"] and len(P) == 10:
+            back = sorted(sorted(P.tolist(), key=lambda q: q[0])[:5], key=lambda q: q[1])
+            want = "3-5-2" if np.mean([back[0][0], back[-1][0]]) - np.mean([q[0] for q in back[1:-1]]) >= 4 else "5-3-2"
+            if cand[0][0] != want:
+                cand[0], cand[1] = (cand[1][0], cand[0][1]), (cand[0][0], cand[1][1])  # swap the names, keep the costs in order
+        return cand
+
+    def _fits(self, P):
         n = len(P)
         cand = []
         for name, slots in FORMATIONS.items():
@@ -302,7 +358,7 @@ class MatchView:
         if a not in FORMATIONS or b not in FORMATIONS:
             return False
         A = np.array([[sl[2] * L, sl[3] * W] for sl in FORMATIONS[a] if sl[1] != "GK"])
-        return dict(self._read_formation(A)).get(b, 9.) < .01
+        return dict(self._fits(A)).get(b, 9.) < .01
 
     def score_reading(self, team, read_changes, tolerance=600.):
         """How a reading of the formation changes compares with what the engine did: a true change is found when the reading reports

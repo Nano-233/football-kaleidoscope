@@ -63,8 +63,22 @@ def _observed(match, names, team):
     from analytics.tools import MatchView
     mv, out = MatchView(match), []
     for tm in (0, 1):
-        for c in mv.formation_timeline(tm)["changes"]:
-            out.append((c["confirmed_t"], "shape_change", dict(team=team[tm], shift=dict(phase=c["phase"].replace("_", " "), previous=c["previous"], now=c["formation"], since=c["at"]))))
+        tl = mv.formation_timeline(tm)
+        now = dict(tl["starting"])  # the shape in each phase as the reader has it, updated change by change
+        changes = tl["changes"]
+        for i, c in enumerate(changes):
+            now[c["phase"]] = c["formation"]
+            twin = next((d for d in changes[i + 1:] if d["t"] == c["t"] and d["phase"] != c["phase"]), None)
+            if any(d["t"] == c["t"] and d["phase"] != c["phase"] for d in changes[:i]):
+                continue  # announced with its twin
+            if twin:
+                now[twin["phase"]] = twin["formation"]
+            phase = "with and without the ball" if twin and twin["formation"] == c["formation"] and twin["previous"] == c["previous"] else c["phase"].replace("_", " ")
+            shift = dict(phase=phase, previous=c["previous"], now=c["formation"], since=c["at"],
+                         shape_with_ball=now["in_possession"], shape_without_ball=now["out_of_possession"])
+            if obs := mv.change_observed(tm, c):  # what the players did, so the line describes that and not the formation's name
+                shift["observed"] = obs
+            out.append((c["confirmed_t"], "shape_change", dict(team=team[tm], shift=shift)))
     for sp in mv.momentum()["dominant_spells"]:
         out.append((sp["end_t"], "spell", dict(team=sp["team"], spell=dict(start=sp["start"], end=sp["end"], xg=sp["xg"], opponent_xg=sp["opponent_xg"]))))
     seen = set()

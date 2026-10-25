@@ -118,7 +118,7 @@ async function boot() {
   S.persona = TABS[q.get('p')] ? q.get('p') : 'fan';
   S.tab = TABS[S.persona][0];
   const index = await fetch('data/index.json').then(r => r.json());
-  $('match').innerHTML = index.map(m => `<option value="${esc(m.id)}">${esc(m.home)} ${m.score[0]}–${m.score[1]} ${esc(m.away)}</option>`).join('');
+  $('match').innerHTML = index.map(m => `<option value="${esc(m.id)}">${esc(m.home)} v ${esc(m.away)}</option>`).join('');  // no final score: it would spoil the replay
   const want = index.some(m => m.id === q.get('m')) ? q.get('m') : index[0].id;
   $('match').value = want;
   setPersona(S.persona);
@@ -409,7 +409,7 @@ function setPersona(p) {
 function render(force) {
   if (!S.D) return;
   const minute = Math.floor(S.t / 60), shown = feed().filter(it => it.moment.t <= S.t).length + (S.profile.playerId ? playerNotes().length : 0);
-  const key = [S.persona, S.tab, S.tab === 'Clips' || S.tab === 'Ask' ? '' : minute, (S.D.recaps || []).filter(r => r.t <= S.t + .5).length, shown, S.player, S.group, S.clip && S.clip.id, S.custom.length, S.askVer, S.liveVer, S.profile.playerId, S.profile.metric, JSON.stringify(S.board), JSON.stringify(S.wi), S.bench && (S.bench.step + S.bench.busy + !!S.bench.r + S.bench.err), S.trVer, S.profile.language].join('|');
+  const key = [S.persona, S.tab, S.tab === 'Clips' || S.tab === 'Ask' ? '' : minute, S.tab === 'Clips' ? S.D.clips.filter(x => x.t <= S.t + .5).length : '', (S.D.recaps || []).filter(r => r.t <= S.t + .5).length, shown, S.player, S.group, S.clip && S.clip.id, S.custom.length, S.askVer, S.liveVer, S.profile.playerId, S.profile.metric, JSON.stringify(S.board), JSON.stringify(S.wi), S.bench && (S.bench.step + S.bench.busy + !!S.bench.r + S.bench.err), S.trVer, S.profile.language].join('|');
   if (!force && key === S.panelKey) return;
   S.panelKey = key;
   const body = $('panel-body'), keep = body.scrollTop, same = body.dataset.view === S.persona + S.tab + S.player;
@@ -518,7 +518,7 @@ function tableView() {
   }).join('');
   return `<div class="label">Team statistics · after ${esc(clockAt(S.t))}</div>
     <table class="stats"><thead><tr><th>Metric</th><th>${esc(M.home.code)}</th><th>${esc(M.away.code)}</th></tr></thead><tbody>${rows}</tbody></table>
-    <div class="label">Source</div><div class="mono">Computed from the event stream by analytics/stats.py; the newsroom may only quote these numbers.</div>${truthPanel()}`;
+    <div class="label">Source</div><div class="mono">Computed from the event stream by the analytics layer; the newsroom may only quote these numbers.</div>${truthPanel()}`;
 }
 
 // what the reader saw against what the engine actually did: the data is synthetic, so the truth is known
@@ -526,7 +526,9 @@ let EVAL = null;
 fetch('data/eval.json').then(r => (r.ok ? r.json() : null)).then(j => { EVAL = j; }).catch(() => {});
 function evalBlock() {
   if (!EVAL) return '';
-  const e = EVAL.summary, name = { formation: 'Formations and changes', goals: 'Scorers and minutes', best: 'Best player by rating', pressing: 'Which side pressed harder' };
+  const e = EVAL.summary, name = { formation: 'Formations and changes', goals: 'Scorers and minutes', best: 'Best player by rating', pressing: 'Which side pressed harder',
+    bench: 'Bench assistant names the tested pick', control: 'Which side controlled the game', duties: 'Who did which defensive job', fatigue: 'Who is tiring',
+    milestones: 'Milestones (braces, hat-tricks)', passing: 'Most hard passes completed' };
   return `<div class="label">Newsroom answers scored against the truth</div>
     <table class="stats"><tbody>${Object.entries(e.accuracy).map(([k, v]) => `<tr><td>${name[k] || k}</td><td>${Math.round(v * 100)}%</td></tr>`).join('')}
       <tr><td><b>All ${e.answers} answers, ${e.matches} matches</b></td><td class="lead">${Math.round(e.overall * 100)}%</td></tr>
@@ -535,7 +537,7 @@ function evalBlock() {
       <tr><td>…minute off by, on average</td><td>${e.changes.mean_minute_error}</td></tr>` : ''}
       <tr><td>Approved by the fact-checker</td><td>${Math.round(e.approved * 100)}%</td></tr>
       <tr><td>Tool calls · seconds per answer</td><td>${e.avg_tool_calls} · ${e.avg_seconds}</td></tr></tbody></table>
-    <div class="mono" style="margin-top:6px">The engine records what really happened, so every answer can be marked (scripts/eval_newsroom.py).</div>`;
+    <div class="mono" style="margin-top:6px">The engine records what really happened, so every answer can be marked against it.</div>`;
 }
 function truthPanel() {
   return truthMatch() + evalBlock();
@@ -561,7 +563,8 @@ function truthMatch() {
 function squadView() {
   const P = S.D.players, M = S.D.meta;
   const list = side => {
-    const team = side === 'home' ? 0 : 1, starters = M[side].players.map(p => p.id), used = M[side].bench.filter(p => (P[p.id] || {}).minutes > 0).map(p => p.id);
+    const starters = M[side].players.map(p => p.id), onAt = Object.fromEntries(S.D.events.filter(e => e.type === 'substitution').map(e => [e.on, e.t]));
+    const used = M[side].bench.filter(p => onAt[p.id] !== undefined && onAt[p.id] <= S.t).map(p => p.id);  // a substitute appears once he is on
     return [...starters, ...used].map(id => {
       const p = S.info[id], s = P[id] || {};
       return `<li><button data-player="${esc(id)}"><span class="num">${p.number}</span><span>${esc(p.name)}${p.star ? ' <span class="badge">Star</span>' : ''}${starters.includes(id) ? '' : ' <span class="sub">(sub)</span>'}</span>
@@ -570,7 +573,7 @@ function squadView() {
   };
   return `<div class="label">${esc(M.home.name)} · ${esc(M.home.formation)}</div><ul class="squad">${list('home')}</ul>
     <div class="label">${esc(M.away.name)} · ${esc(M.away.formation)}</div><ul class="squad">${list('away')}</ul>
-    <div class="mono">Ratings are for the full match (analytics/stats.py rating, 1–10). Select a player for every action.</div>`;
+    <div class="mono">Ratings (1–10) are for each player's whole match. Select a player for every action.</div>`;
 }
 
 const ROLE_KV = {
@@ -917,7 +920,7 @@ function momentumSvg(h = 150) {
 
 function liveStrip() {  // the fan's glance at the game: who is on top, five minutes at a time, and the chances now
   if (!S.D.board || S.t < 300) return '';
-  return `${winBar()}${rhythmStrip()}<div class="label" style="margin-top:10px">Momentum · xG by five minutes</div>${momentumSvg(90)}`;
+  return `${winBar()}${rhythmStrip()}<div class="label" style="margin-top:10px">Who is making the chances · five minutes at a time</div>${momentumSvg(90)}`;
 }
 // control vs chaos by five minutes (analytics/tools.py rhythm): a chip per finished window, the side in control in its colour
 const RH_COL = st => (st.startsWith('control') ? (st.endsWith(S.D.meta.home.name) ? 'var(--home)' : 'var(--away)') : st === 'chaos' ? 'var(--bad)' : st === 'stop-start' ? 'var(--text-3)' : 'var(--surface-3)');
@@ -927,12 +930,14 @@ function rhythmStrip(full) {
   const done = R.by_window.filter(r => r.t1 <= S.t), last = done[done.length - 1];
   if (!last) return '';
   const word = st => (st.startsWith('control') ? `${st.slice(9)} in control` : st === 'chaos' ? 'Chaos' : st === 'stop-start' ? 'Stop-start' : 'Even');
+  const plain = st => (st.startsWith('control') ? `${st.slice(9)} keeping the ball and building their moves` : st === 'chaos' ? 'End to end: the ball keeps changing hands'
+    : st === 'stop-start' ? 'Lots of stoppages, little flowing play' : 'Neither side on top');  // the fan's version of the same reading
   const tip = r => `${r.window}: ${word(r.state)} · settled ${r.settled_pct}% · broken ${r.broken_pct}% · ${r.turnovers_per_min} turnovers a minute · ${r.passes_per_min} passes a minute · ball in play ${r.ball_in_play_pct}%`;
   const chips = R.by_window.map(r => `<i title="${esc(r.t1 <= S.t ? tip(r) : '')}" style="flex:1;height:10px;border-radius:2px;background:${r.t1 <= S.t ? RH_COL(r.state) : 'transparent'};border:1px solid var(--line)"></i>`).join('');
   const spells = full ? R.spells.filter(x => x.end_t <= S.t) : [];
   return `<div class="label" style="margin-top:10px">Control vs chaos · ${esc(word(last.state))} (${esc(last.window)})</div>
     <div style="display:flex;gap:2px">${chips}</div>
-    <div class="mono" style="margin-top:4px">Settled ${last.settled_pct}% · broken ${last.broken_pct}% · ${last.turnovers_per_min} turnovers and ${last.passes_per_min} passes a minute of play</div>
+    <div class="mono" style="margin-top:4px">${S.persona === 'fan' ? esc(plain(last.state)) : `Settled ${last.settled_pct}% · broken ${last.broken_pct}% · ${last.turnovers_per_min} turnovers and ${last.passes_per_min} passes a minute of play`}</div>
     ${full ? `<div class="mono" style="margin-top:4px">Settled: a move of four passes or fifteen seconds. Broken: lost inside eight seconds with at most one pass.</div>
       ${spells.length ? `<table class="stats" style="margin-top:6px"><tbody>${spells.map(x => `<tr><td>${esc(word(x.state))}</td><td>${esc(x.start)}–${esc(x.to)}</td></tr>`).join('')}</tbody></table>` : ''}` : ''}`;
 }
@@ -1178,9 +1183,10 @@ function clipsView() {
       <div class="bar"><button class="btn" data-act="preview">Preview</button><button class="btn primary" data-act="export">Export JSON</button>
         ${c.custom ? '<button class="btn" data-act="delete">Delete</button>' : ''}<button class="btn" data-act="close">Close</button></div></div>` : '';
   const li = x => `<li><button data-clip="${esc(x.id)}" aria-current="${!!c && c.id === x.id}"><span>${esc(x.title)}</span><span class="dur">${(x.end - x.start).toFixed(0)} s</span></button></li>`;
-  const bds = (S.D.breakdowns || []).map((b, i) => `<li><button data-bd="${i}"><span>${esc(b.title)}</span><span class="dur">${b.stops.length} stops</span></button></li>`).join('');
+  const seen = x => x.t <= S.t + .5;  // only what has happened by now: a later goal in the list would spoil the replay
+  const bds = (S.D.breakdowns || []).map((b, i) => !seen(b) ? '' : `<li><button data-bd="${i}"><span>${esc(b.title)}</span><span class="dur">${b.stops.length} stops</span></button></li>`).join('');
   return editor + (bds ? `<div class="label">Breakdowns: the move paused and drawn on the pitch</div><ul class="clips">${bds}</ul>` : '') + (S.custom.length ? `<div class="label">Your clips</div><ul class="clips">${S.custom.map(li).join('')}</ul>` : '')
-    + `<div class="label">Suggested by the newsroom (${S.D.clips.length})</div><ul class="clips">${S.D.clips.map(li).join('')}</ul>
+    + `<div class="label">Suggested by the newsroom (${S.D.clips.filter(seen).length})</div><ul class="clips">${S.D.clips.filter(seen).map(li).join('') || '<li class="empty">The first suggestions arrive with the first chances.</li>'}</ul>
     <div class="mono" style="margin-top:10px">Clips export as JSON: the events and tracking frames inside the range, ready for an overlay or edit tool.</div>
     <div class="label">Broadcast pack</div>
     <div class="mono" style="margin-bottom:8px">Timed overlay cues (lower thirds) in ${esc(S.profile.language)}, the half-time and full-time reports as studio talking points, and the clip list, as one JSON file.</div>
@@ -1326,7 +1332,8 @@ $('sash').onpointerdown = e => {
 $('sash').ondblclick = () => { panelPrefs.w = panelWidth(440); panelSave(panelPrefs); };
 $('match').onchange = e => load(e.target.value);
 $('play').onclick = () => setPlaying(!S.playing);
-$('next').onclick = () => { const e = S.D.events.find(e => e.t > S.t + 1 && KEY(e)); if (e) seek(e.t - 6); };
+// the next key moment, from its build-up (6 s before), playing: a moment whose build-up has already started counts as passed, so repeated presses move on
+$('next').onclick = () => { const e = S.D.events.find(e => e.t - 6 > S.t + 1 && KEY(e)); if (e) { seek(e.t - 6); setPlaying(true); } };
 $('seek').oninput = e => { S.reel = null; S.bd = null; seek(+e.target.value); };
 $('bd-next').onclick = bdNext;
 $('bd-exit').onclick = () => { S.bd = null; setPlaying(false); };

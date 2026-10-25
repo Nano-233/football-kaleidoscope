@@ -33,15 +33,22 @@ RULES = ("Use only facts and numbers from FACTS. Never invent a player, minute, 
 def build(client, persona="veteran"):
     mk = lambda role, text: Agent(client, f"[[ROLE:{role}]] {text} {RULES}", name=role)
     stats = mk("stats", "You are the stats analyst. From FACTS pick the two or three numbers that best explain this moment. Reply as a JSON list of {metric, value, meaning}.")
-    tactics = mk("tactics", "You are the tactics analyst. Explain in one sentence, from FACTS.why, how the moment came about.")
+    tactics = mk("tactics", "You are the tactics analyst. Explain in one sentence, from FACTS.why (for a shape change, FACTS.shift.observed: what moved, by how many metres), "
+                            "how the moment came about. A formation's name is not evidence of intent.")
     commentator = mk("commentator", f"You are the commentator, {PERSONAS[persona]}. Write one or two sentences of live commentary using the analysts' points. "
-                                    "First say what this moment is (FACTS.moment.type, in plain words: a red card, not red_card): for a shape_change the shape before and after from FACTS.shift and which phase; "
+                                    "First say what this moment is (FACTS.moment.type, in plain words: a red card, not red_card): for a shape_change the shape before and after from FACTS.shift and which phase, "
+                                    "then the one or two biggest things the players actually did, from FACTS.shift.observed.in_words (use those words and numbers as they are; do not work out your own differences), and if FACTS.shift.shape_with_ball and shape_without_ball differ, that the side changes shape between "
+                                    "the phases; never read a meaning into the formation's name (a 5-4-1 is not 'defensive' unless the observed line went deeper), and say nothing "
+                                    "about what the players did that FACTS.shift.observed does not show; "
                                     "for a spell who dominated and when from FACTS.spell; for a substitution who came on and off; for an alert (a shift the newsroom spotted, "
                                     "nobody asked) what FACTS.alert shows, then why it matters now given the score and the minute. Use FACTS.scoreline for the score; "
                                     "FACTS.leader is ahead.")
     checker = mk("fact_checker", "You are the fact-checker. Compare the commentary with FACTS line by line. Reject it if any number is attached to the wrong "
-                                 "metric or team, the wrong team is said to lead (FACTS.leader is ahead), a metric is described against its FACTS.glossary meaning, the minute differs from FACTS.moment.clock, or a claim "
-                                 "is not supported by FACTS. Wording, style and emphasis are not errors; set approved to true whenever you find no real error. Reply only as JSON {\"approved\": bool, \"issues\": [str]}, "
+                                 "metric or team, the wrong team is said to lead (FACTS.leader is ahead), a metric is described against its FACTS.glossary meaning, the minute differs from FACTS.moment.clock, a claim "
+                                 "is not supported by FACTS, or the line says how players moved or what a team was trying to do (pushed up, sat deeper, pressed harder, "
+                                 "went for a winner, shut up shop) when FACTS does not show it: for a shape change only FACTS.shift.observed.in_words says how the players moved (take its words and directions as true), and a formation's name says nothing about intent; "
+                                 "or the line says one thing caused another (their pressing is forcing mistakes, the flank focus is helping them hold the lead) when FACTS does not "
+                                 "link the two: two true numbers side by side are fine, an invented cause between them is not. Wording, style and emphasis are not errors, and neither is how the minute is written (67' and 67 minutes are the same; minutes are checked separately); set approved to true whenever you find no real error. Reply only as JSON {\"approved\": bool, \"issues\": [str]}, "
                                  "one short sentence per real error, and an empty list when approved.")
     return stats, tactics, commentator, checker
 
