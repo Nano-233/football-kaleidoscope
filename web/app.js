@@ -176,6 +176,7 @@ async function load(id) {
   $('seek').max = D.meta.duration;
   $('club').innerHTML = '<option value="">Neutral</option>' + ['home', 'away'].map(k => `<option${S.profile.club === D.meta[k].name ? ' selected' : ''}>${esc(D.meta[k].name)}</option>`).join('');
   if (S.profile.playerId && !S.info[S.profile.playerId]) Object.assign(S.profile, { player: '', playerId: '' });
+  if (S.profile.club && ![D.meta.home.name, D.meta.away.name].includes(S.profile.club)) S.profile.club = '';  // a club from another match is not playing in this one
   S.asks = [];
   marks();
   syncUrl();
