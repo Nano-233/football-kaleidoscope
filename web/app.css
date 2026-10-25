@@ -179,6 +179,8 @@ body.panel-off .panel-head { height: 100%; align-items: flex-start; border-botto
 .badge.warn { background: rgba(187, 128, 9, .3); color: var(--warn); }
 .badge.live { background: var(--accent); color: #fff; }
 .feed li.alert { border-left: 2px solid var(--accent); padding-left: 10px; }
+.feed li.mine { border-left: 2px solid var(--home); padding-left: 10px; }  /* the viewer's club */
+.badge.mine { background: var(--accent); color: #fff; }
 .feed li.pending p { color: var(--text-2); font-style: italic; }
 .feed p { margin: 0; color: var(--text-hi); }
 .feed p + p { margin-top: 8px; }  /* recaps and answers come in paragraphs */

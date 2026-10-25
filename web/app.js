@@ -107,7 +107,7 @@ async function flushTr() {
     const out = (await r.json()).texts;
     TR[lang] = TR[lang] || {};
     texts.forEach((t, i) => { TR[lang][t] = out[i]; });
-    S.trVer = (S.trVer || 0) + 1; $('lt-line').dataset.id = ''; render(true);
+    S.trVer = (S.trVer || 0) + 1; $('lt-line').dataset.id = ''; setTabs(); render(true);
   } catch { /* no server: the lines stay in English */ }
 }
 function saveProfile() { try { localStorage.setItem('mn-profile', JSON.stringify(S.profile)); } catch { /* storage off: the profile lasts for this visit */ } }
@@ -429,7 +429,7 @@ function setPersona(p) {
 function render(force) {
   if (!S.D) return;
   const minute = Math.floor(S.t / 60), shown = feed().filter(it => it.moment.t <= S.t).length + (S.profile.playerId ? playerNotes().length : 0);
-  const key = [S.persona, S.tab, S.tab === 'Clips' || S.tab === 'Ask' ? '' : minute, S.tab === 'Clips' ? S.D.clips.filter(x => x.t <= S.t + .5).length : S.tab === 'Ask' ? S.D.events.filter(e => e.t <= S.t && /goal|substitution/.test(e.type)).length : '', (S.D.recaps || []).filter(r => r.t <= S.t + .5).length, shown, S.player, S.group, S.clip && S.clip.id, S.custom.length, S.askVer, S.liveVer, S.profile.playerId, S.profile.metric, JSON.stringify(S.board), JSON.stringify(S.wi), S.bench && (S.bench.step + S.bench.busy + !!S.bench.r + S.bench.err), S.trVer, S.profile.language].join('|');
+  const key = [S.persona, S.tab, S.tab === 'Clips' || S.tab === 'Ask' ? '' : minute, S.tab === 'Clips' ? S.D.clips.filter(x => x.t <= S.t + .5).length : S.tab === 'Ask' ? S.D.events.filter(e => e.t <= S.t && /goal|substitution/.test(e.type)).length : '', (S.D.recaps || []).filter(r => r.t <= S.t + .5).length, shown, S.player, S.group, S.clip && S.clip.id, S.custom.length, S.askVer, S.liveVer, S.profile.playerId, S.profile.metric, JSON.stringify(S.board), JSON.stringify(S.wi), S.bench && (S.bench.step + S.bench.busy + !!S.bench.r + S.bench.err), S.trVer, S.profile.language, S.profile.club].join('|');
   if (!force && key === S.panelKey) return;
   S.panelKey = key;
   const body = $('panel-body'), keep = body.scrollTop, same = body.dataset.view === S.persona + S.tab + S.player;
@@ -473,11 +473,20 @@ function playerNotes() {
   return out.sort((a, b) => a.t - b.t);
 }
 
+// whether a feed item is about the viewer's club: the event's own team where there is one (the scoring side for a goal), else the side the
+// line names first
+function isOurs(it, club) {
+  const M = S.D.meta, e = it.moment.id != null && S.D.events.find(x => x.id === it.moment.id);
+  if (e && (e.team === 0 || e.team === 1)) return M[e.team ? 'away' : 'home'].name === club;
+  const line = it.line || '', other = club === M.home.name ? M.away.name : M.home.name, a = line.indexOf(club), b = line.indexOf(other);
+  return a >= 0 && (b < 0 || a < b);
+}
 function feedView(mode) {
   const notes = mode === 'fan' ? playerNotes().map(n => ({ note: true, moment: { t: n.t, clock: n.clock, type: 'your player' }, line: n.line, approved: true })) : [];
   for (const r of S.D.milestones || []) if (r.t <= S.t && r.player !== S.profile.playerId) notes.push({ note: true, milestone: true, moment: { t: r.t, clock: r.clock, type: 'milestone' }, line: `${S.info[r.player].name}: ${r.text}.`, approved: true });
   const items = [...feed().filter(it => it.moment.t <= S.t), ...notes].sort((a, b) => a.moment.t - b.moment.t).reverse();
-  if (!items.length) return `<div class="empty">The newsroom files its first story when something happens.</div>`;
+  if (!items.length) return `<div class="empty">${esc(tr('The newsroom files its first story when something happens.'))}</div>`;
+  const club = S.profile.club;  // moments that name the viewer's club are marked as theirs
   return `<ul class="feed ${mode}">` + items.map(it => {
     if (it.note) return `<li class="note"><div class="meta"><span class="t">${esc(it.moment.clock)}</span><span class="kind">${esc(it.milestone ? tr('Milestone') : S.profile.player)}</span>
       <button class="jump" data-seek="${it.moment.t - 6}">Watch</button></div><p>${esc(tr(it.line))}</p></li>`;
@@ -487,7 +496,8 @@ function feedView(mode) {
     const badge = !it.approved ? `<span class="badge warn">Held by fact-checker</span>`
       : it.fallback ? `<span class="badge warn" title="Every agent draft was held, so a plain line built from the facts went out">Drafts held · plain line</span>`
       : it.rewrites ? `<span class="badge ok">Fact-checked · rewritten ${it.rewrites}×</span>` : `<span class="badge ok">Fact-checked</span>`;
-    return `<li${it.moment.type === 'alert' ? ' class="alert"' : ''}><div class="meta"><span class="t">${esc(it.moment.clock)}</span><span class="kind">${esc(kindLabel(it.moment))}</span>${mode === 'analyst' ? badge : ''}${it.latency_s != null ? `<span class="badge live" title="From the moment arriving to the line going out, live on Foundry">Live · ${it.latency_s} s</span>` : ''}
+    const ours = club && isOurs(it, club);
+    return `<li class="${it.moment.type === 'alert' ? 'alert' : ''}${ours ? ' mine' : ''}"><div class="meta"><span class="t">${esc(it.moment.clock)}</span><span class="kind">${esc(tr(kindLabel(it.moment)))}</span>${ours ? `<span class="badge mine">${esc(tr('Your club'))}</span>` : ''}${mode === 'analyst' ? badge : ''}${it.latency_s != null ? `<span class="badge live" title="From the moment arriving to the line going out, live on Foundry">Live · ${it.latency_s} s</span>` : ''}
       <button class="jump" data-share="${it.moment.t}|${esc(it.moment.type)}">Share</button>${bdBtn(it.moment.t)}<button class="jump" data-seek="${it.moment.t - 8}">Watch</button></div>
       <p${it.approved ? '' : ' class="rejected"'}>${esc(tr(it.line))}</p>${mode === 'analyst' ? trail(it) : ''}</li>`;
   }).join('') + '</ul>';
@@ -516,9 +526,15 @@ function winBar() {
   const w = winNow(), M = S.D.meta;
   if (!w) return '';
   const over = S.t >= M.duration - 1, p = x => over ? Math.round(x * 100) : x < .005 ? '<1' : x > .995 ? '>99' : Math.round(x * 100);  // nothing is certain before the final whistle
-  return `<div class="label">Win probability · ${esc(clockAt(S.t))}</div>
+  const club = S.profile.club, side = club === M.home.name ? 'home' : club === M.away.name ? 'away' : '';
+  const mine = side ? (() => {  // the fan's own side: score from their end and the chance to win
+    const g = S.D.events.filter(e => e.t <= S.t && (e.type === 'goal' || e.type === 'own_goal')).pop(), sc = g ? [g.home, g.away] : [0, 0];
+    const us = side === 'home' ? 0 : 1;
+    return `<div class="mono" style="margin-top:4px"><span class="badge mine">${esc(tr('Your club'))}</span> ${esc(club)} ${sc[us]}–${sc[1 - us]} · ${p(w[side])}% ${esc(tr('to win'))}</div>`;
+  })() : '';
+  return `<div class="label">${esc(tr('Win probability'))} · ${esc(clockAt(S.t))}</div>
     <div class="winbar"><i style="flex:${w.home};background:var(--home)"></i><i style="flex:${w.draw};background:var(--surface-3)"></i><i style="flex:${w.away};background:var(--away)"></i></div>
-    <div class="cmp-head" style="display:grid;grid-template-columns:1fr 1fr 1fr;font-size:12px;margin-top:4px"><span>${esc(M.home.code)} ${p(w.home)}%</span><span style="text-align:center">Draw ${p(w.draw)}%</span><span style="text-align:right">${esc(M.away.code)} ${p(w.away)}%</span></div>`;
+    <div class="cmp-head" style="display:grid;grid-template-columns:1fr 1fr 1fr;font-size:12px;margin-top:4px"><span>${esc(M.home.code)} ${p(w.home)}%</span><span style="text-align:center">${esc(tr('Draw'))} ${p(w.draw)}%</span><span style="text-align:right">${esc(M.away.code)} ${p(w.away)}%</span></div>${mine}`;
 }
 function compareView() {
   const [h, a] = statsAt(S.t), M = S.D.meta;
@@ -940,7 +956,7 @@ function momentumSvg(h = 150) {
 
 function liveStrip() {  // the fan's glance at the game: who is on top, five minutes at a time, and the chances now
   if (!S.D.board || S.t < 300) return '';
-  return `${winBar()}${rhythmStrip()}<div class="label" style="margin-top:10px">Who is making the chances · five minutes at a time</div>${momentumSvg(90)}`;
+  return `${winBar()}${rhythmStrip()}<div class="label" style="margin-top:10px">${esc(tr('Who is making the chances · five minutes at a time'))}</div>${momentumSvg(90)}`;
 }
 // control vs chaos by five minutes (analytics/tools.py rhythm): a chip per finished window, the side in control in its colour
 const RH_COL = st => (st.startsWith('control') ? (st.endsWith(S.D.meta.home.name) ? 'var(--home)' : 'var(--away)') : st === 'chaos' ? 'var(--bad)' : st === 'stop-start' ? 'var(--text-3)' : 'var(--surface-3)');
@@ -955,9 +971,9 @@ function rhythmStrip(full) {
   const tip = r => `${r.window}: ${word(r.state)} · settled ${r.settled_pct}% · broken ${r.broken_pct}% · ${r.turnovers_per_min} turnovers a minute · ${r.passes_per_min} passes a minute · ball in play ${r.ball_in_play_pct}%`;
   const chips = R.by_window.map(r => `<i title="${esc(r.t1 <= S.t ? tip(r) : '')}" style="flex:1;height:10px;border-radius:2px;background:${r.t1 <= S.t ? RH_COL(r.state) : 'transparent'};border:1px solid var(--line)"></i>`).join('');
   const spells = full ? R.spells.filter(x => x.end_t <= S.t) : [];
-  return `<div class="label" style="margin-top:10px">Control vs chaos · ${esc(word(last.state))} (${esc(last.window)})</div>
+  return `<div class="label" style="margin-top:10px">${esc(tr('Control vs chaos'))} · ${esc(tr(word(last.state)))} (${esc(last.window)})</div>
     <div style="display:flex;gap:2px">${chips}</div>
-    <div class="mono" style="margin-top:4px">${S.persona === 'fan' ? esc(plain(last.state)) : `Settled ${last.settled_pct}% · broken ${last.broken_pct}% · ${last.turnovers_per_min} turnovers and ${last.passes_per_min} passes a minute of play`}</div>
+    <div class="mono" style="margin-top:4px">${S.persona === 'fan' ? esc(tr(plain(last.state))) : `Settled ${last.settled_pct}% · broken ${last.broken_pct}% · ${last.turnovers_per_min} turnovers and ${last.passes_per_min} passes a minute of play`}</div>
     ${full ? `<div class="mono" style="margin-top:4px">Settled: a move of four passes or fifteen seconds. Broken: lost inside eight seconds with at most one pass.</div>
       ${spells.length ? `<table class="stats" style="margin-top:6px"><tbody>${spells.map(x => `<tr><td>${esc(word(x.state))}</td><td>${esc(x.start)}–${esc(x.to)}</td></tr>`).join('')}</tbody></table>` : ''}` : ''}`;
 }
@@ -1330,7 +1346,7 @@ async function sayLine(text) {
 let toastTimer;
 function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 2600); }
 function setTabs() {
-  for (const b of $('tabs').children) b.setAttribute('aria-selected', b.dataset.tab === S.tab);
+  for (const b of $('tabs').children) { b.setAttribute('aria-selected', b.dataset.tab === S.tab); b.textContent = tr(b.dataset.tab); }  // tab names in the reader's language
   if (S.tab === 'What if') fetch('api/warm', { method: 'POST' }).catch(() => {});  // the simulation workers start scaling out while the viewer sets up the change
 }
 
@@ -1451,7 +1467,7 @@ $('panel-body').addEventListener('change', e => {
   if (e.target.id === 'p-depth') { S.profile.depth = e.target.value; saveProfile(); }
 });
 $('panel-body').addEventListener('keydown', e => { if (e.target.id === 'ask-q' && e.key === 'Enter') askNewsroom(e.target.value); });
-$('club').onchange = e => { S.profile.club = e.target.value; saveProfile(); };
+$('club').onchange = e => { S.profile.club = e.target.value; saveProfile(); render(true); };
 function setUnits(u) {
   S.profile.units = u; saveProfile();
   const [len, spd, dist] = u.split(','); $('u-len').value = len; $('u-spd').value = spd; $('u-dist').value = dist;
@@ -1499,7 +1515,7 @@ $('voice').onclick = () => { voiceOn = !voiceOn; $('voice').setAttribute('aria-p
 $('lang').innerHTML = LANGS.map(l => `<option${l === S.profile.language ? ' selected' : ''}>${l}</option>`).join('');
 $('metric').innerHTML = Object.entries(METRICS).map(([k, l]) => `<option value="${k}"${k === S.profile.metric ? ' selected' : ''}>${l}</option>`).join('');
 $('metric').onchange = e => { S.profile.metric = e.target.value; saveProfile(); render(true); };
-$('lang').onchange = e => { S.profile.language = e.target.value; saveProfile(); $('lt-line').dataset.id = ''; render(true); };
+$('lang').onchange = e => { S.profile.language = e.target.value; saveProfile(); $('lt-line').dataset.id = ''; setTabs(); render(true); };
 $('panel-body').addEventListener('input', e => {
   if (e.target.id === 'clip-start' || e.target.id === 'clip-end') { setPlaying(false); updateClip(e.target.id.slice(5), +e.target.value); }
   if (e.target.id === 'ask-q') S.askDraft = e.target.value;
