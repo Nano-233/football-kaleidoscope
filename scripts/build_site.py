@@ -125,7 +125,10 @@ async def recaps(match):
     for kind, q in RECAPS.items():
         t = ht if kind == "half_time" else match["meta"]["duration"]
         for prof in RECAP_PROFILES:
-            r = await Desk(client, match, prof, until=t).ask(q)
+            for _ in range(3):  # a report the fact-checker holds is written again from scratch, up to three times
+                r = await Desk(client, match, prof, until=t).ask(q)
+                if r["approved"]:
+                    break
             out.append(dict(kind=kind, t=t, profile=prof, issues=[a["issues"] for a in r["attempts"]], **{k: r[k] for k in ("answer", "held", "approved", "rewrites", "findings", "steps", "watch")}))
     return out
 

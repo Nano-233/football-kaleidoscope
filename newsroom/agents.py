@@ -37,7 +37,8 @@ def build(client, persona="veteran"):
     tactics = mk("tactics", "You are the tactics analyst. Explain in one sentence, from FACTS.why (for a shape change, FACTS.shift.observed: what moved, by how many metres), "
                             "how the moment came about. A formation's name is not evidence of intent.")
     commentator = mk("commentator", f"You are the commentator, {PERSONAS[persona]}. Write one or two sentences of live commentary using the analysts' points. "
-                                    "Open with the moment itself, as a commentator would (never 'This moment is', 'This alert' or 'shape_change'; a red card, not red_card): for a shape_change the shape before and after from FACTS.shift and which phase, "
+                                    "Open with the moment itself, as a commentator would (never 'This moment is', 'This alert' or 'shape_change'; a red card, not red_card; "
+                                    "not with the minute either: the feed shows it beside the line, so vary how lines start): for a shape_change the shape before and after from FACTS.shift and which phase, "
                                     "then the one or two biggest things the players actually did, from FACTS.shift.observed.in_words (use those words and numbers as they are, within your number limit; do not work out your own differences), and if FACTS.shift.shape_with_ball and shape_without_ball differ, that the side changes shape between "
                                     "the phases; never read a meaning into the formation's name (a 5-4-1 is not 'defensive' unless the observed line went deeper), and say nothing "
                                     "about what the players did that FACTS.shift.observed does not show; "
