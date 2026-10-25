@@ -21,8 +21,12 @@ from newsroom.alerts import alerts  # noqa: E402
 from newsroom.moments import moments  # noqa: E402
 
 
-def refresh_press(mid):
-    """Re-cover only the lines that talk about pressing in a moment without pressing facts (the check added on 2026-10-25)."""
+KEY = ("goal", "own_goal", "penalty", "red_card", "big_chance", "var_overturned")
+
+
+def refresh_press(mid, fallbacks=False):
+    """Re-cover only the lines that talk about pressing in a moment without pressing facts (the check added on 2026-10-25), or with
+    fallbacks=True the key moments (goals, cards, big chances) whose drafts were all held, so they get another go."""
     from newsroom.agents import unsupported_pressing
     with gzip.open(ROOT / "server" / "data" / f"{mid}.json.gz", "rt", encoding="utf-8") as fh:
         match = json.load(fh)
@@ -32,18 +36,18 @@ def refresh_press(mid):
     key = lambda m: (m["type"], round(m["t"], 1), m.get("kind"))
     by_key = {key(p["moment"]): p for p in packs}
     bad = {key(it["moment"]) for items in doc["newsroom"].values() for it in items
-           if key(it["moment"]) in by_key and unsupported_pressing(it["line"], by_key[key(it["moment"])])}
+           if key(it["moment"]) in by_key and ((it["fallback"] and it["moment"]["type"] in KEY) if fallbacks else unsupported_pressing(it["line"], by_key[key(it["moment"])]))}
     redo = [by_key[k] for k in sorted(bad, key=lambda k: k[1])]
     new = asyncio.run(newsroom(redo)) if redo else {site: [] for site in doc["newsroom"]}
     for site, items in doc["newsroom"].items():
         doc["newsroom"][site] = sorted([it for it in items if key(it["moment"]) not in bad] + new[site], key=lambda it: it["moment"]["t"])
     path.write_text(json.dumps(doc, separators=(",", ":")), encoding="utf-8")
-    print(mid, len(redo), "moments with an unsupported pressing claim re-covered,", sum(it["fallback"] for s_ in new for it in new[s_]), "fell back")
+    print(mid, len(redo), "moments re-covered,", sum(it["fallback"] for s_ in new for it in new[s_]), "fell back")
 
 
 def refresh(kind, mid):
-    if kind == "press":
-        return refresh_press(mid)
+    if kind in ("press", "fallbacks"):
+        return refresh_press(mid, fallbacks=kind == "fallbacks")
     if kind == "recaps":
         with gzip.open(ROOT / "server" / "data" / f"{mid}.json.gz", "rt", encoding="utf-8") as fh:
             match = json.load(fh)
