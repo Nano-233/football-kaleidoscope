@@ -114,6 +114,17 @@ def wrong_ppda(line, pair):
     return out
 
 
+PRESS_WORDS = re.compile(r"\b(press(es|ed|ing)?|ppda)\b", re.I)
+
+
+def unsupported_pressing(line, pack):
+    """Pressing talked about in a moment whose pack has no pressing facts (a goal or a substitution: see moments.focus). Duty alerts are
+    about closing down, so they may."""
+    if "pressing_harder" in pack or (pack.get("alert") or {}).get("kind") == "duty":
+        return []
+    return ["the line talks about pressing, but this moment's facts have nothing on pressing"] if PRESS_WORDS.search(line) else []
+
+
 def wrong_team(line, squads):
     """A player given to the other side ("Oakhaven's Arstor Vossez" for a Westmoor player). squads: {team name: [player names]};
     a team is also matched by its first word (Oakhaven for Oakhaven FC)."""
@@ -173,6 +184,8 @@ async def cover(client, pack, persona="veteran"):
         if bad := wrong_leader(line, pack):
             checks.append("; ".join(bad))
         if bad := wrong_ppda(line, [st.get("ppda") for st in pack.get("stats", {}).values()]):
+            checks.append("; ".join(bad))
+        if bad := unsupported_pressing(line, pack):
             checks.append("; ".join(bad))
         if bad := wrong_minutes(line, pack):
             checks.append(f"minute {bad} is not the clock {pack['moment']['clock']}")
