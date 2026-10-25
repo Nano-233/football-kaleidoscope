@@ -486,7 +486,8 @@ function isOurs(it, club) {
 }
 function feedView(mode) {
   const notes = mode === 'fan' ? playerNotes().map(n => ({ note: true, moment: { t: n.t, clock: n.clock, type: 'your player' }, line: n.line, approved: true })) : [];
-  for (const r of S.D.milestones || []) if (r.t <= S.t && r.player !== S.profile.playerId) notes.push({ note: true, milestone: true, moment: { t: r.t, clock: r.clock, type: 'milestone' }, line: `${S.info[r.player].name}: ${r.text}.`, approved: true });
+  const big = r => !/\d/.test(r.text);  // a fan sees the big milestones (brace, off the bench, clean sheet), not counts of tackles or passes
+  for (const r of S.D.milestones || []) if (r.t <= S.t && r.player !== S.profile.playerId && (mode !== 'fan' || big(r))) notes.push({ note: true, milestone: true, moment: { t: r.t, clock: r.clock, type: 'milestone' }, line: `${S.info[r.player].name}: ${r.text}.`, approved: true });
   const items = [...feed().filter(it => it.moment.t <= S.t), ...notes].sort((a, b) => a.moment.t - b.moment.t).reverse();
   if (!items.length) return `<div class="empty">${esc(tr('The newsroom files its first story when something happens.'))}</div>`;
   const club = S.profile.club;  // moments that name the viewer's club are marked as theirs
