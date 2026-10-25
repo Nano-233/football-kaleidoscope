@@ -62,6 +62,7 @@ flowchart LR
   A --> AL[alerts<br/>deterministic triggers]
   AL --> L
   D --> W[what-if engine<br/>paired replays]
+  W --> SW[simulation workers<br/>Container Apps, internal<br/>scale 0-12 per replay]
   L & D --> LZ[localizer]
   LZ --> S[server<br/>aiohttp on Container Apps]
   S --> UI[web match centre]
@@ -106,7 +107,7 @@ are in `web/data/eval.json` and shown in the app.
 | **Microsoft Agent Framework** | Every agent, agents used as tools by the orchestrator, tool calling, per-moment workflow (`agent-framework-*`) |
 | **Foundry tracing / Application Insights** | OpenTelemetry via `azure-monitor-opentelemetry`; agent runs and tool calls appear on Foundry's Tracing page |
 | **Azure AI Speech** | Spoken commentary (`/api/speak`), on the same Foundry resource |
-| **Azure Container Apps** | `infra/deploy.ps1`: 4 vCPU / 8 GiB, scales to zero, system-assigned managed identity with the Foundry User role, so there are **no keys** anywhere |
+| **Azure Container Apps** | `infra/deploy.ps1`: two apps in one environment. The match centre (external, scales to zero, system-assigned managed identity with the Foundry User role, so there are **no keys** anywhere) and the simulation workers (internal ingress only, an HTTP scale rule takes them from 0 to 12 replicas per what-if and back; a busy worker answers 503 and the run is retried on another, and opening the What-if tab wakes them early) |
 | **MCP + GitHub Copilot agent mode** | `server/mcp_server.py` exposes 17 tools (analysis, `what_if`, `ask_newsroom`), over stdio or HTTP; `.vscode/mcp.json` connects Copilot so an analyst can query a match from VS Code |
 | **GitHub Actions** | `tests.yml` runs the engine, stats, analytics and newsroom tests offline; `image.yml` builds the server image on every push to main and publishes it to GitHub Container Registry, which Container Apps runs |
 | **GitHub Copilot / Claude Code** | Development tools only. They are not part of the runtime. |
