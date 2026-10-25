@@ -167,7 +167,9 @@ async function load(id) {
     for (let j = 0; j < 44; j++) F[o + 5 + j] = q[k + 4 + j] / 20;
     for (let j = 0; j < 22; j++) F[o + 50 + j] = h[i * 22 + j] / 40;
   }
-  Object.assign(S, { D, F, n, dt: D.meta.dt, id, t: 0, player: null, clip: null, bd: null, custom: loadCustom(id), panelKey: '', Z: zb ? new Int16Array(zb) : null });
+  const P0 = new Int32Array(n), P1 = new Int32Array(n);  // running count of frames each side had the ball: possession at any minute
+  for (let i = 0; i < n; i++) { P0[i] = (i ? P0[i - 1] : 0) + (F[i * 72 + 4] === 0); P1[i] = (i ? P1[i - 1] : 0) + (F[i * 72 + 4] === 1); }
+  Object.assign(S, { poss: [P0, P1], D, F, n, dt: D.meta.dt, id, t: 0, player: null, clip: null, bd: null, custom: loadCustom(id), panelKey: '', Z: zb ? new Int16Array(zb) : null });
   if (S.v3) teams3d();
   S.info = {};
   for (const side of ['home', 'away']) for (const p of [...D.meta[side].players, ...D.meta[side].bench]) S.info[p.id] = { ...p, team: side === 'home' ? 0 : 1 };
@@ -551,14 +553,20 @@ function winBar() {
     <div class="winbar"><i style="flex:${w.home};background:var(--home)"></i><i style="flex:${w.draw};background:var(--surface-3)"></i><i style="flex:${w.away};background:var(--away)"></i></div>
     <div class="cmp-head" style="display:grid;grid-template-columns:1fr 1fr 1fr;font-size:12px;margin-top:4px"><span>${esc(M.home.code)} ${p(w.home)}%</span><span style="text-align:center">${esc(tr('Draw'))} ${p(w.draw)}%</span><span style="text-align:right">${esc(M.away.code)} ${p(w.away)}%</span></div>${mine}`;
 }
+function possessionAt(t) {  // share of the frames so far in which each side had the ball
+  const i = Math.max(0, Math.min(S.n - 1, Math.floor(t / S.dt))), a = S.poss[0][i], b = S.poss[1][i];
+  return a + b ? [Math.round(100 * a / (a + b)), 100 - Math.round(100 * a / (a + b))] : [50, 50];
+}
 function compareView() {
-  const [h, a] = statsAt(S.t), M = S.D.meta;
+  const [h, a] = statsAt(S.t), M = S.D.meta, [ph, pa] = possessionAt(S.t);
+  const poss = `<div class="cmp-row"><div class="cmp-head"><span>${ph}%</span><span>${esc(tr('Possession'))}</span><span>${pa}%</span></div>
+      <div class="cmp-bar"><i class="${ph > pa ? 'lead h' : ''}" style="flex:${ph}"></i><i class="${pa > ph ? 'lead a' : ''}" style="flex:${pa}"></i></div></div>`;
   const rows = STAT_ROWS.filter(r => FAN_ROWS.includes(r[0])).map(r => {
     const hv = h[r[0]] ?? 0, av = a[r[0]] ?? 0, tot = hv + av || 1, lead = r[3] ? (hv < av ? 'h' : av < hv ? 'a' : '') : (hv > av ? 'h' : av > hv ? 'a' : '');
     return `<div class="cmp-row"><div class="cmp-head"><span>${fmtStat(r, hv)}</span><span>${r[1]}</span><span>${fmtStat(r, av)}</span></div>
       <div class="cmp-bar"><i class="${lead === 'h' ? 'lead h' : ''}" style="flex:${hv / tot || .001}"></i><i class="${lead === 'a' ? 'lead a' : ''}" style="flex:${av / tot || .001}"></i></div></div>`;
   }).join('');
-  return `${winBar()}<div class="label">${esc(M.home.code)} vs ${esc(M.away.code)} · after ${esc(clockAt(S.t))}</div><div class="compare">${rows}</div>`;
+  return `${winBar()}<div class="label">${esc(M.home.code)} vs ${esc(M.away.code)} · after ${esc(clockAt(S.t))}</div><div class="compare">${poss}${rows}</div>`;
 }
 
 function tableView() {
@@ -567,8 +575,10 @@ function tableView() {
     const hv = h[r[0]], av = a[r[0]], better = (x, y) => x != null && y != null && (r[3] ? x < y : x > y);
     return `<tr><td>${r[1]}</td><td class="${better(hv, av) ? 'lead' : ''}">${fmtStat(r, hv)}</td><td class="${better(av, hv) ? 'lead' : ''}">${fmtStat(r, av)}</td></tr>`;
   }).join('');
+  const [ph, pa] = possessionAt(S.t);
+  const poss = `<tr><td>Possession (tracking)</td><td class="${ph > pa ? 'lead' : ''}">${ph}%</td><td class="${pa > ph ? 'lead' : ''}">${pa}%</td></tr>`;
   return `<div class="label">Team statistics · after ${esc(clockAt(S.t))}</div>
-    <table class="stats"><thead><tr><th>Metric</th><th>${esc(M.home.code)}</th><th>${esc(M.away.code)}</th></tr></thead><tbody>${rows}</tbody></table>
+    <table class="stats"><thead><tr><th>Metric</th><th>${esc(M.home.code)}</th><th>${esc(M.away.code)}</th></tr></thead><tbody>${poss}${rows}</tbody></table>
     <div class="label">Source</div><div class="mono">Computed from the event stream by the analytics layer; the newsroom may only quote these numbers.</div>${truthPanel()}`;
 }
 
