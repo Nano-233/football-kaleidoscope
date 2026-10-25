@@ -50,23 +50,23 @@ def template_line(f):
     """A plain line built only from the pack: what the newsroom publishes when every agent draft was held by the fact-checker."""
     m = f["moment"]
     if m["type"] == "alert":
-        return f"{m['clock']} {f['alert']['text']}"
+        return f"{f['alert']['text']}"
     if m["type"] in ("goal", "own_goal"):
-        return f"{m['clock']} Goal for {f['team']}: {f['player']} scores, {f['teams']['home']} {f['score']} {f['teams']['away']}."
+        return f"Goal for {f['team']}: {f['player']} scores, {f['teams']['home']} {f['score']} {f['teams']['away']}."
     if m["type"] == "full_time":
         return f"Full time: {f['teams']['home']} {f['score']} {f['teams']['away']}."
     if m["type"] == "shape_change":
         sh = f["shift"]
-        return f"{m['clock']} {f['team']} change shape {sh['phase']}: {sh['previous']} to {sh['now']}."
+        return f"{f['team']} change shape {sh['phase']}: {sh['previous']} to {sh['now']}."
     if m["type"] == "spell":
         sp = f["spell"]
-        return f"{m['clock']} {f['team']} had the upper hand from {sp['start']} to {sp['end']} (xG {sp['xg']} to {sp['opponent_xg']})."
+        return f"{f['team']} had the upper hand from {sp['start']} to {sp['end']} (xG {sp['xg']} to {sp['opponent_xg']})."
     if m["type"] == "substitution":
-        return f"{m['clock']} Substitution, {f['team']}: {f['player']} on for {f['off']}."
+        return f"Substitution, {f['team']}: {f['player']} on for {f['off']}."
     if m["type"] == "half_time":
         return f"Half-time: {f['teams']['home']} {f['score']} {f['teams']['away']}."
     who = f" {f['player']} ({f['team']})" if f["player"] else f" {f['team']}" if f["team"] else ""
-    return f"{m['clock']} {m['type'].replace('_', ' ').capitalize()}:{who}."
+    return f"{m['type'].replace('_', ' ').capitalize()}:{who}."
 
 
 def _observed(match, names, team):

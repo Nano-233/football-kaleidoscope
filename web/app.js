@@ -1105,7 +1105,7 @@ function recapView() {
     const watch = (r.watch || []).map(w => `<button class="link" data-seek="${w.t - 6}">Watch ${esc(w.clock)} ${esc(label(w.type).toLowerCase())}</button>`).join(' ');
     const steps = r.steps.map(st => `<li><b>${esc(st.agent.replace('_', ' '))}</b> → ${esc(st.tool.replace(/_/g, ' '))}</li>`).join('');
     const issues = (r.issues || []).flat().filter(Boolean);
-    const body = r.approved ? `<p>${esc(tr(r.answer))}</p>`  // a report the fact-checker held is not published: its draft and the reasons stay one click away
+    const body = r.approved ? tr(r.answer).split(/\n\s*\n/).map(x => `<p>${esc(x.trim())}</p>`).join('')  // a report the fact-checker held is not published: its draft and the reasons stay one click away
       : `<p class="rejected">The fact-checker held this report after ${r.rewrites} rewrite${r.rewrites === 1 ? '' : 's'}, so it is not published.</p>
         <details class="trail"><summary>The held draft and why</summary><div class="trail-body"><p class="rejected">${esc(r.held || '')}</p><ul>${issues.slice(-4).map(i => `<li>${esc(i)}</li>`).join('')}</ul></div></details>`;
     return `<li><div class="q">${title}</div><div class="meta">${r.approved ? `<span class="badge ok">Fact-checked${r.rewrites ? ` · rewritten ${r.rewrites}×` : ''}</span>` : '<span class="badge">Held by the fact-checker</span>'}</div>

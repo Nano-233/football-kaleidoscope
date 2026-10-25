@@ -110,8 +110,10 @@ def clips(events, names, duration):
 
 
 RECAPS = {  # (when, question); each is written for every profile in RECAP_PROFILES, from what had happened by then
-    "half_time": "Write the half-time report: the story of the half (every goal, red card and change of system in it), why the score is what it is, and what to watch in the second half.",
-    "full_time": "Write the full-time report: the story of the match (every goal, red card and change of system in it), the turning points and why the result happened.",
+    "half_time": "Write the half-time report in short paragraphs separated by a blank line: the story of the half (every goal, red card and change of system in it), "
+                 "why the score is what it is, and what to watch in the second half.",
+    "full_time": "Write the full-time report in short paragraphs separated by a blank line: the story of the match (every goal, red card and change of system in it), "
+                 "the turning points and why the result happened.",
 }
 RECAP_PROFILES = ({"persona": "fan", "depth": "quick"}, {"persona": "analyst", "depth": "deep"})
 

@@ -176,6 +176,7 @@ body.panel-off .panel-head { height: 100%; align-items: flex-start; border-botto
 .feed li.alert { border-left: 2px solid var(--accent); padding-left: 10px; }
 .feed li.pending p { color: var(--text-2); font-style: italic; }
 .feed p { margin: 0; color: var(--text-hi); }
+.feed p + p { margin-top: 8px; }  /* recaps and answers come in paragraphs */
 .feed.fan p { font-size: 14px; line-height: 22px; }
 .feed .jump { background: none; border: 0; padding: 0; color: var(--link); font-size: 12px; margin-left: auto; }
 .feed .jump:hover { text-decoration: underline; }

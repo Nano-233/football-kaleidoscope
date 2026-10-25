@@ -11,6 +11,12 @@ Framework**, deployed on **Azure Container Apps**.
 
 **Live demo:** https://matchday-newsroom.ashywave-faaedb6c.eastus2.azurecontainerapps.io · **Video:** _link added after upload_
 
+| Fan: live feed, fact-checked | Analyst: the tactics board |
+|---|---|
+| ![Fan view: win probability, control vs chaos and the fact-checked live feed](docs/img/fan-feed.png) | ![Analyst board: the shape with the ball and the defensive line](docs/img/analyst-board.png) |
+| **Full-time report, with the agents' trail** | **Newsroom answers graded against the engine's truth** |
+| ![Full-time report written by the desk](docs/img/recap.png) | ![Stats tab with the eval against engine truth](docs/img/analyst-stats.png) |
+
 ## Try it (for judges)
 
 The demo is free and needs no login. It opens on a finished match with all the stored commentary, recaps and
