@@ -73,15 +73,13 @@ Server answer cache: `server/cache` (git-ignored), keyed by match data, question
   `confirmed_t`). Scoring ignores changes nobody could see (`truth()["unseeable_changes"]`).
 - Desk flow (`newsroom/desk.py`): orchestrator -> tactics_analyst / scout (as tools) -> writer -> fact-checker (up to 2 rewrites).
 
-## User's standing rules
+## Team rules
 
-- Terse replies (caveman + ponytail modes): short, decisions stated, minimal code, no unrequested features or extras.
-- Engine work must be logic-driven (football cause), never stat-fitting; a logic fix that is right against real data stays even if
+- Engine work must be logic-driven (a football cause), never stat-fitting; a logic fix that is right against real data stays even if
   the loss gets worse; recalibrate numbers afterwards. Check DEVLOG before trying anything, so no attempt is repeated.
 - Keep DEVLOG.md updated (what was seen, measured, fixed, tried and not kept).
-- Commit messages end with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Push to main.
 - Never use real clubs, players or badges. Data must be synthetic (rule 4.7).
-- Ask before anything that costs money or is outward-facing (deploy, quota change).
+- Ask before anything that costs money or is outward-facing (deploy, quota change). Push to main.
 
 ## Open items, in order
 
