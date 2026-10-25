@@ -1791,6 +1791,18 @@ User: no more min-maxing; use-case driven, best look for the judges. Walked the 
   keeps only the big milestones; `?t=` links draw the pitch at that moment.
 - Eval after the prompt changes: 0.83 (formation 0.5 is the reader's limit; the answers report it faithfully). Not chased.
 
+### Judge walkthrough, round two (2026-10-25)
+- Slow loads on the live site: a match's files (5 MB) took 20-45 s at times (the same file 0.3 s, then 26 s; the front's CPU idle, a
+  CDN at 1.1 MB/s from the same machine), so throughput to the app varies. The image now carries gzip copies of the page and the
+  match data and aiohttp serves them to browsers that accept gzip: 5 MB to 2 MB a match (match.json to 13 %), loads 2-4 s.
+- The LLM checker let 71 lines talk about pressing in moments whose facts had none: a deterministic check now rejects them
+  (`unsupported_pressing`), and those moments were re-covered (`refresh_moments.py press`). The half-time report called a goal "the
+  winner" in a match that ended 3-3: the question now says the match is not over. Held recaps are written again, up to three times.
+- Fan view: possession from tracking; the player view and squad list show numbers so far (no full-match rating or later actions
+  before the whistle); the result at full time; the followed player's name on the pitch; Arabic and other text sets its own direction;
+  answers and recaps in paragraphs; repeated pairings numbered in the picker; scripts/README.md.
+- Deploys from Bash silently failed (`az.cmd` under "C:\Program Files" breaks in cmd): deploy from PowerShell and check the live app.js.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
