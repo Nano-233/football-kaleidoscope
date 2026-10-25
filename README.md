@@ -154,7 +154,11 @@ python tests/test_sim.py; python tests/test_stats.py; python tests/test_tools.py
 `matchsim/` engine and what-if replays · `analytics/` stats, ratings and `MatchView` analysis tools · `newsroom/`
 agents, checks, alerts and localizer · `server/` aiohttp app and MCP server · `web/` match centre (static, no
 framework; three.js for 3D) · `scripts/` simulation, site build, eval and calibration · `infra/` Azure setup and deploy ·
-`tests/` plain-script tests.
+`tests/` plain-script tests. The scripts are listed in [scripts/README.md](scripts/README.md).
+
+Documentation: [DESIGN.md](DESIGN.md) (how the engine works), [FOOTBALL_PRINCIPLES.md](FOOTBALL_PRINCIPLES.md) (the football it
+follows), [EVENTS.md](EVENTS.md) (every event type and field), [DEVLOG.md](DEVLOG.md) (every measurement, fix and dead end, in
+order), [PLAN.md](PLAN.md) (the use cases), [PITCH.md](PITCH.md) (pitch and video plan), [HANDOFF.md](HANDOFF.md) (working notes).
 
 ## Credits
 

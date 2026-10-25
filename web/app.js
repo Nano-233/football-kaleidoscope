@@ -118,7 +118,12 @@ async function boot() {
   S.persona = TABS[q.get('p')] ? q.get('p') : 'fan';
   S.tab = TABS[S.persona][0];
   const index = await fetch('data/index.json').then(r => r.json());
-  $('match').innerHTML = index.map(m => `<option value="${esc(m.id)}">${esc(m.home)} v ${esc(m.away)}</option>`).join('');  // no final score: it would spoil the replay
+  const pair = m => `${m.home} v ${m.away}`, nth = {};  // no final score (it would spoil the replay); a repeated pairing is numbered
+  $('match').innerHTML = index.map(m => {
+    const same = index.filter(x => pair(x) === pair(m));
+    nth[pair(m)] = (nth[pair(m)] || 0) + 1;
+    return `<option value="${esc(m.id)}">${esc(pair(m))}${same.length > 1 ? ` · game ${nth[pair(m)]}` : ''}</option>`;
+  }).join('');
   const want = index.some(m => m.id === q.get('m')) ? q.get('m') : index[0].id;
   $('match').value = want;
   setPersona(S.persona);
