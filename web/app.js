@@ -126,7 +126,27 @@ async function boot() {
   if (+q.get('t') > 0) S.t = Math.min(+q.get('t'), S.D.meta.duration);  // a link to a moment: ?t=<match seconds>&tab=<panel>
   if (TABS[S.persona].includes(q.get('tab'))) { S.tab = q.get('tab'); setTabs(); }
   render(true);
+  let seen = false;
+  try { seen = !!localStorage.getItem('mn-welcomed'); } catch { /* storage off: show it */ }
+  if (!seen && !q.get('t') && !q.get('tab')) $('welcome').hidden = false;  // first visit to the plain link: say what this is, offer three ways in
 }
+
+// the welcome card's ways in (shown once per browser)
+$('welcome').addEventListener('click', e => {
+  const b = e.target.closest('[data-welcome]');
+  if (!b) return;
+  $('welcome').hidden = true;
+  try { localStorage.setItem('mn-welcomed', '1'); } catch { /* storage off */ }
+  const w = b.dataset.welcome;
+  if (w === 'highlights') playHighlights(true);
+  if (w === 'analyst') {  // the first shape change, on the feed, where the newsroom explains it from the tracking
+    setPersona('analyst');
+    const sc = (S.D.newsroom.analyst || []).find(it => it.moment.type === 'shape_change' && it.approved && !it.fallback) || (S.D.newsroom.analyst || [])[0];
+    if (sc) seek(sc.moment.t + 1);
+    S.tab = 'Feed'; setTabs(); render(true);
+  }
+  if (w === 'ask') { S.tab = 'Ask'; setTabs(); render(true); setTimeout(() => $('ask-q') && $('ask-q').focus(), 50); }
+});
 
 async function load(id) {
   $('loading').hidden = false; S.playing = false; stopLive();
@@ -605,8 +625,8 @@ function reelFor(pid, name) {
   return segs;
 }
 const HL_KINDS = ['goal', 'own_goal', 'big_chance', 'penalty', 'red_card', 'var_overturned'];
-function playHighlights() {
-  const items = feed().filter(it => it.approved && HL_KINDS.includes(it.moment.type) && it.moment.t <= S.t);
+function playHighlights(all) {
+  const items = feed().filter(it => it.approved && HL_KINDS.includes(it.moment.type) && (all || it.moment.t <= S.t));
   if (!items.length) return toast('No highlights yet.');
   S.clip = null; S.view = null;
   S.reel = { name: 'Highlights', who: S.D.meta.home.code + ' v ' + S.D.meta.away.code, i: 0,

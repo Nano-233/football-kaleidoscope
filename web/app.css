@@ -114,6 +114,11 @@ body.panel-off .panel-head { height: 100%; align-items: flex-start; border-botto
 #pitch3d { max-width: 100%; display: block; }
 #pitch { max-width: 100%; max-height: 100%; aspect-ratio: 1100 / 720; background: var(--pitch); display: block; border: 1px solid var(--line); }
 .loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--text-2); }
+.welcome { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(560px, calc(100% - 32px)); z-index: 5;
+  background: var(--surface); border: 1px solid var(--line-strong); border-top: 2px solid var(--accent); border-radius: var(--r); padding: 18px 20px; box-shadow: 0 8px 32px rgba(0,0,0,.5); }
+.welcome h2 { margin: 0 0 8px; font-size: 16px; color: var(--text-hi); }
+.welcome p { margin: 0 0 14px; color: var(--text); line-height: 20px; }
+.welcome .bar { display: flex; flex-wrap: wrap; gap: 8px; }
 .lower-third { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); width: min(86%, 760px); background: rgba(24, 24, 24, .96); border: 1px solid var(--line-strong); border-left: 3px solid var(--accent); padding: 8px 12px 9px; }
 .lower-third p { margin: 2px 0 0; font-size: 14px; line-height: 21px; color: var(--text-hi); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .lt-kind { font-size: 11px; line-height: 16px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--link); }
