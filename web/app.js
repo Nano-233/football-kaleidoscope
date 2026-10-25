@@ -78,6 +78,7 @@ function conv(kind, v, dp = 0) {
   return `${(v * f).toFixed(dp)} ${u}`;
 }
 function unitsText(s) {
+  if (s) s = s.replace(/\bxg\b/g, 'xG');  // the writers sometimes copy the metric's key name
   if (!s || (S.profile.units || 'm,kmh,km') === 'm,kmh,km') return s;
   return s.replace(/(\d+(?:\.\d+)?)\s?(km\/h|kph|m\/s|km|metres|meters|metre|meter|m)\b/g, (all, n, w) => {
     const dp = (n.split('.')[1] || '').length;
