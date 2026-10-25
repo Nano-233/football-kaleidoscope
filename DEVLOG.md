@@ -1801,6 +1801,10 @@ User: no more min-maxing; use-case driven, best look for the judges. Walked the 
 - Fan view: possession from tracking; the player view and squad list show numbers so far (no full-match rating or later actions
   before the whistle); the result at full time; the followed player's name on the pitch; Arabic and other text sets its own direction;
   answers and recaps in paragraphs; repeated pairings numbered in the picker; scripts/README.md.
+- Video shot walk: "Why did Stonebay Albion concede?" was fact-checked yet blamed an interception at 1' (the analyst searched
+  Stonebay's own events, then broke down events 7, 11, 25). New desk tool `goals(team, conceded)` returns each goal with its move;
+  the breakdown caption says "2 attackers against 4 defenders" (the model read "2 v 4" backwards); xg shows as xG; shape-change
+  feed items get a Show shape button (the new shape drawn on the pitch).
 - Deploys from Bash silently failed (`az.cmd` under "C:\Program Files" breaks in cmd): deploy from PowerShell and check the live app.js.
 
 ## Is the tuner machine learning?
