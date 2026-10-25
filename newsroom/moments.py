@@ -16,6 +16,7 @@ GLOSSARY = {
     "big_chances": "shots with xg of 0.25 or more",
     "ppda": "passes allowed per defensive action in the opponent's build-up zone; LOWER means a more intense press",
     "passes_completed": "passes that reached a team-mate (passes is all attempts)",
+    "pressing_harder": "the side with the lower PPDA so far, i.e. the harder press: take it as given",
     "score": "home goals - away goals (teams.home first); scoreline spells it out with the names and leader says who is ahead",
 }
 
@@ -102,7 +103,10 @@ def moments(match, observed=True):
     def pack(kind, clock, t, eid, **kw):
         tt = acc.teams()
         stats = {team[i]: {k: round(tt[i][k], 2) if isinstance(tt[i][k], float) else tt[i][k] for k in STAT_KEYS} for i in (0, 1)}
-        base = dict(moment=dict(type=kind, clock=clock, t=t, id=eid), teams=dict(home=team[0], away=team[1]), team="", player="",
+        pp = [stats[team[i]]["ppda"] for i in (0, 1)]
+        harder = ("not known yet" if None in pp else team[0] if pp[0] < pp[1] - .5 else team[1] if pp[1] < pp[0] - .5
+                  else "neither: about the same")  # PPDA read once, so no writer reads it backwards
+        base = dict(moment=dict(type=kind, clock=clock, t=t, id=eid), teams=dict(home=team[0], away=team[1]), team="", player="", pressing_harder=harder,
                     score=f"{score[0]}-{score[1]}", scoreline=f"{team[0]} {score[0]}-{score[1]} {team[1]}",
                     leader=team[0] if score[0] > score[1] else team[1] if score[1] > score[0] else "level", xg=None, assist="", reason="", why="", stats=stats, glossary=GLOSSARY)
         base.update(kw)

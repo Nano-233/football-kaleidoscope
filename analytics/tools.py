@@ -591,7 +591,8 @@ class MatchView:
         # both shapes early in the move, the defenders' block, their last line, the space between their back two lines
         passes = [e for e in seq if e["type"] in ("pass", "cross") and e.get("player")]
         ts = next((e["t"] for e in passes if e0["t"] - e["t"] <= 14), e0["t"] - 5)
-        if not stops or ts - stops[0]["t"] > 2:
+        dead_ball = e0.get("kind") in ("free_kick_shot", "penalty")  # a shot from a set piece: no open-play shapes or passing lanes to draw
+        if not dead_ball and (not stops or ts - stops[0]["t"] > 2):
             a, d = self.lines_now(tm, ts, True, back=4.), self.lines_now(1 - tm, ts, False, back=4.)  # the shape drawn is the shape read
             _, xy = self._at(ts)
             dk = [k for k in on(xy, theirs) if self.role_now[self._occupant(k, ts)] != "GK"]
@@ -603,14 +604,16 @@ class MatchView:
             depth, width = float(np.ptp(P[:, 0])), float(np.ptp(P[:, 1]))
             whose = self.team_names[1 - tm] + ("'" if self.team_names[1 - tm].endswith("s") else "'s")
             stops.append(dict(t=ts, kind="shape",
-                              caption=f"{self.team_names[tm]} attack in a {a['label']} against {whose} {d['label']} without the ball: "
-                                      f"a block {width:.0f} m wide and {depth:.0f} m deep" + (f", {gap:.0f} m between its back line and the line in front." if gap >= 5 else "."),
-                              lines=[dict(team=tm, label=f"{self.team_names[tm]} with the ball: {a['label']}", rows=a["lines"]),
-                                     dict(team=1 - tm, label=f"{self.team_names[1 - tm]} without the ball: {d['label']}", rows=d["lines"])],
+                              # no formation names: mid-move the players are not in a system (a 4-second read flickers between 3-5-2, 2-4-4, 3-3-3),
+                              # so the caption gives what can be measured and the drawing shows where the lines are
+                              caption=f"{self.team_names[tm]} attack; {whose} block is {width:.0f} m wide and {depth:.0f} m deep"
+                                      + (f", with {gap:.0f} m between its back line and the line in front." if gap >= 5 else "."),
+                              lines=[dict(team=tm, label=f"{self.team_names[tm]} with the ball", rows=a["lines"]),
+                                     dict(team=1 - tm, label=f"{self.team_names[1 - tm]} without the ball", rows=d["lines"])],
                               hull=[1 - tm, hull], last_line=[1 - tm, round(last, 1)],
                               between=None if gap < 5 else [round(float(back), 1), round(float(mid), 1), round(float(P[:, 1].min()), 1), round(float(P[:, 1].max()), 1)]))
         # the last pass: every open lane from the passer, the triangles they make, the runs being made, the numbers around the ball
-        lp = next((e for e in reversed(passes) if e0["t"] - e["t"] <= 8 and e["t"] >= ts), None)
+        lp = None if dead_ball else next((e for e in reversed(passes) if e0["t"] - e["t"] <= 8 and e["t"] >= ts), None)
         if lp:
             ball, xy = self._at(lp["t"])
             _, xy2 = self._at(lp["t"] + 2.5)
@@ -649,7 +652,8 @@ class MatchView:
             block = [k for k in on(xy, theirs) if k not in gk and inside(xy[k])]
             d = float(np.hypot(*(goal - xy[s])))
             stops.append(dict(t=e0["t"], kind="shot",
-                              caption=f"{name(e0['player'])} shoots from {d:.0f} m with {len(block) or 'no'} defender{'s' * (len(block) != 1)} between him and the goal (xG {e0.get('xg', 0):.2f}).",
+                              caption=f"{name(e0['player'])} " + {"free_kick_shot": "takes the free kick", "penalty": "takes the penalty", "header": "heads"}.get(e0.get("kind"), "shoots")
+                                      + f" from {d:.0f} m with {len(block) or 'no'} defender{'s' * (len(block) != 1)} between him and the goal (xG {e0.get('xg', 0):.2f}).",
                               ring=[s] + block, names=[s] + block, cone=[s, round(float(goal[0]), 1)], keeper=gk[:1]))
         return dict(id=event_id, t=e0["t"], clock=e0["clock"], team=tm, outcome=e0.get("outcome"),
                     title=f"{e0['clock']} {'goal' if e0.get('outcome') == 'goal' else 'chance'} · {name(e0['player'])}",

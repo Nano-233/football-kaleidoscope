@@ -75,7 +75,10 @@ ADVICE = ("Write the bench advice for the {team} manager at {clock} ({score}). I
 
 CHECKER = """You are the fact-checker. Compare the ANSWER with the FINDINGS the analysts produced from their tools. Reject it if a number is
 attached to the wrong player, team, metric or minute, a metric is described wrongly (PPDA: lower means a harder press), or a claim is not
-supported by the findings. Wording, tone and language are not errors. Reply only as JSON {"approved": bool, "issues": [str]}, one short
+supported by the findings. Also reject a claim that one thing caused another (the 3-5-2 helped them control midfield, smart substitutions
+earned the draw) or about what a side was trying to do or how its players moved (went defensive, tried to protect the lead, pushed up) when
+the findings do not show it: a formation's name is not evidence of intent, and two true facts side by side do not make one the cause of
+the other. Wording, tone and language are not errors. Reply only as JSON {"approved": bool, "issues": [str]}, one short
 sentence per real error, an empty list when approved."""
 
 
@@ -117,7 +120,8 @@ def _writer_text(profile):
     lang = p.get("language", "English")
     return (f"You are the newsroom's writer. Turn the FINDINGS into the answer to the QUESTION for {who}. Length and style: "
             f"{DEPTH.get(p.get('depth', 'standard'), DEPTH['standard'])}.{side} Write in {lang}; keep player and team names as they are. "
-            "Use only facts and numbers from the FINDINGS; never invent one. Mention minutes as they appear (e.g. 63'). "
+            "Use only facts and numbers from the FINDINGS; never invent one, nor a cause, a motive or a movement the FINDINGS do not show "
+            "(a formation's name says nothing about how the side played; call a formation by the name the findings use). Mention minutes as they appear (e.g. 63'). "
             "Shares and rates between 0 and 1 (closing down, tracking, accuracy, success rates) are written as percentages: 0.031 is 3%; xG stays as it is. "
             f"Units: {', '.join(UNIT_WORDS[u] for u in _units(p))}; the FINDINGS already use them, so never convert a number.")
 
@@ -229,7 +233,9 @@ class Desk:
         def match_summary() -> dict:
             """Score, goals (minute, scorer, team), cards, substitutions, milestones (brace, hat-trick, off the bench, 50 passes, clean sheet...) and the starting formations so far."""
             ev = mv.events
-            goals = [dict(minute=e["clock"], team=mv.team_names[e["team"]], scorer=mv.names.get(e.get("player")), score=f"{e.get('home')}-{e.get('away')}") for e in ev if e["type"] in ("goal", "own_goal")]
+            goals = [dict(minute=e["clock"], team=mv.team_names[e["team"]], scorer=mv.names.get(e.get("player")), score=f"{e.get('home')}-{e.get('away')}")
+                     | ({"own_goal": f"an own goal by {mv.names.get(e.get('player'))} of {mv.team_names[1 - e['team']]}, counted for {mv.team_names[e['team']]}"} if e["type"] == "own_goal" else {})
+                     for e in ev if e["type"] in ("goal", "own_goal")]
             score = [0, 0]
             if goals:
                 last = [e for e in ev if e["type"] in ("goal", "own_goal")][-1]

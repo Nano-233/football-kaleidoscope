@@ -4,6 +4,7 @@ to how a kind of moment is packed or written.
 
     python scripts/refresh_moments.py shape_change match_1 match_7 RED-ASH HAR-STB WMW-OAK
     python scripts/refresh_moments.py '!shape_change' match_1 ...     # every kind except one
+    python scripts/refresh_moments.py recaps match_1 ...              # the half-time and full-time reports instead
 """
 import asyncio
 import gzip
@@ -15,12 +16,21 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from build_site import newsroom  # noqa: E402
+from build_site import newsroom, recaps  # noqa: E402
 from newsroom.alerts import alerts  # noqa: E402
 from newsroom.moments import moments  # noqa: E402
 
 
 def refresh(kind, mid):
+    if kind == "recaps":
+        with gzip.open(ROOT / "server" / "data" / f"{mid}.json.gz", "rt", encoding="utf-8") as fh:
+            match = json.load(fh)
+        path = ROOT / "web" / "data" / mid / "match.json"
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        doc["recaps"] = asyncio.run(recaps(match))
+        path.write_text(json.dumps(doc, separators=(",", ":")), encoding="utf-8")
+        print(mid, len(doc["recaps"]), "recaps rewritten,", sum(not r["approved"] for r in doc["recaps"]), "held")
+        return
     hit = (lambda k: k != kind[1:]) if kind.startswith("!") else (lambda k: k == kind)
     with gzip.open(ROOT / "server" / "data" / f"{mid}.json.gz", "rt", encoding="utf-8") as fh:
         match = json.load(fh)

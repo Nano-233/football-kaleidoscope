@@ -1745,7 +1745,34 @@ out: the runs went to the one replica already up and queued in its process pool,
 2 s for up to 7 minutes, so runs land on new replicas as they come up; and `/api/warm` sends 24 holds (a request that sleeps 90 s) to
 the workers when the What-if tab opens, a what-if starts or the bench starts, so the scale-out begins while the viewer sets the change
 (about $0.06 a time: 12 replicas idle for the 5-minute cooldown). Locally (one worker, 8 slots): 8 runs per round, all 24 in 42 s.
-Not yet measured on Azure with the warm-up.
+Not yet measured on Azure with the warm-up. Measured 2026-10-24, workers idle overnight: warm-up, 45 s, then the run: first pair 31 s,
+all 12 in 56 s.
+
+### Explanations that match the match: shape changes, causes, spoilers (2026-10-24)
+User: the explanation of a formation may not match what happened (wing-backs push up in a back five, but never did in that spell).
+Seen in the stored feeds (HAR-STB): Stonebay "switch" five times in the last 20 minutes and each line invents a meaning from the name:
+"a more defensive 5-4-1 to hold firm", "throwing caution to the wind". The engine's job log: 4-4-2 -> 4-3-3 at 65' and -> 3-4-3 at 87',
+both chasing the game. The reader saw it rightly (a back three with the ball, a 5-4-1 without it: the wing-backs drop); the commentator
+read "5-4-1" as defensive. The pack held only phase, previous, now, since: nothing about how the players moved, so every such claim was
+invented. Also each phase got its own line when both changed at once.
+Fixed: `MatchView.shape_profile` (back line height, block length and width, how far the two widest of the back line stand above the rest,
+in the reader's own frames) and `change_observed` (the five minutes before a change against the time since, in plain words only:
+"back line 5.8 m deeper, now 44.6 m from their own goal", "the two widest of the back 5 now 20.5 m above the rest of the back line, 5.1 m
+further forward than before"); the pack has the shape with and without the ball, and one moment when both phases change together.
+Commentator: the one or two biggest observed changes, never a meaning from the name; checker: rejects movement, intent or causes FACTS
+do not show. The Ask desk's `formation_changes` carries the same `observed`, and its writer and checker the same rules.
+What did not work first: the raw before/after numbers. The writers subtracted (6.5 m, not in the pack, so the number check rejected
+the line) and both the commentator and the checker read a smaller back_line_m as "higher", despite a note: 11 of 20 lines fell back to
+the template. Words with every number worked out: 12 of 54 across the five matches fell back (the rest are mostly the checker
+contradicting itself, a gpt-4.1-mini limit; the template is still true).
+The checker also lets causes through: "their fierce pressing is forcing mistakes", "this flank focus is helping them hold the lead",
+"Harlow's 3-5-2 helped them control midfield", "smart substitutions" in the recaps. Both checkers now reject a cause the facts do not
+link; the feeds and recaps were re-covered (`scripts/refresh_moments.py`, one kind of moment or the recaps without a site rebuild).
+3-5-2 / 5-3-2: one layout to the fit (0.003 apart), the name was a coin flip. Now named from the players: the two widest of the five
+deepest 4 m or more above the other three are wing-backs (3-5-2), else a back five. Harlow with the ball mostly 0.7-3 m: 5-3-2.
+User walkthrough (live site, 1366x768 and phone): Next moment stuck (it sought 6 s before the next key event, so the same event was next
+again) and paused; the match picker showed the final score; the Clips tab listed later goals; the squad listed substitutes (with their
+full-match rating) before they came on; the scrubber was 160 px wide; file paths in user text; fan view in analyst numbers. All fixed.
 
 ## Is the tuner machine learning?
 

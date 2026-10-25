@@ -1104,8 +1104,12 @@ function recapView() {
     const title = r.kind === 'half_time' ? 'Half-time report' : 'Full-time report';
     const watch = (r.watch || []).map(w => `<button class="link" data-seek="${w.t - 6}">Watch ${esc(w.clock)} ${esc(label(w.type).toLowerCase())}</button>`).join(' ');
     const steps = r.steps.map(st => `<li><b>${esc(st.agent.replace('_', ' '))}</b> → ${esc(st.tool.replace(/_/g, ' '))}</li>`).join('');
-    return `<li><div class="q">${title}</div><div class="meta"><span class="badge ok">Fact-checked${r.rewrites ? ` · rewritten ${r.rewrites}×` : ''}</span></div>
-      <p${r.approved ? '' : ' class="rejected"'}>${esc(tr(r.answer || r.held))}</p>${watch ? `<div class="watch">${watch}</div>` : ''}
+    const issues = (r.issues || []).flat().filter(Boolean);
+    const body = r.approved ? `<p>${esc(tr(r.answer))}</p>`  // a report the fact-checker held is not published: its draft and the reasons stay one click away
+      : `<p class="rejected">The fact-checker held this report after ${r.rewrites} rewrite${r.rewrites === 1 ? '' : 's'}, so it is not published.</p>
+        <details class="trail"><summary>The held draft and why</summary><div class="trail-body"><p class="rejected">${esc(r.held || '')}</p><ul>${issues.slice(-4).map(i => `<li>${esc(i)}</li>`).join('')}</ul></div></details>`;
+    return `<li><div class="q">${title}</div><div class="meta">${r.approved ? `<span class="badge ok">Fact-checked${r.rewrites ? ` · rewritten ${r.rewrites}×` : ''}</span>` : '<span class="badge">Held by the fact-checker</span>'}</div>
+      ${body}${watch ? `<div class="watch">${watch}</div>` : ''}
       <details class="trail"><summary>How the newsroom worked it out (${r.steps.length} steps)</summary><div class="trail-body"><ol class="steps">${steps}</ol></div></details></li>`;
   }).join('') + '</ul>';
 }
@@ -1237,7 +1241,7 @@ function exportClip() {
 
 async function exportPack() {
   const voice = VOICE[S.persona], items = (S.D.newsroom[voice] || []).filter(it => it.approved), lang = S.profile.language;
-  const recs = (S.D.recaps || []).filter(r => r.profile.persona === (S.persona === 'analyst' ? 'analyst' : 'fan'));
+  const recs = (S.D.recaps || []).filter(r => r.approved && r.profile.persona === (S.persona === 'analyst' ? 'analyst' : 'fan'));  // held reports are not published
   let texts = [...items.map(it => it.line), ...recs.map(r => r.answer || '')];
   if (lang !== 'English') {  // the whole pack in one language: translate what is not cached yet, in batches
     for (let i = 0; i < texts.length; i += 20) { texts.slice(i, i + 20).forEach(t => trQueue.add(t)); await flushTr(); }
