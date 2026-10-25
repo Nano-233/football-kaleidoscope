@@ -13,7 +13,7 @@ stats and tactics analysts, the commentator, the fact-checker.
 """
 from analytics.stats import L, W
 from analytics.tools import MatchView
-from newsroom.moments import moments
+from newsroom.moments import focus, moments
 
 CHANNEL = ("the left", "the middle", "the right")
 
@@ -66,7 +66,7 @@ def triggers(match, every=120.):
                 pct = lambda c: {(f"share_of_their_possession_{k}_pct" if share(k, v) else k): (round(v * 100, 1) if share(k, v) else v)
                                  for k, v in c.items() if k not in ("id", "t", "confirmed_t")}  # shares as labelled percentages: 0.053 is not "a rate per second"
                 facts = dict(team=teams[tm], since=new[0]["at"], changes=[pct(c) for c in new[:3]])
-                out.append((t, "duty", tm, new[0].get("id"), facts, f"{teams[tm]} without the ball since {new[0]['at']}: " + "; ".join(f"{c['player']} {c['change']}" for c in new[:3]) + "."))
+                out.append((t, "duty", tm, new[0].get("id"), facts, f"How {teams[tm]} defend has changed since {new[0]['at']}: " + "; ".join(f"{c['player']} {c['change']}" for c in new[:3]) + "."))
             done = [b for a, b in mv._windows(900.) if b <= t and b - a >= 600]
             if t >= 60 * 60 and done and t - done[-1] < every and ok("tiring", tm, t):  # a 15-minute window has just completed
                 f = mv.fatigue(tm)
@@ -102,7 +102,7 @@ def triggers(match, every=120.):
 
 def alerts(match, every=120.):
     """Alert fact packs, in time order, built like moment packs (score and stats as they stood)."""
-    base = moments(match, observed=False)
+    base = moments(match, observed=False, focused=False)
     names = {p["id"]: p["name"] for k in ("home", "away") for p in match["meta"][k]["players"] + match["meta"][k]["bench"]}
     teams = [match["meta"]["home"]["name"], match["meta"]["away"]["name"]]
     clocks = [(e["t"], e["clock"]) for e in match["events"] if e.get("clock")]
@@ -113,7 +113,7 @@ def alerts(match, every=120.):
         clock = next((c for tt, c in reversed(clocks) if tt <= t), "1'")
         b.update(moment=dict(type="alert", clock=clock, t=t, id=None, kind=kind), team=teams[tm] if tm in (0, 1) else "", player=names.get(pid, ""),
                  xg=None, assist="", reason="", why="", alert=dict(kind=kind, text=text, **facts))
-        out.append(b)
+        out.append(focus(b))
     return out
 
 

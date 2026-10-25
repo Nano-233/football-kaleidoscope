@@ -34,6 +34,18 @@ def _why(e, names):
     return s
 
 
+# Moments about the run of play keep the pressing numbers; a goal, a substitution or a shape change does not get them, or every line
+# ends up about pressing (a prompt asking the writers to hold back was not enough)
+PRESS_MOMENTS = {"spell", "half_time", "full_time"}
+
+
+def focus(pack):
+    """The pack as its moment should see it: without PPDA and pressing_harder unless the moment is about the run of play."""
+    if pack["moment"]["type"] in PRESS_MOMENTS or pack["moment"].get("kind") == "spell":
+        return pack
+    return {**{k: v for k, v in pack.items() if k != "pressing_harder"}, "stats": {tm: {k: v for k, v in st.items() if k != "ppda"} for tm, st in pack.get("stats", {}).items()}}
+
+
 def template_line(f):
     """A plain line built only from the pack: what the newsroom publishes when every agent draft was held by the fact-checker."""
     m = f["moment"]
@@ -93,7 +105,7 @@ def _observed(match, names, team):
     return sorted(out, key=lambda x: x[0])
 
 
-def moments(match, observed=True):
+def moments(match, observed=True, focused=True):
     meta, acc = match["meta"], StatsAccumulator(match["meta"])
     team = [meta["home"]["name"], meta["away"]["name"]]
     names = {p["id"]: p["name"] for k in ("home", "away") for p in meta[k]["players"] + meta[k]["bench"]}
@@ -127,7 +139,7 @@ def moments(match, observed=True):
             continue
         pack(kind, e["clock"], e["t"], e["id"], team=team[tm] if tm in (0, 1) else "", player=names.get(e.get("player"), ""), xg=e.get("xg"),
              assist=names.get(e.get("assist"), ""), reason=e.get("card") or "", why=_why(e, names))
-    return out
+    return [focus(p) for p in out] if focused else out
 
 
 if __name__ == "__main__":
