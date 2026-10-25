@@ -62,7 +62,10 @@ def triggers(match, every=120.):
             if new and ok("duty", tm, t):
                 last[("duty", tm)] = t
                 new.sort(key=lambda c: (not c["change"].startswith("tracks"), c["player"]))
-                facts = dict(team=teams[tm], since=new[0]["at"], changes=[{k: v for k, v in c.items() if k not in ("id", "t", "confirmed_t")} for c in new[:3]])
+                share = lambda k, v: k in ("before", "after") and isinstance(v, float)  # closing-down shares (heights are already metres)
+                pct = lambda c: {(f"share_of_their_possession_{k}_pct" if share(k, v) else k): (round(v * 100, 1) if share(k, v) else v)
+                                 for k, v in c.items() if k not in ("id", "t", "confirmed_t")}  # shares as labelled percentages: 0.053 is not "a rate per second"
+                facts = dict(team=teams[tm], since=new[0]["at"], changes=[pct(c) for c in new[:3]])
                 out.append((t, "duty", tm, new[0].get("id"), facts, f"{teams[tm]} without the ball since {new[0]['at']}: " + "; ".join(f"{c['player']} {c['change']}" for c in new[:3]) + "."))
             done = [b for a, b in mv._windows(900.) if b <= t and b - a >= 600]
             if t >= 60 * 60 and done and t - done[-1] < every and ok("tiring", tm, t):  # a 15-minute window has just completed

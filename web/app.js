@@ -409,7 +409,7 @@ function setPersona(p) {
 function render(force) {
   if (!S.D) return;
   const minute = Math.floor(S.t / 60), shown = feed().filter(it => it.moment.t <= S.t).length + (S.profile.playerId ? playerNotes().length : 0);
-  const key = [S.persona, S.tab, S.tab === 'Clips' || S.tab === 'Ask' ? '' : minute, S.tab === 'Clips' ? S.D.clips.filter(x => x.t <= S.t + .5).length : '', (S.D.recaps || []).filter(r => r.t <= S.t + .5).length, shown, S.player, S.group, S.clip && S.clip.id, S.custom.length, S.askVer, S.liveVer, S.profile.playerId, S.profile.metric, JSON.stringify(S.board), JSON.stringify(S.wi), S.bench && (S.bench.step + S.bench.busy + !!S.bench.r + S.bench.err), S.trVer, S.profile.language].join('|');
+  const key = [S.persona, S.tab, S.tab === 'Clips' || S.tab === 'Ask' ? '' : minute, S.tab === 'Clips' ? S.D.clips.filter(x => x.t <= S.t + .5).length : S.tab === 'Ask' ? S.D.events.filter(e => e.t <= S.t && /goal|substitution/.test(e.type)).length : '', (S.D.recaps || []).filter(r => r.t <= S.t + .5).length, shown, S.player, S.group, S.clip && S.clip.id, S.custom.length, S.askVer, S.liveVer, S.profile.playerId, S.profile.metric, JSON.stringify(S.board), JSON.stringify(S.wi), S.bench && (S.bench.step + S.bench.busy + !!S.bench.r + S.bench.err), S.trVer, S.profile.language].join('|');
   if (!force && key === S.panelKey) return;
   S.panelKey = key;
   const body = $('panel-body'), keep = body.scrollTop, same = body.dataset.view === S.persona + S.tab + S.player;
@@ -495,7 +495,7 @@ function winNow() {
 function winBar() {
   const w = winNow(), M = S.D.meta;
   if (!w) return '';
-  const p = x => Math.round(x * 100);
+  const over = S.t >= M.duration - 1, p = x => over ? Math.round(x * 100) : x < .005 ? '<1' : x > .995 ? '>99' : Math.round(x * 100);  // nothing is certain before the final whistle
   return `<div class="label">Win probability · ${esc(clockAt(S.t))}</div>
     <div class="winbar"><i style="flex:${w.home};background:var(--home)"></i><i style="flex:${w.draw};background:var(--surface-3)"></i><i style="flex:${w.away};background:var(--away)"></i></div>
     <div class="cmp-head" style="display:grid;grid-template-columns:1fr 1fr 1fr;font-size:12px;margin-top:4px"><span>${esc(M.home.code)} ${p(w.home)}%</span><span style="text-align:center">Draw ${p(w.draw)}%</span><span style="text-align:right">${esc(M.away.code)} ${p(w.away)}%</span></div>`;
@@ -1117,7 +1117,11 @@ function recapView() {
 // ---------------------------------------------------------------- ask the newsroom
 function askView() {
   const P = S.profile;
-  const sug = SUGGEST[S.persona].map(q => (q === 'How is my player doing?' && P.player ? `How is ${P.player} doing?` : q)).filter(q => q !== 'How is my player doing?');
+  // suggestions that fit the match so far: no goal or substitution questions before there is one, and the side that conceded by name
+  const past = S.D.events.filter(e => e.t <= S.t), lastGoal = past.filter(e => e.type === 'goal' || e.type === 'own_goal').pop(), subs = past.some(e => e.type === 'substitution');
+  const conceded = lastGoal && S.D.meta[lastGoal.team ? 'home' : 'away'].name;
+  const sug = SUGGEST[S.persona].map(q => (q === 'How is my player doing?' && P.player ? `How is ${P.player} doing?` : q === 'Why did they concede?' && conceded ? `Why did ${conceded} concede?` : q))
+    .filter(q => q !== 'How is my player doing?' && !(q === 'Why did they concede?') && !(q === 'Explain the last goal' && !lastGoal) && !(q === 'What changed after the substitutions?' && !subs));
   const opt = (v, cur, txt) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(txt || v)}</option>`;
   const hist = S.asks.slice().reverse().map(a => {
     if (a.pending) return `<li><div class="q">${esc(a.q)}</div><div class="thinking">The newsroom is working on it</div>
