@@ -84,10 +84,11 @@ that loses or changes a number falls back to the original. Calls retry on 429, 5
 credentials, a scripted client runs the whole pipeline offline, which is how CI tests it.
 
 **Measured accuracy.** `scripts/eval_newsroom.py` grades the answers against engine truth: 60 answers on the five
-demo matches, 0.92 overall, 82 % approved by the fact-checker (the rest were held after
-the rewrites rather than published). Goals, best player, pressing,
-duties, milestones, passing, control and the bench assistant all scored 1.0; formation scored 0.8 (7 of 9
-changes found) and fatigue 0.7. The results
+demo matches, 0.83 overall, 78 % approved by the fact-checker (the rest were held after the rewrites rather than
+published). Goals, best player, pressing, milestones, passing, control and the bench assistant scored 1.0, defensive
+duties 0.9, fatigue 0.6 and formation changes 0.5 (4 of 9 found: the formation reader's limit, not the writing). The
+answers describe shapes by what the players did (back-line height, block size, wing-back positions from tracking),
+never by what a formation's name suggests, and the checkers reject invented causes and motives. The results
 are in `web/data/eval.json` and shown in the app.
 
 ## Microsoft technology used
