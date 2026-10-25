@@ -622,19 +622,19 @@ function truthMatch() {
 }
 
 function squadView() {
-  const P = S.D.players, M = S.D.meta;
+  const P = S.D.players, M = S.D.meta, live = S.persona === 'fan' && S.t < M.duration - 1;  // a fan sees the ratings at the final whistle
   const list = side => {
     const starters = M[side].players.map(p => p.id), onAt = Object.fromEntries(S.D.events.filter(e => e.type === 'substitution').map(e => [e.on, e.t]));
     const used = M[side].bench.filter(p => onAt[p.id] !== undefined && onAt[p.id] <= S.t).map(p => p.id);  // a substitute appears once he is on
     return [...starters, ...used].map(id => {
       const p = S.info[id], s = P[id] || {};
       return `<li><button data-player="${esc(id)}"><span class="num">${p.number}</span><span>${esc(p.name)}${p.star ? ' <span class="badge">Star</span>' : ''}${starters.includes(id) ? '' : ' <span class="sub">(sub)</span>'}</span>
-        <span class="role">${esc(p.label || p.role)}</span><span class="rt">${s.rating ?? '–'}</span></button></li>`;
+        <span class="role">${esc(p.label || p.role)}</span><span class="rt">${live ? '' : s.rating ?? '–'}</span></button></li>`;
     }).join('');
   };
   return `<div class="label">${esc(M.home.name)} · ${esc(M.home.formation)}</div><ul class="squad">${list('home')}</ul>
     <div class="label">${esc(M.away.name)} · ${esc(M.away.formation)}</div><ul class="squad">${list('away')}</ul>
-    <div class="mono">Ratings (1–10) are for each player's whole match. Select a player for every action.</div>`;
+    <div class="mono">${live ? 'Ratings (1–10) come at the final whistle.' : "Ratings (1–10) are for each player's whole match."} Select a player for every action.</div>`;
 }
 
 const ROLE_KV = {
