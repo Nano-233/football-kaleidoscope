@@ -49,7 +49,7 @@ const SUGGEST = {
 };
 // the metric a viewer follows (scripts/build_site.py FOCUS: top three players by the end of each minute; control is the rhythm reader's)
 const METRICS = { '': 'No focus metric', xg: 'Chances (xG)', pressing: 'Pressing and winning it back', running: 'Running', passing: 'Hard passes', duels: 'Duels won', control: 'Control vs chaos' };
-const METRIC_UNIT = { xg: v => `xG ${v.toFixed(2)}`, pressing: v => `${v} pressures, tackles and interceptions`, running: v => conv('dist', v, 1), passing: v => `${v} hard passes completed`, duels: v => `${v} duels won` };
+const METRIC_UNIT = { xg: v => `xG ${v.toFixed(2)}`, pressing: v => `${v} pressures, tackles and interceptions`, running: v => conv('dist', v, 2), passing: v => `${v} hard passes completed`, duels: v => `${v} duels won` };
 function metricCard() {
   const k = S.profile.metric;
   if (!k || !S.D) return '';
@@ -301,7 +301,10 @@ function draw() {
     g.fillText(p ? p.number : '', X, Y + .5);
     if (k === f[3]) { g.beginPath(); g.arc(X, Y, 13, 0, 7); g.strokeStyle = 'rgba(255,255,255,.8)'; g.lineWidth = 1.5; g.stroke(); }
     if (k === sel) { g.beginPath(); g.arc(X, Y, 15, 0, 7); g.strokeStyle = COL.accent; g.lineWidth = 3; g.stroke(); }
-    if (k === fol && k !== sel) { g.setLineDash([3, 3]); g.beginPath(); g.arc(X, Y, 15, 0, 7); g.strokeStyle = COL.accent; g.lineWidth = 2; g.stroke(); g.setLineDash([]); }
+    if (k === fol && k !== sel) {  // the player the viewer follows: a dashed ring and his name, wherever he is
+      g.setLineDash([3, 3]); g.beginPath(); g.arc(X, Y, 15, 0, 7); g.strokeStyle = COL.accent; g.lineWidth = 2; g.stroke(); g.setLineDash([]);
+      g.font = '600 11px "Segoe UI", system-ui, sans-serif'; g.textBaseline = 'bottom'; g.fillStyle = COL.accent; g.fillText(p ? p.name.split(' ').pop() : '', X, Y - 18);
+    }
   }
   g.globalAlpha = 1;
   if (viewOn()) { g.save(); (S.view.kind === 'shape' ? paintShape : paintNetwork)(S.view.team, S.view); g.restore(); }
@@ -532,16 +535,19 @@ function winNow() {
   return r;
 }
 function winBar() {
-  const w = winNow(), M = S.D.meta;
+  let w = winNow();
+  const M = S.D.meta;
   if (!w) return '';
-  const over = S.t >= M.duration - 1, p = x => over ? Math.round(x * 100) : x < .005 ? '<1' : x > .995 ? '>99' : Math.round(x * 100);  // nothing is certain before the final whistle
+  const over = S.t >= M.duration - 1;
+  if (over) { const [h, a] = M.score; w = { ...w, home: +(h > a), draw: +(h === a), away: +(a > h) }; }  // at the whistle: the result, not a last estimate
+  const p = x => over ? Math.round(x * 100) : x < .005 ? '<1' : x > .995 ? '>99' : Math.round(x * 100);  // nothing is certain before the final whistle
   const club = S.profile.club, side = club === M.home.name ? 'home' : club === M.away.name ? 'away' : '';
   const mine = side ? (() => {  // the fan's own side: score from their end and the chance to win
     const g = S.D.events.filter(e => e.t <= S.t && (e.type === 'goal' || e.type === 'own_goal')).pop(), sc = g ? [g.home, g.away] : [0, 0];
     const us = side === 'home' ? 0 : 1;
     return `<div class="mono" style="margin-top:4px"><span class="badge mine">${esc(tr('Your club'))}</span> ${esc(club)} ${sc[us]}–${sc[1 - us]} · ${p(w[side])}% ${esc(tr('to win'))}</div>`;
   })() : '';
-  return `<div class="label">${esc(tr('Win probability'))} · ${esc(clockAt(S.t))}</div>
+  return `<div class="label">${esc(tr(over ? 'Result' : 'Win probability'))} · ${esc(clockAt(S.t))}</div>
     <div class="winbar"><i style="flex:${w.home};background:var(--home)"></i><i style="flex:${w.draw};background:var(--surface-3)"></i><i style="flex:${w.away};background:var(--away)"></i></div>
     <div class="cmp-head" style="display:grid;grid-template-columns:1fr 1fr 1fr;font-size:12px;margin-top:4px"><span>${esc(M.home.code)} ${p(w.home)}%</span><span style="text-align:center">${esc(tr('Draw'))} ${p(w.draw)}%</span><span style="text-align:right">${esc(M.away.code)} ${p(w.away)}%</span></div>${mine}`;
 }
