@@ -28,16 +28,17 @@ tools for GitHub Copilot agent mode, GitHub Actions (tests, image build).
 
 ## Video (under 2 minutes): shot list
 
-Record at 1920x1080 on the live link, browser full screen, no music with rights issues (silence or a voice-over). Speed 5x unless
-noted. About 115 s total.
+Record at 1920x1080 on the live link, browser full screen with the page zoom at 125% (Ctrl +) so the text reads on video, no music
+with rights issues (silence or a voice-over). Speed 5x unless noted. About 115 s total. Before recording: open the link once (the
+app wakes up), then open a private window so the welcome card shows; open the What-if tab once so the workers are warm.
 
 | # | Time | Screen | Voice-over (suggested) |
 |---|---|---|---|
-| 1 | 0:00-0:08 | Title card or the match page loading, `HAR-STB`, Fan view | "A scoreline doesn't say why. Matchday Newsroom is a team of AI agents that explains a match as it happens." |
+| 1 | 0:00-0:08 | The link opening on the welcome card (Harlow Athletic v Stonebay Albion), then **Explore on my own** | "A scoreline doesn't say why. Matchday Newsroom is a team of AI agents that explains a match as it happens." |
 | 2 | 0:08-0:22 | Press **Next moment** twice: the 13' goal, the lower-third overlay and the Live feed | "Every key moment is covered by four agents: two analysts, a commentator, and a fact-checker that rejects anything the data doesn't show." |
 | 3 | 0:22-0:32 | Switch persona **Fan -> Analyst -> Scout** at the same minute | "The same moment, written for a fan, an analyst and a scout." |
 | 4 | 0:32-0:42 | Settings: language **Español**, favourite club Stonebay; feed and overlay re-render | "In nine languages, from your club's side." |
-| 5 | 0:42-0:58 | Analyst, **Feed** at 72'-89': a shape-change line; then **Board > Shape** with the dashed back line | "When a team changes shape, the newsroom says what the players actually did, measured from tracking: the back line, the block, the wing-backs." |
+| 5 | 0:42-0:58 | Analyst, **Feed** at about 76': the 72' shape-change line, then its **Show shape** button (the new shape drawn on the pitch) | "When a team changes shape, the newsroom says what the players actually did, measured from tracking: the back line, the block, the wing-backs." |
 | 6 | 0:58-1:12 | **Ask**: "Why did Harlow Athletic concede?" (cached is fine); open "How the newsroom worked it out" | "Ask anything. An orchestrator sends specialists to the tools, a writer answers for you, a fact-checker signs it off, and the whole trail is visible." |
 | 7 | 1:12-1:30 | **What if** (open the tab first so the workers warm up): pressing up from 60', **Play it out**; pairs fill in | "What if they'd pressed higher? Twenty-four simulations run in parallel on Azure Container Apps, each pair with the same random numbers, so only the change differs." |
 | 8 | 1:30-1:40 | **Clips > Breakdown** of a goal: the move paused and drawn | "Every goal can be broken down: where the ball was won, the open lanes, the shot." |

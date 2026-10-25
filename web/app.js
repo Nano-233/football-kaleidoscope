@@ -512,7 +512,7 @@ function feedView(mode) {
       : it.rewrites ? `<span class="badge ok">Fact-checked · rewritten ${it.rewrites}×</span>` : `<span class="badge ok">Fact-checked</span>`;
     const ours = club && isOurs(it, club);
     return `<li class="${it.moment.type === 'alert' ? 'alert' : ''}${ours ? ' mine' : ''}"><div class="meta"><span class="t">${esc(it.moment.clock)}</span><span class="kind">${esc(tr(kindLabel(it.moment)))}</span>${ours ? `<span class="badge mine">${esc(tr('Your club'))}</span>` : ''}${mode === 'analyst' ? badge : ''}${it.latency_s != null ? `<span class="badge live" title="From the moment arriving to the line going out, live on Foundry">Live · ${it.latency_s} s</span>` : ''}
-      <button class="jump" data-share="${it.moment.t}|${esc(it.moment.type)}">Share</button>${bdBtn(it.moment.t)}<button class="jump" data-seek="${it.moment.t - 8}">Watch</button></div>
+      <button class="jump" data-share="${it.moment.t}|${esc(it.moment.type)}">Share</button>${it.view ? `<button class="jump" data-feedview="${it.moment.t}">Show shape</button>` : ''}${bdBtn(it.moment.t)}<button class="jump" data-seek="${it.moment.t - 8}">Watch</button></div>
       <p dir="auto"${it.approved ? '' : ' class="rejected"'}>${esc(tr(it.line))}</p>${mode === 'analyst' ? trail(it) : ''}</li>`;
   }).join('') + '</ul>';
 }
@@ -1461,6 +1461,10 @@ $('panel-body').addEventListener('click', e => {
   else if (d.bmode) { S.board.mode = d.bmode; render(true); }
   else if (d.bteam !== undefined) { S.board.team = +d.bteam; render(true); }
   else if (d.bphase) { S.board.phase = d.bphase; render(true); }
+  else if (d.feedview) {  // a shape change in the feed: its new shape drawn on the pitch
+    const it = feed().find(x => x.view && String(x.moment.t) === d.feedview);
+    if (it) { S.view = it.view; setPlaying(false); toast('Shown on the pitch. Press Esc or Hide to go back to the live picture.'); draw(); render(true); }
+  }
   else if (d.ansview) {
     const [ai, vi] = d.ansview.split(':').map(Number), v = S.asks[ai].r.views[vi];
     if (v.kind === 'move') { S.view = null; S.reel = { name: 'The move', who: v.title.replace('The move: ', ''), segs: [{ start: Math.max(0, v.start - 2), end: v.end + 3, clock: '' }], i: 0 }; seek(v.start - 2); setPlaying(true); }

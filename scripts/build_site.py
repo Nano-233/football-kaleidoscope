@@ -194,6 +194,27 @@ def duties(match):
     return out
 
 
+def shape_views(match, feed):
+    """A drawable shape for every shape-change item in the feed: the side's average positions from the change to when it was confirmed,
+    in that phase (the frames the formation reader used), so the viewer can see the new shape on the pitch with one click. Kept out of
+    the agents' fact packs."""
+    mv = MatchView(match)
+    views = {}
+    for tm in (0, 1):
+        for c in mv.formation_timeline(tm)["changes"]:
+            ph = "in" if c["phase"] == "in_possession" else "out"
+            sh = mv.shape(tm, c["t"], c["confirmed_t"], ph, attacking=mv.read_attack)
+            if "positions" in sh:
+                views.setdefault(round(c["confirmed_t"], 1), dict(kind="shape", team=tm, phase=c["phase"], line=sh["defensive_line_m"],
+                                 title=f"{mv.team_names[tm]} {c['formation']} {c['phase'].replace('_', ' ')} since {c['at']}",
+                                 positions=[[q["id"], q["x"], q["y"]] for q in sh["positions"]]))
+    for items in feed.values():
+        for it in items:
+            if it["moment"]["type"] == "shape_change" and round(it["moment"]["t"], 1) in views:
+                it["view"] = views[round(it["moment"]["t"], 1)]
+    return feed
+
+
 def breakdowns(match):
     """The pause-and-draw breakdown of every goal and big chance (penalties aside)."""
     mv = MatchView(match)
@@ -242,7 +263,7 @@ def build(src, keep_agents=False):
     events = [{k: v for k, v in e.items() if k not in ("freeze_frame", "why", "players", "bench")} for e in match["events"]]
     old = json.loads((dest / "match.json").read_text(encoding="utf-8")) if keep_agents else {}
     doc = dict(meta=meta, n_frames=len(q), events=events, team_stats=timeline, players=players, leaders=leaders,
-               newsroom=old.get("newsroom") or asyncio.run(newsroom(packs)), recaps=old.get("recaps") or asyncio.run(recaps(match)), reading=reading(match), board=board(match),
+               newsroom=shape_views(match, old.get("newsroom") or asyncio.run(newsroom(packs))), recaps=old.get("recaps") or asyncio.run(recaps(match)), reading=reading(match), board=board(match),
                breakdowns=breakdowns(match), profiles=profiles(match), tags=MatchView(match).player_tags(), milestones=MatchView(match).milestones(), duties=duties(match), fatigue=[MatchView(match).fatigue(t) for t in (0, 1)], clips=clips(match["events"], {k: v["name"] for k, v in players.items()}, meta["duration"]))
     (dest / "match.json").write_text(json.dumps(doc, separators=(",", ":")), encoding="utf-8")
     print(dest, f"{sum(f.stat().st_size for f in dest.iterdir()) / 1e6:.1f} MB,", len(packs), "moments,", len(doc["clips"]), "clips")
