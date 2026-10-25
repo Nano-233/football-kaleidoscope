@@ -42,8 +42,8 @@ without_ball_changes (those describe how the side defended; mention them only as
 (the score from find_moments with goals, red cards, substitutions) is what a manager reacts to. Look for causes: changes of shape, pressing height and PPDA by period, momentum
 spells, where attacks start, substitutions. For who presses, who tracks whom and who holds which space (and when that changed), use
 defensive_duties: its numbers are shares of the opponents' possession, read from tracking. For whether a side controlled the game
-or it was chaotic, and the rhythm (tempo, stoppages), use control_and_rhythm; for who is tiring, fatigue. For why goals were scored or conceded, find every one of
-those goals so far with find_moments and call moment_breakdown on each: say how each move was built and where it beat the defence (who lost the ball,
+or it was chaotic, and the rhythm (tempo, stoppages), use control_and_rhythm; for who is tiring, fatigue. For why goals were scored or conceded, call goals (with conceded=true for the goals a team let in): it gives every one of
+those goals so far with the move behind it; use moment_breakdown only for more detail on one of them: say how each move was built and where it beat the defence (who lost the ball,
 the pass that broke the line, who was free), not general trends. For a "what if" question (a different instruction or formation from a minute on), use what_if
 and report both columns, as it was and with the change, as chances out of the runs; say the runs are simulations. Use only numbers your tools returned. Reply with concise findings (bullet points), each with
 its numbers and the minutes (e.g. 63') it refers to."""
@@ -328,6 +328,27 @@ class Desk:
             """Pass links between players, average pass positions, the main connectors and which side entries into the final third favour."""
             return mv.passing_network(team_ix(team), t_from(from_minute), t_to(to_minute) if to_minute else None)
 
+        def goals(team: Annotated[str, "home, away or the team name"], conceded: Annotated[bool, "true for the goals this team let in, false for the goals it scored"] = False) -> dict:
+            """Every goal a team scored or conceded so far, each with its minute, scorer and the move that led to it, told step by step
+            (where the ball was won, the last pass and the open lanes, the finish and who was in the way). Use this for why a team scored
+            or conceded, and cover every goal it returns."""
+            t = team_ix(team)
+            side = 1 - t if conceded else t
+            ev, out = mv.events, []
+            for i, g in enumerate(ev):
+                if g["type"] not in ("goal", "own_goal") or g.get("team") != side:
+                    continue
+                item = dict(minute=g["clock"], scored_by=mv.names.get(g.get("player")), for_team=mv.team_names[side],
+                            own_goal=g["type"] == "own_goal", score_after=f"{g.get('home')}-{g.get('away')}")
+                prev = next((x for x in reversed(ev[max(0, i - 4):i]) if x["type"] in ("shot", "pass", "cross")), None)
+                if prev and g["type"] == "goal":
+                    try:
+                        item["the_move"] = [s_["caption"] for s_ in mv.breakdown(prev["id"])["stops"]]
+                    except (KeyError, ValueError, StopIteration, IndexError):
+                        pass
+                out.append(item)
+            return dict(team=mv.team_names[t], conceded=bool(conceded), goals=out)
+
         def moment_breakdown(event_id: Annotated[int, "the id of the event (a goal, shot, etc.) from find_moments"]) -> dict:
             """The possession that led to a moment, step by step, with the alternatives each player had and the pressure he was under."""
             return mv.sequence(int(event_id))
@@ -373,7 +394,7 @@ class Desk:
             self.trail.append(dict(agent="tactics_analyst", tool="what_if", args=kw))
             return json.dumps(out, default=str)
 
-        tt = [team_shape, formation_changes, pressing, defensive_duties, control_and_rhythm, fatigue, stat_leaders, momentum, passing_network, moment_breakdown, find_moments, match_summary]
+        tt = [team_shape, formation_changes, pressing, defensive_duties, control_and_rhythm, fatigue, stat_leaders, momentum, passing_network, goals, moment_breakdown, find_moments, match_summary]
         st = [player_report, stat_leaders, defensive_duties, fatigue, find_moments, moment_breakdown, list_players, match_summary]
         self.tool_fns = {f.__name__: f for f in tt + st}  # the plain tools (metres, no logging), for the MCP server (server/mcp_server.py)
         self.tactics = Agent(client, TACTICS, name="tactics_analyst", tools=[logged("tactics_analyst", f) for f in tt] + [what_if])

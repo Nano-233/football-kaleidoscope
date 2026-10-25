@@ -628,12 +628,13 @@ class MatchView:
             runs = sorted(([k, *map(lambda v: round(float(v), 1), (*xy[k], *xy2[k]))] for k in on(xy, mine) if k != p and (xy2[k][0] - xy[k][0]) * fwd >= 10),
                           key=lambda r: -abs(r[3] - r[1]))[:3]  # 10 m forward in 2.5 s: a run, not a jog
             near = lambda ks: sum(np.hypot(*(xy[k] - ball)) <= 15 for k in on(xy, ks))
-            us, them = near(mine), near(theirs)
+            us, them = int(near(mine)), int(near(theirs))
             open_ = rcv is None or self._lane_open(xy[p], xy[rcv], opp)
             what = "crosses for" if lp["type"] == "cross" else "goes over the top to" if lp.get("lofted") else "picks out" if open_ else "forces it through to"
             stops.append(dict(t=lp["t"], kind="options",
                               caption=f"{name(lp['player'])} has {n} open passing lane{'s' * (n != 1)} and {what} {name(lp.get('receiver')) or 'a team-mate'}. "
-                                      f"{us} v {them} within 15 m of the ball" + (f"; {len(runs)} forward run{'s' * (len(runs) != 1)} under way." if runs else "."),
+                                      f"{us} attacker{'s' * (us != 1)} against {them} defender{'s' * (them != 1)} within 15 m of the ball"
+                                      + (f"; {len(runs)} forward run{'s' * (len(runs) != 1)} under way." if runs else "."),
                               ring=[p], names=sorted({p, *opts, *(r[0] for r in runs)}), opts=[[p, k, int(k == rcv)] for k in opts], tris=[[p, a, b] for a, b in tris],
                               runs=runs, zone=[round(float(ball[0]), 1), round(float(ball[1]), 1), 15, int(us), int(them)]))
         # the shot
