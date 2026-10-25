@@ -123,7 +123,7 @@ async function boot() {
   $('match').value = want;
   setPersona(S.persona);
   await load(want);
-  if (+q.get('t') > 0) S.t = Math.min(+q.get('t'), S.D.meta.duration);  // a link to a moment: ?t=<match seconds>&tab=<panel>
+  if (+q.get('t') > 0) seek(+q.get('t'));  // a link to a moment: ?t=<match seconds>&tab=<panel> (seek draws the pitch and the scoreboard there)
   if (TABS[S.persona].includes(q.get('tab'))) { S.tab = q.get('tab'); setTabs(); }
   render(true);
   let seen = false;
