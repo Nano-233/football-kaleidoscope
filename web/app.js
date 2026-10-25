@@ -503,7 +503,7 @@ function feedView(mode) {
   const club = S.profile.club;  // moments that name the viewer's club are marked as theirs
   return `<ul class="feed ${mode}">` + items.map(it => {
     if (it.note) return `<li class="note"><div class="meta"><span class="t">${esc(it.moment.clock)}</span><span class="kind">${esc(it.milestone ? tr('Milestone') : S.profile.player)}</span>
-      <button class="jump" data-seek="${it.moment.t - 6}">Watch</button></div><p>${esc(tr(it.line))}</p></li>`;
+      <button class="jump" data-seek="${it.moment.t - 6}">Watch</button></div><p dir="auto">${esc(tr(it.line))}</p></li>`;
     if (it.pending) return `<li class="pending"><div class="meta"><span class="t">${esc(it.moment.clock)}</span><span class="kind">${esc(kindLabel(it.moment))}</span>
       <span class="badge live">${it.pending === 'drafting' ? 'Newsroom drafting · checking' : 'Queued for the newsroom'}</span></div><p>${tr('The desk is on it…')}</p></li>`;
     if (!it.approved && mode === 'fan') return '';
@@ -513,7 +513,7 @@ function feedView(mode) {
     const ours = club && isOurs(it, club);
     return `<li class="${it.moment.type === 'alert' ? 'alert' : ''}${ours ? ' mine' : ''}"><div class="meta"><span class="t">${esc(it.moment.clock)}</span><span class="kind">${esc(tr(kindLabel(it.moment)))}</span>${ours ? `<span class="badge mine">${esc(tr('Your club'))}</span>` : ''}${mode === 'analyst' ? badge : ''}${it.latency_s != null ? `<span class="badge live" title="From the moment arriving to the line going out, live on Foundry">Live · ${it.latency_s} s</span>` : ''}
       <button class="jump" data-share="${it.moment.t}|${esc(it.moment.type)}">Share</button>${bdBtn(it.moment.t)}<button class="jump" data-seek="${it.moment.t - 8}">Watch</button></div>
-      <p${it.approved ? '' : ' class="rejected"'}>${esc(tr(it.line))}</p>${mode === 'analyst' ? trail(it) : ''}</li>`;
+      <p dir="auto"${it.approved ? '' : ' class="rejected"'}>${esc(tr(it.line))}</p>${mode === 'analyst' ? trail(it) : ''}</li>`;
   }).join('') + '</ul>';
 }
 
@@ -1180,7 +1180,7 @@ function recapView() {
     const watch = (r.watch || []).map(w => `<button class="link" data-seek="${w.t - 6}">Watch ${esc(w.clock)} ${esc(label(w.type).toLowerCase())}</button>`).join(' ');
     const steps = r.steps.map(st => `<li><b>${esc(st.agent.replace('_', ' '))}</b> → ${esc(st.tool.replace(/_/g, ' '))}</li>`).join('');
     const issues = (r.issues || []).flat().filter(Boolean);
-    const body = r.approved ? tr(r.answer).split(/\n\s*\n/).map(x => `<p>${esc(x.trim())}</p>`).join('')  // a report the fact-checker held is not published: its draft and the reasons stay one click away
+    const body = r.approved ? tr(r.answer).split(/\n\s*\n/).map(x => `<p dir="auto">${esc(x.trim())}</p>`).join('')  // a report the fact-checker held is not published: its draft and the reasons stay one click away
       : `<p class="rejected">The fact-checker held this report after ${r.rewrites} rewrite${r.rewrites === 1 ? '' : 's'}, so it is not published.</p>
         <details class="trail"><summary>The held draft and why</summary><div class="trail-body"><p class="rejected">${esc(r.held || '')}</p><ul>${issues.slice(-4).map(i => `<li>${esc(i)}</li>`).join('')}</ul></div></details>`;
     return `<li><div class="q">${title}</div><div class="meta">${r.approved ? `<span class="badge ok">Fact-checked${r.rewrites ? ` · rewritten ${r.rewrites}×` : ''}</span>` : '<span class="badge">Held by the fact-checker</span>'}</div>
@@ -1208,7 +1208,7 @@ function askView() {
     const watch = (r.watch || []).map(w => `<button class="link" data-seek="${w.t - 6}">Watch ${esc(w.clock)} ${esc(label(w.type).toLowerCase())}</button>`).join(' ')
       + (r.views || []).map((v, i) => `<button class="link" data-ansview="${S.asks.indexOf(a)}:${i}">${v.kind === 'move' ? 'Replay' : 'Show'}: ${esc(v.title)}</button>`).join(' ');
     return `<li><div class="q">${esc(a.q)}</div><div class="meta">${badge}${r.cached ? '<span class="badge">cached</span>' : ''}<span class="mono">as of ${esc(a.clock)}</span></div>
-      <p${r.approved ? '' : ' class="rejected"'}>${esc(r.answer || r.held)}</p>${watch ? `<div class="watch">${watch}</div>` : ''}
+      ${String(r.answer || r.held || '').split(/\n\s*\n/).map(x => `<p dir="auto"${r.approved ? '' : ' class="rejected"'}>${esc(x.trim())}</p>`).join('')}${watch ? `<div class="watch">${watch}</div>` : ''}
       <details class="trail"><summary>How the newsroom worked it out (${r.steps.length} steps)</summary><div class="trail-body"><ol class="steps">${steps}</ol>
       <h4>Findings handed to the writer</h4><pre>${esc(r.findings)}</pre></div></details></li>`;
   }).join('');
