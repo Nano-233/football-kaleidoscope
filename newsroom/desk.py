@@ -127,7 +127,8 @@ def _writer_text(profile):
             "(a formation's name says nothing about how the side played; call a formation by the name the findings use). No hedged guesses ('may have', "
             "'such as', 'possibly'): say what the findings show, or leave it out; for a goal, tell the move as the findings give it (who won the ball, the pass, the finish). "
             "Never say two things that contradict each other about the same player or team; when you discuss a player who scored, say so; "
-            "if the question takes something for granted that the findings do not show, say plainly that the data does not support it. "
+            "check the question against MATCH STATE first: if it takes something for granted that the match state or the findings contradict "
+            "(a likely draw when one side leads), open by correcting it. "
             "Write in British English (metres, centre, defence). "
             "Mention minutes as they appear (e.g. 63'). "
             "Shares and rates between 0 and 1 (closing down, tracking, accuracy, success rates) are written as percentages: 0.031 is 3%; xG stays as it is. "
@@ -479,9 +480,20 @@ class Desk:
         return dict(question=question, views=views, answer=last["answer"] if last["approved"] else None, held=None if last["approved"] else last["answer"],
                     approved=last["approved"], rewrites=len(attempts) - 1, findings=found, steps=self.trail[n0:], attempts=attempts, watch=watch)
 
+    def _state(self):
+        """The match as it stands: score, minute and the win probability model now."""
+        mv, g = self.mv, [e for e in self.mv.events if e["type"] in ("goal", "own_goal")]
+        wp = mv.win_probability()["series"]
+        w = wp[-1] if wp else {}
+        return dict(minute=mv.events[-1]["clock"] if mv.events else "1'", score=f"{mv.team_names[0]} {g[-1]['home'] if g else 0}-{g[-1]['away'] if g else 0} {mv.team_names[1]}",
+                    win_probability_now={mv.team_names[0]: w.get("home"), "draw": w.get("draw"), mv.team_names[1]: w.get("away")})
+
     async def _write_checked(self, question, found):
         """The writer drafts from the findings; the LLM fact-checker and the deterministic checks judge it; up to MAX_REWRITES rewrites."""
         facts = {"facts": self.facts, "question": [float(n) for n in re.findall(r"\d+(?:\.\d+)?", question)]}  # the reader's own numbers (a minute they asked about) are given
+        state = self._state()  # the score, the minute and the chances, so a question that takes a wrong state for granted is corrected
+        self.facts.append(state)
+        found = f"MATCH STATE: {json.dumps(state)}\n{found}"
         brief = f"QUESTION: {question}\nFINDINGS:\n{found}\n"
         attempts, ask = [], brief
         for _ in range(1 + MAX_REWRITES):
