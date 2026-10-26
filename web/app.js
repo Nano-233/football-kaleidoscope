@@ -8,7 +8,7 @@ const SX = (cv.width - 2 * PAD) / L, SY = (cv.height - 2 * PAD) / W, px = x => P
 const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const COL = { home: css('--home'), away: css('--away'), accent: css('--accent'), good: css('--good'), bad: css('--bad'), pitch: css('--pitch'), line: css('--pitch-line') };
 
-const TABS = { fan: ['Live', 'Ask', 'Recap', 'Players', 'Stats', 'Clips'], analyst: ['Feed', 'Board', 'What if', 'Ask', 'Recap', 'Stats', 'Clips'], scout: ['Players', 'Ask', 'Clips'] };
+const TABS = { fan: ['Live', 'Ask', 'Recap', 'Players', 'Stats', 'Clips'], analyst: ['Feed', 'Board', 'What if', 'Ask', 'Players', 'Recap', 'Stats', 'Clips'], scout: ['Players', 'Ask', 'Clips'] };
 const VOICE = { fan: 'fan', analyst: 'analyst', scout: 'analyst' };  // which newsroom feed each persona reads
 const GROUPS = {
   All: null,
@@ -78,7 +78,7 @@ function conv(kind, v, dp = 0) {
   return `${(v * f).toFixed(dp)} ${u}`;
 }
 function unitsText(s) {
-  if (s) s = s.replace(/\bxg\b/g, 'xG');  // the writers sometimes copy the metric's key name
+  if (s) s = s.replace(/\bxg\b/g, 'xG').replace(/\b(kilo)?meter(s?)\b/gi, (w, k, pl) => `${k || ''}metre${pl}`);  // the metric's key name; one spelling (British)
   if (!s || (S.profile.units || 'm,kmh,km') === 'm,kmh,km') return s;
   return s.replace(/(\d+(?:\.\d+)?)\s?(km\/h|kph|m\/s|km|metres|meters|metre|meter|m)\b/g, (all, n, w) => {
     const dp = (n.split('.')[1] || '').length;
@@ -100,7 +100,8 @@ function tr(text) {
 }
 async function flushTr() {
   const lang = S.profile.language, texts = [...trQueue].filter(t => !(TR[lang] || {})[t]).slice(0, 20);
-  trQueue.clear();
+  for (const t of texts) trQueue.delete(t);  // send 20 at a time; the rest stay queued for the next round
+  if (trQueue.size) { clearTimeout(trTimer); trTimer = setTimeout(flushTr, 400); }
   if (!texts.length) return;
   try {
     const r = await fetch('api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ language: lang, texts }) });
@@ -184,8 +185,9 @@ async function load(id) {
   $('seek').max = D.meta.duration;
   $('club').innerHTML = '<option value="">Neutral</option>' + ['home', 'away'].map(k => `<option${S.profile.club === D.meta[k].name ? ' selected' : ''}>${esc(D.meta[k].name)}</option>`).join('');
   if (S.profile.playerId && !S.info[S.profile.playerId]) Object.assign(S.profile, { player: '', playerId: '' });
-  if (S.profile.club && ![D.meta.home.name, D.meta.away.name].includes(S.profile.club)) S.profile.club = '';  // a club from another match is not playing in this one
-  S.asks = [];
+  if (S.profile.club && ![D.meta.home.name, D.meta.away.name].includes(S.profile.club)) S.profile.club = '';
+  setTimeout(pretranslate, 0);  // a club from another match is not playing in this one
+  S.asks = []; S.reveal = false;
   marks();
   syncUrl();
   $('loading').hidden = true;
@@ -374,8 +376,8 @@ function hud(t) {
   const [h, a] = scoreAt(t), clock = clockAt(t), per = periodAt(t), key = `${h}${a}${clock}${per}`;
   if (key !== hudKey) {
     hudKey = key;
-    $('h-score').textContent = h; $('a-score').textContent = a; $('clock').textContent = per === 'Full time' ? 'FT' : clock; $('period').textContent = per;
-    $('sb-clock').textContent = `${per === 'Full time' ? 'FT' : clock} · ${per}`;
+    $('h-score').textContent = h; $('a-score').textContent = a; $('clock').textContent = per === 'Full time' ? 'FT' : clock; $('period').textContent = tr(per);
+    $('sb-clock').textContent = `${per === 'Full time' ? 'FT' : clock} · ${tr(per)}`;
     for (const tm of [0, 1]) {  // the scorers under each side, as far as the replay has got (an own goal is listed for the side it counted for)
       $(tm ? 'a-goals' : 'h-goals').innerHTML = S.D.events.filter(e => (e.type === 'goal' || e.type === 'own_goal') && e.team === tm && e.t <= t)
         .map(e => `<span>${esc(surname(e.player))} ${esc(e.clock)}${e.type === 'own_goal' ? ' (og)' : ''}</span>`).join('');
@@ -443,7 +445,7 @@ function setPersona(p) {
 function render(force) {
   if (!S.D) return;
   const minute = Math.floor(S.t / 60), shown = feed().filter(it => it.moment.t <= S.t).length + (S.profile.playerId ? playerNotes().length : 0);
-  const key = [S.persona, S.tab, S.tab === 'Clips' || S.tab === 'Ask' ? '' : minute, S.tab === 'Clips' ? S.D.clips.filter(x => x.t <= S.t + .5).length : S.tab === 'Ask' ? S.D.events.filter(e => e.t <= S.t && /goal|substitution/.test(e.type)).length : '', (S.D.recaps || []).filter(r => r.t <= S.t + .5).length, shown, S.player, S.group, S.clip && S.clip.id, S.custom.length, S.askVer, S.liveVer, S.profile.playerId, S.profile.metric, JSON.stringify(S.board), JSON.stringify(S.wi), S.bench && (S.bench.step + S.bench.busy + !!S.bench.r + S.bench.err), S.trVer, S.profile.language, S.profile.club].join('|');
+  const key = [S.persona, S.tab, S.tab === 'Clips' || S.tab === 'Ask' ? '' : minute, S.tab === 'Clips' ? S.D.clips.filter(x => x.t <= S.t + .5).length : S.tab === 'Ask' ? S.D.events.filter(e => e.t <= S.t && /goal|substitution/.test(e.type)).length + '/' + S.asks.filter(a => a.t <= S.t + 1).length : '', (S.D.recaps || []).filter(r => r.t <= S.t + .5).length, shown, S.player, S.group, S.clip && S.clip.id, S.custom.length, S.askVer, S.liveVer, S.profile.playerId, S.profile.metric, JSON.stringify(S.board), JSON.stringify(S.wi), S.bench && (S.bench.step + S.bench.busy + !!S.bench.r + S.bench.err), S.trVer, S.profile.language, S.profile.club].join('|');
   if (!force && key === S.panelKey) return;
   S.panelKey = key;
   const body = $('panel-body'), keep = body.scrollTop, same = body.dataset.view === S.persona + S.tab + S.player;
@@ -623,7 +625,7 @@ function truthMatch() {
 }
 
 function squadView() {
-  const P = S.D.players, M = S.D.meta, live = S.persona === 'fan' && S.t < M.duration - 1;  // a fan sees the ratings at the final whistle
+  const P = S.D.players, M = S.D.meta, live = S.t < M.duration - 1 && !S.reveal;  // ratings come at the final whistle
   const list = side => {
     const starters = M[side].players.map(p => p.id), onAt = Object.fromEntries(S.D.events.filter(e => e.type === 'substitution').map(e => [e.on, e.t]));
     const used = M[side].bench.filter(p => onAt[p.id] !== undefined && onAt[p.id] <= S.t).map(p => p.id);  // a substitute appears once he is on
@@ -746,7 +748,7 @@ function soFar(pid) {
 }
 function playerView() {
   const p = S.info[S.player], s = S.D.players[S.player] || {}, side = p.team ? 'away' : 'home';
-  const live = S.persona === 'fan' && S.t < S.D.meta.duration - 1, sf = live ? soFar(S.player) : null;
+  const live = S.t < S.D.meta.duration - 1 && !S.reveal, sf = live ? soFar(S.player) : null;  // before the whistle: numbers so far (a scout may ask for the whole match)
   const kv = live ? [['Goals', sf.goals], ['xG', sf.xg.toFixed(2)], ['Shots', sf.shots], ['Key passes', sf.key], ['Take-ons won', sf.takeons], ['Tackles won', sf.tackles]]
     .map(([l, v]) => `<div><b>${v}</b><span>${l}</span></div>`).join('')
     : kvFor(p.role).map(([k, l, f]) => `<div><b>${s[k] == null ? '–' : f ? f(s[k]) : s[k]}</b><span>${l}</span></div>`).join('');
@@ -766,12 +768,13 @@ function playerView() {
       <div class="sub">${live ? sf.minutes : s.minutes ?? 0} minutes played${live ? ' so far' : ''}${p.foot ? ` · ${p.foot === 'left' ? 'Left' : 'Right'}-footed, weak foot ${Math.round(p.weak_foot)}/20` : ''}</div></div><span class="rating" title="${live ? 'The rating comes at full time' : 'Full-match rating'}">${live ? '–' : s.rating ?? '–'}</span></div>
     <div class="label">${live ? `So far · ${esc(clockAt(S.t))}` : 'Full match'}</div><div class="kv">${kv}</div>
     ${s.passes && !live ? `<div class="label">Pass quality${s.shots ? ' and shooting' : ''}</div><div class="kv"><div><b>${conv('len', s.avg_pass_length_m, 1)}</b><span>Avg pass length</span></div>
-      <div><b>${s.avg_pass_difficulty?.toFixed(2) ?? '–'}</b><span>Avg difficulty</span></div><div><b>${s.hard_passes_completed}/${s.hard_passes}</b><span>Hard passes completed</span></div>
+      <div title="How hard a pass was: 1 minus the chance the engine's pass model gave it of reaching the team-mate when he chose it (like xG, but for passes). 0.5 or more counts as a hard pass."><b>${s.avg_pass_difficulty?.toFixed(2) ?? '–'}</b><span>Avg difficulty ⓘ</span></div><div><b>${s.hard_passes_completed}/${s.hard_passes}</b><span>Hard passes completed</span></div>
       ${s.shots ? `<div><b>${conv('spd', s.top_shot_speed_kmh)}</b><span>Fastest shot</span></div>` : ''}</div>` : ''}
     <div class="bar" style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
       ${S.persona === 'scout' ? `<button class="btn primary" data-report="${esc(S.player)}">Scout report</button>` : `<button class="btn primary" data-hismatch="${esc(S.player)}">His match</button>`}
       <button class="btn" data-reel="Highlights">Highlights reel</button></div>
-    ${live ? '<div class="mono" style="margin-top:12px">His full-match numbers, rating and heat map come at the final whistle.</div>' : profileBlocks(S.player, p) + fatigueBlock(S.player, p.team) + dutyBlock(S.player, p.team)}
+    ${live ? `<div class="mono" style="margin-top:12px">His full-match numbers, rating and heat map come at the final whistle.</div>${S.persona === 'scout' ? '<div class="bar" style="margin-top:8px"><button class="btn" data-act="reveal">Show full-match profile (spoils the result)</button></div>' : ''}`
+      : profileBlocks(S.player, p) + fatigueBlock(S.player, p.team) + dutyBlock(S.player, p.team)}
     <div class="label">Actions (${acts.length})</div><div class="chips">${chips}</div>
     <ul class="actions" style="margin-top:10px">${rows || '<li><span></span><span class="empty">No actions in this group.</span></li>'}</ul>
     ${S.group === 'All' ? '<div class="mono" style="margin-top:8px">Pressures are under Defending.</div>' : ''}`;
@@ -1199,7 +1202,8 @@ function askView() {
   const sug = SUGGEST[S.persona].map(q => (q === 'How is my player doing?' && P.player ? `How is ${P.player} doing?` : q === 'Why did they concede?' && conceded ? `Why did ${conceded} concede?` : q))
     .filter(q => q !== 'How is my player doing?' && !(q === 'Why did they concede?') && !(q === 'Explain the last goal' && !lastGoal) && !(q === 'What changed after the substitutions?' && !subs));
   const opt = (v, cur, txt) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(txt || v)}</option>`;
-  const hist = S.asks.slice().reverse().map(a => {
+  // each persona keeps its own questions, and an answer written at a later minute hides when the replay goes back before it
+  const hist = S.asks.slice().reverse().filter(a => a.persona === S.persona && a.t <= S.t + 1).map(a => {
     if (a.pending) return `<li><div class="q">${esc(a.q)}</div><div class="thinking">The newsroom is working on it</div>
       ${(a.live || []).length ? `<ol class="steps live">${a.live.map(st => `<li><b>${esc(st.agent.replace('_', ' '))}</b> ${esc(st.tool.replace(/_/g, ' '))}${Object.values(st.args || {}).some(Boolean) ? ` <span class="mono">${esc(Object.values(st.args).filter(Boolean).join(', '))}</span>` : ''}</li>`).join('')}</ol>` : ''}</li>`;
     if (a.error) return `<li><div class="q">${esc(a.q)}</div><div class="empty">${esc(a.error)}</div></li>`;
@@ -1226,7 +1230,7 @@ const NO_SERVER = 'The ask desk needs the newsroom server (python -m server.app)
 async function askNewsroom(q) {
   q = (q || '').trim();
   if (!q) return;
-  const P = S.profile, a = { q, pending: true, clock: clockAt(S.t) };
+  const P = S.profile, a = { q, pending: true, clock: clockAt(S.t), t: S.t, persona: S.persona };
   S.asks.push(a); S.askDraft = ''; S.askVer++; render(true);
   try {
     const res = await fetch('api/ask?stream=1', { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1385,7 +1389,27 @@ async function sayLine(text) {
 
 let toastTimer;
 function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 2600); }
+// the page's own labels (buttons, persona names, settings, status bar) in the reader's language: each element's text nodes keep their
+// English in a map and are swapped for the translation as it arrives
+const EN = new WeakMap();
+const LABELS = '#persona span, #settings summary span, .flyout h2, .flyout .field > span, .flyout small, #u-preset button, #next, #voice, #v3d, #live, '
+  + '.transport .speed > span, .view-head, .warn-item, .statusbar .opt, .welcome h2, .welcome p, .welcome button';
+function relabel() {
+  for (const el of document.querySelectorAll(LABELS)) {
+    for (const n of el.childNodes) {
+      if (n.nodeType !== 3 || !n.textContent.trim()) continue;
+      if (!EN.has(n)) EN.set(n, n.textContent.trim());
+      n.textContent = tr(EN.get(n));
+    }
+  }
+}
+function pretranslate() {  // every line of both feeds and the recaps, so switching persona does not flash English
+  if (!S.D || S.profile.language === 'English') return;
+  for (const items of Object.values(S.D.newsroom || {})) for (const it of items) tr(it.line);
+  for (const r of S.D.recaps || []) if (r.answer) tr(r.answer);
+}
 function setTabs() {
+  relabel();
   for (const b of $('tabs').children) { b.setAttribute('aria-selected', b.dataset.tab === S.tab); b.textContent = tr(b.dataset.tab); }  // tab names in the reader's language
   if (S.tab === 'What if') fetch('api/warm', { method: 'POST' }).catch(() => {});  // the simulation workers start scaling out while the viewer sets up the change
 }
@@ -1478,6 +1502,7 @@ $('panel-body').addEventListener('click', e => {
   }
   else if (d.witeam !== undefined) { S.wi = { team: +d.witeam, change: {}, formation: '', busy: false, res: null, err: '' }; render(true); }
   else if (d.act === 'highlights') playHighlights();
+  else if (d.act === 'reveal') { S.reveal = true; render(true); }
   else if (d.act === 'wi-run') runWhatIf();
   else if (d.act === 'bench') runBench();
   else if (d.act === 'bench-apply') { const rc = S.bench.r.recommendation; S.wi.change = Object.fromEntries(Object.entries(rc).filter(([k]) => k !== 'formation')); S.wi.formation = rc.formation || ''; render(true); }
@@ -1559,7 +1584,7 @@ $('voice').onclick = () => { voiceOn = !voiceOn; $('voice').setAttribute('aria-p
 $('lang').innerHTML = LANGS.map(l => `<option${l === S.profile.language ? ' selected' : ''}>${l}</option>`).join('');
 $('metric').innerHTML = Object.entries(METRICS).map(([k, l]) => `<option value="${k}"${k === S.profile.metric ? ' selected' : ''}>${l}</option>`).join('');
 $('metric').onchange = e => { S.profile.metric = e.target.value; saveProfile(); render(true); };
-$('lang').onchange = e => { S.profile.language = e.target.value; saveProfile(); $('lt-line').dataset.id = ''; setTabs(); render(true); };
+$('lang').onchange = e => { S.profile.language = e.target.value; saveProfile(); $('lt-line').dataset.id = ''; setTabs(); pretranslate(); render(true); };
 $('panel-body').addEventListener('input', e => {
   if (e.target.id === 'clip-start' || e.target.id === 'clip-end') { setPlaying(false); updateClip(e.target.id.slice(5), +e.target.value); }
   if (e.target.id === 'ask-q') S.askDraft = e.target.value;

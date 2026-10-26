@@ -26,7 +26,7 @@ PERSONAS = {
 }
 MAX_REWRITES = 2
 
-RULES = ("Use only facts and numbers from FACTS. Never invent a player, minute, score or statistic. The minute is FACTS.moment.clock exactly. "
+RULES = ("Write in British English (metres, centre, defence). Use only facts and numbers from FACTS. Never invent a player, minute, score or statistic. The minute is FACTS.moment.clock exactly. "
          "Which side presses harder is FACTS.pressing_harder; never work it out from PPDA yourself. "
          "Read each metric as FACTS.glossary defines it.")
 

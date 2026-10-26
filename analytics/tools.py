@@ -474,7 +474,7 @@ class MatchView:
         for t in grid:
             sc = next(((h, a) for tt, h, a in reversed(goals) if tt <= t + .05), (0, 0))
             played = max(t / 60., 1.)
-            left = max(dur - t, 0.) / 60.
+            left = max(max(dur, self.meta.get("scheduled", dur)) - t, 0.) / 60.  # a match cut at the current minute still has its time to run
             xg = [sum(x for tt, tm, x in shots if tt <= t and tm == s_) for s_ in (0, 1)]
             rate = [(1.24 * 30 + xg[s_] * 90) / (30 + played) / 90 for s_ in (0, 1)]  # per minute
             ph = [pois(rate[0] * left, k) for k in range(10)]

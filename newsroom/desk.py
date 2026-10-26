@@ -56,8 +56,10 @@ ORCHESTRATOR = """You run the newsroom desk. For the reader's question, call the
 pressing, momentum, why things happened and "what if" questions about a different instruction or formation; scout for players), with a precise task for each; call only the specialists the question needs (why a team scored or conceded is the tactics analyst's
 alone), and when you need both, call them in the same step so they work at the same time. Use match_summary for
 the basic facts. Then reply with the combined findings exactly as the specialists gave them (bullet points, numbers and minutes kept).
-Do not add numbers of your own. If a specialist returns an error or no evidence, call it again; if it still has none, say the
-data could not be read rather than answering without it."""
+Do not add numbers of your own. Always call at least one specialist first: never answer from match_summary alone, and never say there
+is no data before a specialist has looked (every question is about this match, in whatever language it is asked; an open question such
+as "thoughts on a team?" goes to the tactics analyst). If a specialist returns an error or no evidence, call it again; if it still has
+none, say the data could not be read rather than answering without it."""
 
 MANAGER = """You are the manager's assistant on the bench. Investigate the team's game with your tools first (match_summary, formation_changes,
 team_shape, pressing, defensive_duties, control_and_rhythm, fatigue, momentum): what is going wrong, or what is working and must be protected, given the
@@ -78,7 +80,8 @@ attached to the wrong player, team, metric or minute, a metric is described wron
 supported by the findings. Also reject a claim that one thing caused another (the 3-5-2 helped them control midfield, smart substitutions
 earned the draw) or about what a side was trying to do or how its players moved (went defensive, tried to protect the lead, pushed up) when
 the findings do not show it: a formation's name is not evidence of intent, and two true facts side by side do not make one the cause of
-the other. Wording, tone and language are not errors. Reply only as JSON {"approved": bool, "issues": [str]}, one short
+the other. Also reject an answer that contradicts itself (consistent pressure, then limited defensive actions), leaves out a goal by a
+player it discusses, or goes along with a premise of the question that the findings do not support. Wording, tone and language are not errors. Reply only as JSON {"approved": bool, "issues": [str]}, one short
 sentence per real error, an empty list when approved."""
 
 
@@ -123,6 +126,9 @@ def _writer_text(profile):
             "Use only facts and numbers from the FINDINGS; never invent one, nor a cause, a motive or a movement the FINDINGS do not show "
             "(a formation's name says nothing about how the side played; call a formation by the name the findings use). No hedged guesses ('may have', "
             "'such as', 'possibly'): say what the findings show, or leave it out; for a goal, tell the move as the findings give it (who won the ball, the pass, the finish). "
+            "Never say two things that contradict each other about the same player or team; when you discuss a player who scored, say so; "
+            "if the question takes something for granted that the findings do not show, say plainly that the data does not support it. "
+            "Write in British English (metres, centre, defence). "
             "Mention minutes as they appear (e.g. 63'). "
             "Shares and rates between 0 and 1 (closing down, tracking, accuracy, success rates) are written as percentages: 0.031 is 3%; xG stays as it is. "
             f"Units: {', '.join(UNIT_WORDS[u] for u in _units(p))}; the FINDINGS already use them, so never convert a number.")
@@ -159,6 +165,13 @@ def _first_json_list(text):
     return []
 
 
+def _looks_english(text):
+    """Whether a text is (still) English: common English words make up a good share of it."""
+    words = re.findall(r"[A-Za-z']+", text.lower())
+    common = {"the", "and", "of", "to", "in", "a", "is", "with", "his", "their", "was", "by", "for", "on", "at", "while", "from"}
+    return len(words) > 20 and sum(w in common for w in words) / len(words) > .15
+
+
 def _until(match, t):
     """The match as it stood at time t (seconds): later events and frames removed."""
     if t is None:
@@ -166,7 +179,7 @@ def _until(match, t):
     m = dict(match)
     m["events"] = [e for e in match["events"] if e["t"] <= t]
     m["frames"] = match["frames"][:int(t / match["meta"]["dt"]) + 1]
-    m["meta"] = dict(match["meta"], duration=float(t))
+    m["meta"] = dict(match["meta"], duration=float(t), scheduled=max(float(t), 2. * match["meta"]["half_time"]))  # how long the match is due to run, for the time left
     if match.get("jobs"):
         m["jobs"] = match["jobs"][:len(m["frames"])]
     return m
@@ -452,7 +465,14 @@ class Desk:
         n0, f0 = len(self.trail), len(self.facts)
         self._say("orchestrator", "reading the question")
         found = (await _run(self.orchestrator, f"QUESTION: {question}")).text.strip()
+        if not any(st["agent"] != "orchestrator" for st in self.trail[n0:]):  # answered without investigating: send it back once
+            found = (await _run(self.orchestrator, f"QUESTION: {question}\nYou answered without calling a specialist. Call the tactics_analyst "
+                                                   "or the scout (or both) now, then reply with their findings.")).text.strip()
         last, attempts = await self._write_checked(question, found)
+        lang = self.profile.get("language", "English")
+        if last["answer"] and lang != "English" and _looks_english(last["answer"]):  # the writer slipped into English: the localizer puts it right
+            from newsroom.localize import translate
+            last = dict(last, answer=(await translate(self.client, lang, [last["answer"]]))[0])
         moments = {m["clock"]: m for f in self.facts if isinstance(f, dict) for m in f.get("moments", [])}
         watch = [dict(clock=c, t=m["t"], type=m["type"], player=m["player"]) for c, m in moments.items() if re.search(rf"(?<![\d+]){re.escape(c)}", last["answer"])][:6]
         views = self._views(self.trail[n0:], self.raw[f0:])

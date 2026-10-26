@@ -30,7 +30,7 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg><span>Settings</span></summary>
     <div class="flyout" role="dialog" aria-label="Settings">
       <h2>Settings</h2>
-      <label class="field"><span>Your club<small>Answers are told from its side</small></span><select id="club"></select></label>
+      <label class="field"><span>Your club<small>Answers are written from its side (the facts stay the same) and its moments are marked in the feed</small></span><select id="club"></select></label>
       <label class="field"><span>Focus metric<small>Leads the live view and the newsroom's answers</small></span><select id="metric"></select></label>
       <label class="field"><span>Language<small>Commentary, recaps and answers</small></span><select id="lang"></select></label>
       <div class="field"><span>Units</span><div class="seg" id="u-preset"><button data-u="m,kmh,km">Metric</button><button data-u="yd,mph,mi">Imperial</button></div></div>
@@ -62,9 +62,9 @@
       <div class="lower-third" id="overlay" hidden><span class="lt-kind" id="lt-kind"></span><p id="lt-line" dir="auto"></p></div>
       <div class="loading" id="loading">Loading match…</div>
       <div class="welcome" id="welcome" role="dialog" aria-labelledby="welcome-h" hidden>
-        <h2 id="welcome-h">A newsroom of AI agents, covering a football match</h2>
+        <h2 id="welcome-h">An AI-powered newsroom covering a football match</h2>
         <p>The match is synthetic: our engine played it, every club and player is fictional. Agents on Microsoft Foundry explain it as it
-          happens, and a fact-checker signs off every line against the data.</p>
+          happens: analysts, commentators, a writer and a fact-checker who signs off every line against the data.</p>
         <div class="bar">
           <button class="btn primary" data-welcome="highlights">Watch the goals</button>
           <button class="btn" data-welcome="analyst">See the tactics</button>
