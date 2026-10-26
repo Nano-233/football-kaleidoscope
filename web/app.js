@@ -187,7 +187,8 @@ async function load(id) {
   if (S.profile.playerId && !S.info[S.profile.playerId]) Object.assign(S.profile, { player: '', playerId: '' });
   if (S.profile.club && ![D.meta.home.name, D.meta.away.name].includes(S.profile.club)) S.profile.club = '';
   setTimeout(pretranslate, 0);  // a club from another match is not playing in this one
-  S.asks = []; S.reveal = false;
+  S.asks = []; S.reveal = false; S.bench = null; S.view = null; S.reel = null;  // a new match starts clean: no answers, what-ifs or advice from the last one
+  S.wi = { team: 1, change: {}, formation: '', busy: false, res: null, err: '' };
   marks();
   syncUrl();
   $('loading').hidden = true;
@@ -376,6 +377,7 @@ function hud(t) {
   const [h, a] = scoreAt(t), clock = clockAt(t), per = periodAt(t), key = `${h}${a}${clock}${per}`;
   if (key !== hudKey) {
     hudKey = key;
+    marks();
     $('h-score').textContent = h; $('a-score').textContent = a; $('clock').textContent = per === 'Full time' ? 'FT' : clock; $('period').textContent = tr(per);
     $('sb-clock').textContent = `${per === 'Full time' ? 'FT' : clock} · ${tr(per)}`;
     for (const tm of [0, 1]) {  // the scorers under each side, as far as the replay has got (an own goal is listed for the side it counted for)
@@ -407,9 +409,9 @@ function hud(t) {
   if (c) { const d = S.D.meta.duration; tl.style.left = (c.start / d * 100) + '%'; tl.style.width = ((c.end - c.start) / d * 100) + '%'; }
 }
 
-function marks() {
+function marks() {  // goals and cards on the scrubber, once they have happened (marks ahead of the play would give the result away)
   const d = S.D.meta.duration;
-  $('tl-marks').innerHTML = S.D.events.filter(e => e.type === 'goal' || e.type === 'own_goal' || e.type === 'card')
+  $('tl-marks').innerHTML = S.D.events.filter(e => (e.type === 'goal' || e.type === 'own_goal' || e.type === 'card') && e.t <= S.t)
     .map(e => `<i class="${e.type === 'card' ? (e.card === 'yellow' ? 'card' : 'red') : 'goal'}" style="left:${e.t / d * 100}%" title="${esc(e.clock + ' ' + label(e.type))}"></i>`).join('');
 }
 
@@ -451,6 +453,7 @@ function render(force) {
   const body = $('panel-body'), keep = body.scrollTop, same = body.dataset.view === S.persona + S.tab + S.player;
   body.innerHTML = VIEWS[S.tab]();
   paintHeats(body);
+  if (S.profile.language !== 'English') relabel(body);
   body.dataset.view = S.persona + S.tab + S.player;
   if (same) body.scrollTop = keep;
 }
@@ -663,7 +666,7 @@ const REELS = {
 function reelFor(pid, name) {
   const segs = [];
   for (const e of S.D.events) {
-    if (e.player !== pid || !REELS[name](e)) continue;
+    if (e.player !== pid || !REELS[name](e) || (e.t > S.t && !S.reveal && S.t < S.D.meta.duration - 1)) continue;  // only what has happened
     const a = Math.max(0, e.t - 5), b = e.t + 3, last = segs[segs.length - 1];
     if (last && a <= last.end) last.end = b; else segs.push({ start: a, end: b, clock: e.clock });
   }
@@ -1133,7 +1136,7 @@ function whatIfView() {
     return `<div class="row"><span>${name}</span><div class="wi-track" style="--set:${base[k] * 100}%"><input type="range" min="0" max="1" step="0.05" value="${v}" data-wi="${k}" aria-label="${name}" title="The tick is the team's own setting (${was})"></div>
       <span class="wi-val${changed ? ' chg' : ''}">${changed ? `${was} → ${now_}<button class="wi-undo" data-wiundo="${k}" title="Back to the team's setting (${was})" aria-label="Undo ${name}">↺</button>` : now_}</span></div>
       <div class="mono wi-scale"><span>${lo}</span><span>${hi}</span></div>`; }).join('');
-  const r = w.res;
+  const r = w.res && w.t <= S.t + 30 ? w.res : null;  // a result played from a later minute hides when the replay goes back before it
   const pct = x => Math.round(x * 100) + '%';
   const res = w.busy && !r ? `<div class="thinking">Playing the rest of the match 24 times from ${now}': the first pairs arrive in about half a minute</div>`
     : w.err ? `<div class="empty">${esc(w.err)}</div>`
@@ -1157,7 +1160,7 @@ function benchView(side) {
   const b = S.bench;
   const head = `<div class="editor" style="margin-top:10px"><h3>Bench assistant</h3><div class="mono">Reads ${esc(S.D.meta[side].name)}'s game at ${esc(clockAt(S.t))}, proposes two changes, then replays the rest of the match with and without each before recommending one.</div>
     <div class="bar" style="margin-top:8px"><button class="btn primary" data-act="bench"${b && b.busy ? ' disabled' : ''}>Advise the manager</button></div>`;
-  if (!b || b.side !== side) return head + '</div>';
+  if (!b || b.side !== side || (b.t != null && b.t > S.t + 30)) return head + '</div>';  // advice from a later minute hides after a rewind
   if (b.busy) return head + `<div class="thinking">${esc(b.step || 'Reading the game')}</div></div>`;
   if (b.err) return head + `<div class="empty">${esc(b.err)}</div></div>`;
   const r = b.r, pct = x => Math.round(x * 100) + '%';
@@ -1186,7 +1189,7 @@ async function readEvents(res, on) {
   }
 }
 async function runBench() {
-  const side = S.wi.team ? 'away' : 'home', b = S.bench = { side, busy: true, step: '' };
+  const side = S.wi.team ? 'away' : 'home', b = S.bench = { side, busy: true, step: '', t: S.t };
   render(true);
   try {
     const res = await fetch('api/assistant', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ match: S.id, t: S.t, team: S.wi.team }) });
@@ -1439,10 +1442,13 @@ function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = fals
 const EN = new WeakMap();
 const LABELS = '#persona span, #settings summary span, .flyout h2, .flyout .field > span, .flyout small, #u-preset button, #next, #voice, #v3d, #live, '
   + '.transport .speed > span, .view-head, .warn-item, .statusbar .opt, .welcome h2, .welcome p, .welcome button';
-function relabel() {
-  for (const el of document.querySelectorAll(LABELS)) {
+// and in the panel, after every render: its buttons, badges, headings and notes (text with digits is left alone: a clock or a score
+// changes every minute and would be a new translation each time)
+const PANEL_LABELS = '.jump, .badge, summary, .label, .btn, .chip, .empty, .link';
+function relabel(root) {
+  for (const el of (root || document).querySelectorAll(root ? PANEL_LABELS : LABELS)) {
     for (const n of el.childNodes) {
-      if (n.nodeType !== 3 || !n.textContent.trim()) continue;
+      if (n.nodeType !== 3 || !n.textContent.trim() || (root && /\d/.test(n.textContent))) continue;
       if (!EN.has(n)) EN.set(n, n.textContent.trim());
       n.textContent = tr(EN.get(n));
     }
