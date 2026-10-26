@@ -17,9 +17,9 @@ full-time reports, and a bench assistant that tests two changes with paired simu
 things the match never showed. We wanted explanations a viewer can trust: every number comes from the data, a fact-checker agent
 plus deterministic checks reject any line with an unsupported number, cause or motive, and a shape change is described by what the
 players did (the back line dropped 6 m, the wing-backs pushed 8 m higher) rather than by what a formation's name suggests. We grade
-the newsroom against the engine's own record of what happened: 60 answers, 0.83 correct.
+the newsroom against the engine's own record of what happened: 60 answers, 0.85 correct, 92 % approved by the fact-checker.
 
-**Microsoft technology.** Microsoft Foundry (gpt-4.1-mini, tracing in Application Insights), Microsoft Agent Framework
+**Microsoft technology.** Microsoft Foundry (gpt-4.1 writer and fact-checkers, gpt-4.1-mini analysts, tracing in Application Insights), Microsoft Agent Framework
 (orchestrator, specialists as tools, writer, fact-checker with rewrites), Azure AI Speech (spoken commentary), Azure Container Apps
 (a front end plus simulation workers that scale out per what-if and back to zero; managed identity, no keys), an MCP server with 17
 tools for GitHub Copilot agent mode, GitHub Actions (tests, image build).
