@@ -49,7 +49,7 @@ The free demo has a daily allowance for new model calls. Everything that is cach
 | **Ingest** | The engine emits 37 event types (passes, shots, tackles, pressure, possession changes, cards, VAR, injuries, offsides and more; [EVENTS.md](EVENTS.md)) plus 5 Hz tracking. Live run streams them as they happen. |
 | **Interpret** | `analytics/` computes every displayed number deterministically: stats and ratings, PPDA, pass length and difficulty, ball and shot speed, sprints and distance, formation reader, pressing, momentum, win probability, control vs chaos, fatigue, defensive duties, milestones. |
 | **Explain** | The agents choose which numbers matter and explain why the moment happened (shape changes, pressing spells, tiring players), using only tool output. Every engine decision also carries a `why` rationale. |
-| **Render** | Match centre with timed lower thirds, a live feed, a tactics board (shapes, pass networks, press, momentum), breakdowns you can pause and draw on, a 3D view, and a machine-readable broadcast pack. |
+| **Render** | Match centre with timed lower thirds, a live feed, team and player heat maps from tracking, a tactics board (shapes, pass networks, press, momentum), breakdowns you can pause and draw on, a 3D view, and a machine-readable broadcast pack. |
 | **Personalise** | Fan / Analyst / Scout personas, favourite club, followed player, a metric to follow, nine languages (localizer agent plus a number-preservation check), metric / imperial units, spoken commentary. |
 
 ## Architecture

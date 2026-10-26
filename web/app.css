@@ -337,3 +337,5 @@ table.stats tr:hover td { background: #2a2d2e; }
 .bd-box p { margin: 3px 0 8px; font-size: 13px; line-height: 20px; color: var(--text-hi); }
 .bd-box .bar { display: flex; gap: 6px; }
 .pitch-tip { position: absolute; pointer-events: none; z-index: 5; max-width: 300px; background: #252526; border: 1px solid #454545; padding: 4px 8px; font-size: 12px; line-height: 17px; white-space: pre-line; }
+
+canvas.heat { display: block; width: 100%; height: auto; border-radius: var(--r); margin-top: 6px; }  /* team and player heat maps */

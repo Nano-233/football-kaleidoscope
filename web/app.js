@@ -450,6 +450,7 @@ function render(force) {
   S.panelKey = key;
   const body = $('panel-body'), keep = body.scrollTop, same = body.dataset.view === S.persona + S.tab + S.player;
   body.innerHTML = VIEWS[S.tab]();
+  paintHeats(body);
   body.dataset.view = S.persona + S.tab + S.player;
   if (same) body.scrollTop = keep;
 }
@@ -685,6 +686,45 @@ function playReel(pid, name) {
   seek(segs[0].start); setPlaying(true);
   toast(`${name}: ${S.info[pid].name}, ${segs.length} moment${segs.length > 1 ? 's' : ''}.`);
 }
+// heat maps from the tracking: where a team (or one player) has been between t0 and t1, sampled once a second into 5 m cells, drawn
+// with the side's own goal on the left. A canvas is written into the panel as a placeholder (data-heat) and painted after each render.
+function heatGrid(team, pid, t0, t1) {
+  const nx = 21, ny = 14, grid = new Float32Array(nx * ny), step = Math.max(1, Math.round(1 / S.dt));
+  const i0 = Math.max(0, Math.floor(t0 / S.dt)), i1 = Math.min(S.n - 1, Math.floor(t1 / S.dt));
+  for (let i = i0; i <= i1; i += step) {
+    const t = i * S.dt, ks = pid ? [slotOf(pid, t)] : Array.from({ length: 11 }, (_, j) => 11 * team + j);
+    for (const k of ks) {
+      if (k < 0) continue;
+      let x = S.F[i * 72 + 5 + 2 * k], y = S.F[i * 72 + 6 + 2 * k];
+      if (y < -5 || (!pid && who(k, t)?.role === 'GK')) continue;  // off the pitch; a team's map leaves the keeper out
+      if (team) { x = L - x; y = W - y; }
+      grid[Math.min(ny - 1, Math.max(0, Math.floor(y / W * ny))) * nx + Math.min(nx - 1, Math.max(0, Math.floor(x / L * nx)))] += 1;
+    }
+  }
+  return { grid, nx, ny };
+}
+function heatCanvas(team, pid, t0, t1, label) {
+  return `<canvas class="heat" width="420" height="272" data-heat="${team}|${pid || ''}|${t0}|${t1}" role="img" aria-label="${esc(label)}"></canvas>`;
+}
+function paintHeats(root) {
+  for (const c of root.querySelectorAll('canvas[data-heat]')) {
+    const [team, pid, t0, t1] = c.dataset.heat.split('|'), { grid, nx, ny } = heatGrid(+team, pid, +t0, +t1), x = c.getContext('2d');
+    const w = c.width, h = c.height, cw = w / nx, ch = h / ny, mx = Math.max(...grid, 1);
+    x.fillStyle = COL.pitch; x.fillRect(0, 0, w, h);
+    x.filter = 'blur(12px)';  // a heat scale (cool to hot), the busiest cells hottest, the quietest left as pitch
+    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+      const v = Math.pow(grid[j * nx + i] / mx, .8);
+      if (v < .12) continue;
+      x.globalAlpha = .25 + .65 * v; x.fillStyle = `hsl(${Math.round(220 * (1 - v))}, 90%, 55%)`; x.fillRect(i * cw - 3, j * ch - 3, cw + 6, ch + 6);
+    }
+    x.filter = 'none'; x.globalAlpha = 1; x.strokeStyle = 'rgba(255,255,255,.35)'; x.lineWidth = 1.5;
+    const sx = w / L, sy = h / W;
+    x.strokeRect(1, 1, w - 2, h - 2); x.beginPath(); x.moveTo(w / 2, 0); x.lineTo(w / 2, h); x.stroke();
+    x.beginPath(); x.arc(w / 2, h / 2, 9.15 * sx, 0, 7); x.stroke();
+    x.strokeRect(1, (W / 2 - 20.16) * sy, 16.5 * sx, 40.32 * sy); x.strokeRect(w - 1 - 16.5 * sx, (W / 2 - 20.16) * sy, 16.5 * sx, 40.32 * sy);
+    x.fillStyle = 'rgba(255,255,255,.55)'; x.font = '600 12px "Segoe UI", system-ui, sans-serif'; x.textAlign = 'right'; x.fillText('attacking →', w - 8, h - 8);
+  }
+}
 function heatSvg(grid, team) {  // 6 x 4 zones, own goal on the left, attacking left to right
   const w = 300, h = 194, cw = w / 6, ch = h / 4, mx = Math.max(...grid.flat(), .001);
   const cells = grid.map((col, i) => col.map((v, j) => `<rect x="${i * cw}" y="${j * ch}" width="${cw - 1}" height="${ch - 1}" fill="${team ? 'var(--away)' : 'var(--home)'}" fill-opacity="${(.08 + .9 * v / mx).toFixed(2)}"/>`).join('')).join('');
@@ -706,7 +746,7 @@ function profileBlocks(pid, p) {
     .sort((a, b) => Math.abs(b[3]) - Math.abs(a[3])).slice(0, 6);
   const reels = S.persona === 'scout' ? Object.keys(REELS).filter(r => r !== 'Highlights') : ['Shots', 'Chances created', 'Duels won'];
   return `<div class="label">Physical</div><div class="kv"><div><b>${conv('dist', ph.distance_km, 1)}</b><span>Distance</span></div><div><b>${ph.sprints ?? '–'}</b><span>Sprints</span></div><div><b>${conv('spd', ph.top_speed_kmh, 1)}</b><span>Top speed</span></div></div>
-    ${pr.heat_map_6x4 ? `<div class="label">Where he played</div>${heatSvg(pr.heat_map_6x4, team)}` : ''}
+    <div class="label">Where he played</div>${heatCanvas(team, pid, 0, S.D.meta.duration, `Where ${p.name} played over the match`)}
     ${terms.length ? `<div class="label">What made his rating</div><table class="stats"><tbody>${terms.map(([k, v]) => `<tr><td>${TERM_LABEL[k] || k}</td>
       <td style="width:45%"><span class="termbar ${v < 0 ? 'neg' : ''}" style="width:${Math.round(Math.abs(v) / mt * 100)}%"></span></td><td class="${v >= 0 ? 'lead' : ''}">${v > 0 ? '+' : ''}${v.toFixed(2)}</td></tr>`).join('')}</tbody></table>` : ''}
     ${vs.length ? `<div class="label">Per 90 against his position</div><table class="stats"><thead><tr><th>Metric</th><th>Him</th><th>Avg</th></tr></thead><tbody>${vs.map(([k, him, avg, d]) => `<tr><td>${PER90_LABEL[k] || k}</td>
@@ -773,7 +813,8 @@ function playerView() {
     <div class="bar" style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
       ${S.persona === 'scout' ? `<button class="btn primary" data-report="${esc(S.player)}">Scout report</button>` : `<button class="btn primary" data-hismatch="${esc(S.player)}">His match</button>`}
       <button class="btn" data-reel="Highlights">Highlights reel</button></div>
-    ${live ? `<div class="mono" style="margin-top:12px">His full-match numbers, rating and heat map come at the final whistle.</div>${S.persona === 'scout' ? '<div class="bar" style="margin-top:8px"><button class="btn" data-act="reveal">Show full-match profile (spoils the result)</button></div>' : ''}`
+    ${live ? `<div class="label">Where he has played · so far</div>${heatCanvas(p.team, S.player, 0, S.t, `Where ${p.name} has played so far`)}
+      <div class="mono" style="margin-top:12px">His full-match numbers and rating come at the final whistle.</div>${S.persona === 'scout' ? '<div class="bar" style="margin-top:8px"><button class="btn" data-act="reveal">Show full-match profile (spoils the result)</button></div>' : ''}`
       : profileBlocks(S.player, p) + fatigueBlock(S.player, p.team) + dutyBlock(S.player, p.team)}
     <div class="label">Actions (${acts.length})</div><div class="chips">${chips}</div>
     <ul class="actions" style="margin-top:10px">${rows || '<li><span></span><span class="empty">No actions in this group.</span></li>'}</ul>
@@ -999,7 +1040,11 @@ function momentumSvg(h = 150) {
 
 function liveStrip() {  // the fan's glance at the game: who is on top, five minutes at a time, and the chances now
   if (!S.D.board || S.t < 300) return '';
-  return `${winBar()}${rhythmStrip()}<div class="label" style="margin-top:10px">${esc(tr('Who is making the chances · five minutes at a time'))}</div>${momentumSvg(90)}`;
+  const ht = S.heatTeam || 0, M = S.D.meta, from = Math.max(0, S.t - 900);
+  const heat = `<div class="label" style="margin-top:10px">${esc(tr('Where they have played · last 15 minutes'))}</div>
+    <div class="chips">${[0, 1].map(k => `<button class="chip" data-heatteam="${k}" aria-pressed="${ht === k}">${esc(M[k ? 'away' : 'home'].name)}</button>`).join('')}</div>
+    ${heatCanvas(ht, '', from, S.t, `Where ${M[ht ? 'away' : 'home'].name} have played in the last 15 minutes`)}`;
+  return `${winBar()}${rhythmStrip()}${heat}<div class="label" style="margin-top:10px">${esc(tr('Who is making the chances · five minutes at a time'))}</div>${momentumSvg(90)}`;
 }
 // control vs chaos by five minutes (analytics/tools.py rhythm): a chip per finished window, the side in control in its colour
 const RH_COL = st => (st.startsWith('control') ? (st.endsWith(S.D.meta.home.name) ? 'var(--home)' : 'var(--away)') : st === 'chaos' ? 'var(--bad)' : st === 'stop-start' ? 'var(--text-3)' : 'var(--surface-3)');
@@ -1503,6 +1548,7 @@ $('panel-body').addEventListener('click', e => {
   else if (d.witeam !== undefined) { S.wi = { team: +d.witeam, change: {}, formation: '', busy: false, res: null, err: '' }; render(true); }
   else if (d.act === 'highlights') playHighlights();
   else if (d.act === 'reveal') { S.reveal = true; render(true); }
+  else if (d.heatteam !== undefined) { S.heatTeam = +d.heatteam; render(true); }
   else if (d.act === 'wi-run') runWhatIf();
   else if (d.act === 'bench') runBench();
   else if (d.act === 'bench-apply') { const rc = S.bench.r.recommendation; S.wi.change = Object.fromEntries(Object.entries(rc).filter(([k]) => k !== 'formation')); S.wi.formation = rc.formation || ''; render(true); }
