@@ -29,7 +29,7 @@ tools for GitHub Copilot agent mode, GitHub Actions (tests, image build).
 ## Video (under 2 minutes): shot list
 
 Record at 1920x1080 on the live link, browser full screen with the page zoom at 125% (Ctrl +) so the text reads on video, no music
-with rights issues (silence or a voice-over). Speed 5x unless noted. About 115 s total. Before recording: open the link once (the
+with rights issues (silence or a voice-over). Speed 5x unless noted. About 118 s total. Plain cuts and a voice-over; no transitions or effects (see the note below the table). Before recording: open the link once (the
 app wakes up), then open a private window so the welcome card shows; open the What-if tab once so the workers are warm.
 
 | # | Time | Screen | Voice-over (suggested) |
@@ -41,9 +41,14 @@ app wakes up), then open a private window so the welcome card shows; open the Wh
 | 5 | 0:42-0:58 | Analyst, **Feed** at about 76': the 72' shape-change line, then its **Show shape** button (the new shape drawn on the pitch) | "When a team changes shape, the newsroom says what the players actually did, measured from tracking: the back line, the block, the wing-backs." |
 | 6 | 0:58-1:12 | **Ask**: "Why did Harlow Athletic concede?" (cached is fine); open "How the newsroom worked it out" | "Ask anything. An orchestrator sends specialists to the tools, a writer answers for you, a fact-checker signs it off, and the whole trail is visible." |
 | 7 | 1:12-1:30 | **What if** (open the tab first so the workers warm up): pressing up from 60', **Play it out**; pairs fill in | "What if they'd pressed higher? Twenty-four simulations run in parallel on Azure Container Apps, each pair with the same random numbers, so only the change differs." |
-| 8 | 1:30-1:40 | **Clips > Breakdown** of a goal: the move paused and drawn | "Every goal can be broken down: where the ball was won, the open lanes, the shot." |
-| 9 | 1:40-1:50 | **Stats**: "Newsroom answers scored against the truth" table | "And because the data is synthetic, we can grade the newsroom against what really happened." |
-| 10 | 1:50-1:57 | Architecture diagram from the README, or the logo with the link | "Microsoft Foundry, Agent Framework, Azure Container Apps. Matchday Newsroom." |
+| 8 | 1:30-1:38 | **Clips > Breakdown** of a goal: the move paused and drawn | "Every goal can be broken down: where the ball was won, the open lanes, the shot." |
+| 9 | 1:38-1:43 | Fan: the team heat map in the live strip (last 15 minutes), then tap a player: "Where he has played so far" | "Where every player actually played, from the tracking." |
+| 10 | 1:43-1:52 | **Stats**: "Newsroom answers scored against the truth" table | "And because the data is synthetic, we can grade the newsroom against what really happened." |
+| 11 | 1:52-1:58 | Architecture diagram from the README, or the logo with the link | "Microsoft Foundry, Agent Framework, Azure Container Apps. Matchday Newsroom." |
 
 Tips: do one dry run first (it warms the What-if workers and caches the Ask answer); keep the cursor still while text renders;
 cut dead time in the editor rather than re-recording.
+
+Editing: hard cuts between shots, the voice-over carrying the story, short on-screen captions only where the voice-over names
+something (a number, "24 simulations"). Skip transitions, zooms and music beds: judges score clarity and what the product does,
+and effects cost time that the 2-minute limit needs for features.
