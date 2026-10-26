@@ -73,7 +73,7 @@ flowchart LR
 **Rule we hold everywhere:** the engine produces facts only, analytics produces every number, and the agents add the
 insight: what matters, why, for whom, in which words. Agents may only quote numbers that came from a tool.
 
-### The agents (Microsoft Agent Framework on Foundry, `gpt-4.1-mini`)
+### The agents (Microsoft Agent Framework on Foundry: `gpt-4.1` writes and fact-checks, `gpt-4.1-mini` does the rest)
 
 - **Live desk** (`newsroom/agents.py`). For each key moment, a **stats analyst** and a **tactics analyst** read the
   fact pack. A **commentator** writes the line in a persona's voice, and a **fact-checker** approves or rejects it,
@@ -92,9 +92,10 @@ that loses or changes a number falls back to the original. Calls retry on 429, 5
 credentials, a scripted client runs the whole pipeline offline, which is how CI tests it.
 
 **Measured accuracy.** `scripts/eval_newsroom.py` grades the answers against engine truth: 60 answers on the five
-demo matches, 0.83 overall, 78 % approved by the fact-checker (the rest were held after the rewrites rather than
-published). Goals, best player, pressing, milestones, passing, control and the bench assistant scored 1.0, defensive
-duties 0.9, fatigue 0.6 and formation changes 0.5 (4 of 9 found: the formation reader's limit, not the writing). The
+demo matches, 0.85 overall, 92 % approved by the fact-checker (the rest were held after the rewrites rather than
+published), 27 s an answer. Goals, best player, pressing, milestones, passing, control and the bench assistant scored 1.0,
+defensive duties 0.9, fatigue 0.6 and formation changes 0.6 (5 of 9 found: the formation reader's limit, not the writing).
+Moving the writer and the fact-checkers from `gpt-4.1-mini` to `gpt-4.1` raised approval from 78 % at about the same speed. The
 answers describe shapes by what the players did (back-line height, block size, wing-back positions from tracking),
 never by what a formation's name suggests, and the checkers reject invented causes and motives. The results
 are in `web/data/eval.json` and shown in the app.
@@ -103,7 +104,7 @@ are in `web/data/eval.json` and shown in the app.
 
 | Technology | Where |
 |---|---|
-| **Microsoft Foundry** | Project `newsroom`, `gpt-4.1-mini` deployment, Responses API (`newsroom/clients.py`) |
+| **Microsoft Foundry** | Project `newsroom`, `gpt-4.1` (writer, fact-checkers) and `gpt-4.1-mini` (analysts, commentator, orchestrator) deployments, Responses API (`newsroom/clients.py`) |
 | **Microsoft Agent Framework** | Every agent, agents used as tools by the orchestrator, tool calling, per-moment workflow (`agent-framework-*`) |
 | **Foundry tracing / Application Insights** | OpenTelemetry via `azure-monitor-opentelemetry`; agent runs and tool calls appear on Foundry's Tracing page |
 | **Azure AI Speech** | Spoken commentary (`/api/speak`), on the same Foundry resource |
@@ -134,7 +135,7 @@ python -m server.app                       # match centre + API on http://localh
 Without `FOUNDRY_PROJECT_ENDPOINT`, the agents use the scripted offline client. For live agents:
 
 ```bash
-powershell -File infra/setup.ps1           # one-time: Foundry resource, project, gpt-4.1-mini deployment, role, App Insights
+powershell -File infra/setup.ps1           # one-time: Foundry resource, project, gpt-4.1-mini and gpt-4.1 deployments, role, App Insights
 # set FOUNDRY_PROJECT_ENDPOINT and FOUNDRY_MODEL, then run the server again
 powershell -File infra/deploy.ps1          # publish to Azure Container Apps
 ```

@@ -1820,6 +1820,17 @@ A tester's notes (feedback.pdf) and the classes of problem behind them, fixed wh
 - Stale state: answers, what-ifs, advice, shape overlays and reels carried into another match; Ask history shared across personas.
 - Clarity: analysts get Players (pass map); pass difficulty explained; the club setting says what it does; heat maps for team and player.
 
+### Writer and fact-checkers on gpt-4.1 (2026-10-26)
+Saw: 22 % of Ask answers held by the fact-checker after two rewrites (approved 0.78) on gpt-4.1-mini.
+Guessed: the writer and checker are where judgement matters; a bigger model there, mini elsewhere, keeps speed.
+Measured: eval_newsroom.py, 60 answers: approved 0.78 to 0.92, 23.8 s to 26.7 s an answer. Bench fell to 0.4 at first:
+the keep reason said "neither change did better" when one did a little, so the writer argued for it; and the grader only
+read sentences with "recommend". A live answer was then held for "PPDA 29.3 is the higher": the PPDA check read "low
+intensity, with a PPDA of 29.3" as calling the PPDA low.
+Fixed: `strong()` in clients.py (FOUNDRY_STRONG_MODEL), the keep reason states the real gain and the 0.15 points / 2 results
+bar, the advice is final; grader reads the closing sentences; wrong_ppda skips low/high that describes the press.
+Effect: overall 0.83 to 0.85, bench 1.0.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax

@@ -10,6 +10,7 @@ param(
     [string]$Account = "matchday-newsroom-$((az account show --query id -o tsv).Substring(0, 6))",  # custom domain must be globally unique
     [string]$Project = "newsroom",
     [string]$Model = "gpt-4.1-mini",
+    [string]$StrongModel = "gpt-4.1",       # the writer and fact-checkers (FOUNDRY_STRONG_MODEL)
     [string]$ModelVersion = "2025-04-14",
     [int]$Capacity = 50                     # thousands of tokens per minute, GlobalStandard (pay per token)
 )
@@ -21,6 +22,7 @@ az group create -n $Rg -l $Location -o none; Ok
 az cognitiveservices account create -n $Account -g $Rg -l $Location --kind AIServices --sku S0 --custom-domain $Account --allow-project-management --yes -o none; Ok
 az cognitiveservices account project create -n $Account -g $Rg --project-name $Project -l $Location -o none; Ok
 az cognitiveservices account deployment create -n $Account -g $Rg --deployment-name $Model --model-name $Model --model-version $ModelVersion --model-format OpenAI --sku-name GlobalStandard --sku-capacity $Capacity -o none; Ok
+az cognitiveservices account deployment create -n $Account -g $Rg --deployment-name $StrongModel --model-name $StrongModel --model-version $ModelVersion --model-format OpenAI --sku-name GlobalStandard --sku-capacity $Capacity -o none; Ok
 
 # DefaultAzureCredential uses your az login; it needs a data-plane role on the resource, not just Owner of the subscription.
 $me = az ad signed-in-user show --query id -o tsv; Ok
