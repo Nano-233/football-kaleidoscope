@@ -1807,6 +1807,19 @@ User: no more min-maxing; use-case driven, best look for the judges. Walked the 
   feed items get a Show shape button (the new shape drawn on the pitch).
 - Deploys from Bash silently failed (`az.cmd` under "C:\Program Files" breaks in cmd): deploy from PowerShell and check the live app.js.
 
+### Tester feedback and the same problems elsewhere (2026-10-26)
+A tester's notes (feedback.pdf) and the classes of problem behind them, fixed wherever they occurred:
+- Wrong facts in answers: the desk's match view is cut at the current minute, so win probability saw no time left ("99.6 % draw with
+  50 minutes to go"); the cut keeps the scheduled length now. Every answer gets the match state (score, minute, chances) and corrects a
+  premise it contradicts; an answer with no specialist step is sent back; the checker rejects self-contradictions and missing goals.
+- Language: a translation queue that dropped all but the first 20 lines; both feeds pre-translated; answers translated if the writer
+  slips into English; the localizer check accepts digits for spelled-out numbers (Chinese 5次射门); page, settings and panel labels
+  translated; one spelling (metres).
+- Spoilers: full-match ratings and numbers before the whistle (every persona; scouts may reveal), goal and card marks on the scrubber
+  from kick-off, highlight reels with later moments, Ask answers, what-if and bench results from a later minute after a rewind.
+- Stale state: answers, what-ifs, advice, shape overlays and reels carried into another match; Ask history shared across personas.
+- Clarity: analysts get Players (pass map); pass difficulty explained; the club setting says what it does; heat maps for team and player.
+
 ## Is the tuner machine learning?
 
 No, and it should not be described as such. The behaviour weights in `TUNE` are hand-designed utility terms in a softmax
