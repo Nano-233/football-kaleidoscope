@@ -23,7 +23,7 @@ from analytics.tools import MatchView
 from matchsim.teams import FORMATIONS
 from matchsim.whatif import TACTIC_KEYS, cached_what_if, snapshot, t_at_minute
 from newsroom.agents import _run, _verdict, unsupported_numbers, wrong_leader, wrong_ppda, wrong_team
-from newsroom.clients import traced
+from newsroom.clients import strong, traced
 
 MAX_REWRITES = 2
 DEPTH = {"quick": "two or three short sentences, plain words, at most one number",
@@ -72,7 +72,8 @@ A formation must be one of the FORMATIONS listed and different from the current 
 
 ADVICE = ("Write the bench advice for the {team} manager at {clock} ({score}). In order: what the analysis found (the findings), the two changes "
           "that were tried and why, what the simulations showed for each (win / draw / loss chances as it was against with the change, and xG "
-          "after the change), and the recommendation: {rec}. Say the test is {runs} paired replays of the rest of the match for each change "
+          "after the change), and the recommendation: {rec}. That recommendation is decided and final: close with it in plain "
+          "words (without mentioning any rule), and never advise a different change. Say the test is {runs} paired replays of the rest of the match for each change "
           "(the same random numbers with and without it), so a difference of one replay can be chance.")
 
 CHECKER = """You are the fact-checker. Compare the ANSWER with the FINDINGS the analysts produced from their tools. Reject it if a number is
@@ -418,8 +419,8 @@ class Desk:
             self.scout.as_tool(name="scout", description="Investigates players: reports, strengths, weaknesses, moments.", arg_name="task"),
             logged("orchestrator", match_summary), logged("orchestrator", list_players)])
         self.manager = Agent(client, MANAGER, name="manager_assistant", tools=[logged("manager_assistant", f) for f in tt])
-        self.writer = Agent(client, _writer_text(self.profile), name="writer")
-        self.checker = Agent(client, CHECKER, name="fact_checker")
+        self.writer = Agent(strong(client), _writer_text(self.profile), name="writer")  # the larger model where judgement matters most
+        self.checker = Agent(strong(client), CHECKER, name="fact_checker")
 
     def _say(self, agent, what, args=None):
         """Tell a listener (the streaming endpoint) what the newsroom is doing right now."""
@@ -555,7 +556,10 @@ class Desk:
                         answer="The assistant could not turn its reading of the game into a change to test this time.", held=None, approved=True, rewrites=0, steps=self.trail)
         best = max(tests, key=lambda x: x["points_gain"], default=None)
         keep = not best or best["points_gain"] < .15 or best["runs_with_a_different_result"] < 2
-        rec = ("keep things as they are: neither change did better in the replays" if keep else
+        rec = (("keep things as they are: neither change did better in the replays" if not best or best["points_gain"] <= 0 else
+                f"keep things as they are: the better change ({json.dumps(best['change'])}) gained {best['points_gain']} expected points over "
+                f"{best['runs_with_a_different_result']} changed results, below the 0.15 points and 2 results the assistant needs before it calls a "
+                "gain real rather than chance") if keep else
                f"make the change {json.dumps(best['change'])}: expected points {best['points_as_it_was']} -> {best['points_with_change']}")
         last, attempts = await self._write_checked(ADVICE.format(team=mv.team_names[tm], clock=clock, score=score, rec=rec, runs=runs),
                                                    found + "\nSIMULATIONS:\n" + json.dumps(tests))

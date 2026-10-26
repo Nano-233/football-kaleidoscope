@@ -126,7 +126,8 @@ KEEP = ("keep", "as they are", "no change", "unchanged", "maintain", "stay with"
 def recommends(text, rec):
     """Do the sentences that recommend name the code's pick? A formation by name, an instruction by its word; "keep" when nothing was
     picked. Deterministic: an LLM grader took the description of a change that was tested for a second recommendation."""
-    sents = [x.lower() for x in re.split(r"(?<=[.!?])\s+", text) if "recommend" in x.lower()]
+    parts = [x.lower() for x in re.split(r"(?<=[.!?])\s+", text) if x.strip()]
+    sents = [x for x in parts if re.search(r"recommend|advi[cs]e|suggest", x)] + parts[-2:]  # the closing sentences carry the recommendation too
     if not sents:
         return False
     if rec is None:

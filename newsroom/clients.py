@@ -17,16 +17,31 @@ from agent_framework import BaseChatClient, ChatResponse, Message
 from newsroom.moments import template_line
 
 
-def make_client():
+def make_client(model=None):
     if os.environ.get("FOUNDRY_PROJECT_ENDPOINT"):
         from agent_framework_foundry import FoundryChatClient
         from azure.identity import DefaultAzureCredential
         cred = DefaultAzureCredential()
         _tracing(cred)
-        client = FoundryChatClient(project_endpoint=os.environ["FOUNDRY_PROJECT_ENDPOINT"], model=os.environ.get("FOUNDRY_MODEL", "gpt-4.1-mini"), credential=cred)
+        client = FoundryChatClient(project_endpoint=os.environ["FOUNDRY_PROJECT_ENDPOINT"], model=model or os.environ.get("FOUNDRY_MODEL", "gpt-4.1-mini"), credential=cred)
         client.client = client.client.with_options(timeout=45., max_retries=3)  # one stalled call (seen: 103 s) is retried, not waited out
         return client
     return ScriptedClient()
+
+
+def strong(client):
+    """The client for the agents whose judgement matters most (the writer and the fact-checkers): FOUNDRY_STRONG_MODEL when it is set
+    (a larger deployment, e.g. gpt-4.1), else the same client. One per process."""
+    model = os.environ.get("FOUNDRY_STRONG_MODEL")
+    if not model or isinstance(client, ScriptedClient):
+        return client
+    global _strong
+    if _strong is None:
+        _strong = make_client(model)
+    return _strong
+
+
+_strong = None
 
 
 @functools.cache

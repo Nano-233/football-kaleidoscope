@@ -16,7 +16,7 @@ import re
 
 from agent_framework import Agent
 
-from newsroom.clients import traced
+from newsroom.clients import strong, traced
 from newsroom.moments import template_line
 
 PERSONAS = {
@@ -32,7 +32,7 @@ RULES = ("Write in British English (metres, centre, defence). Use only facts and
 
 
 def build(client, persona="veteran"):
-    mk = lambda role, text: Agent(client, f"[[ROLE:{role}]] {text} {RULES}", name=role)
+    mk = lambda role, text, c=None: Agent(c or client, f"[[ROLE:{role}]] {text} {RULES}", name=role)
     stats = mk("stats", "You are the stats analyst. From FACTS pick the two or three numbers that best explain this moment (its own numbers first; the match-total PPDA only if the moment is about pressing). Reply as a JSON list of {metric, value, meaning}.")
     tactics = mk("tactics", "You are the tactics analyst. Explain in one sentence, from FACTS.why (for a shape change, FACTS.shift.observed: what moved, by how many metres), "
                             "how the moment came about. A formation's name is not evidence of intent.")
@@ -52,7 +52,7 @@ def build(client, persona="veteran"):
                                  "went for a winner, shut up shop) when FACTS does not show it: for a shape change only FACTS.shift.observed.in_words says how the players moved (take its words and directions as true), and a formation's name says nothing about intent; "
                                  "or the line says one thing caused another (their pressing is forcing mistakes, the flank focus is helping them hold the lead) when FACTS does not "
                                  "link the two: two true numbers side by side are fine, an invented cause between them is not. Wording, style and emphasis are not errors, and neither is how the minute is written (67' and 67 minutes are the same; minutes are checked separately); which side presses harder is FACTS.pressing_harder (a lower PPDA is the harder press, already worked out): accept a line that agrees with it and do not re-derive it; set approved to true whenever you find no real error. Reply only as JSON {\"approved\": bool, \"issues\": [str]}, "
-                                 "one short sentence per real error, and an empty list when approved.")
+                                 "one short sentence per real error, and an empty list when approved.", strong(client))  # the larger model judges
     return stats, tactics, commentator, checker
 
 

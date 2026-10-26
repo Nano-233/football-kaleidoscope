@@ -15,6 +15,7 @@ param(
     [string]$Account = "matchday-newsroom-$((az account show --query id -o tsv).Substring(0, 6))",
     [string]$Project = "newsroom",
     [string]$Model = "gpt-4.1-mini",
+    [string]$StrongModel = "gpt-4.1",  # the writer and the fact-checkers (a deployment of its own in the Foundry project)
     [string]$Image = "ghcr.io/nano-233/matchday-newsroom:latest"
 )
 function Ok { if ($LASTEXITCODE) { Write-Host "Failed (see the error above); fix it and re-run." -ForegroundColor Red; exit 1 } }
@@ -23,7 +24,7 @@ foreach ($ns in "Microsoft.App", "Microsoft.OperationalInsights") { az provider 
 $endpoint = "https://$Account.services.ai.azure.com/api/projects/$Project"
 $resId = az cognitiveservices account show -n $Account -g $Rg --query id -o tsv; Ok
 $aiConn = az monitor app-insights component show -g $Rg --app "$Account-insights" --query connectionString -o tsv --only-show-errors; Ok  # tracing (setup.ps1 made it)
-az containerapp up -n $App -g $Rg -l $Location --image $Image --ingress external --target-port 8080 --env-vars "FOUNDRY_PROJECT_ENDPOINT=$endpoint" "FOUNDRY_MODEL=$Model" "ASK_SLOTS=2" "SPEECH_ENDPOINT=https://$Account.cognitiveservices.azure.com" "SPEECH_RESOURCE_ID=$resId" "APPLICATIONINSIGHTS_CONNECTION_STRING=$aiConn"; Ok
+az containerapp up -n $App -g $Rg -l $Location --image $Image --ingress external --target-port 8080 --env-vars "FOUNDRY_PROJECT_ENDPOINT=$endpoint" "FOUNDRY_MODEL=$Model" "FOUNDRY_STRONG_MODEL=$StrongModel" "ASK_SLOTS=2" "SPEECH_ENDPOINT=https://$Account.cognitiveservices.azure.com" "SPEECH_RESOURCE_ID=$resId" "APPLICATIONINSIGHTS_CONNECTION_STRING=$aiConn"; Ok
 $envName = az containerapp show -n $App -g $Rg --query properties.managedEnvironmentId -o tsv; Ok
 az containerapp up -n "$App-sim" -g $Rg -l $Location --environment $envName --image $Image --ingress internal --target-port 8080 --env-vars "SIM_WORKER=1" "SIM_WORKERS=2"; Ok
 az containerapp update -n "$App-sim" -g $Rg --cpu 2 --memory 4Gi --min-replicas 0 --max-replicas 12 --scale-rule-name http --scale-rule-type http --scale-rule-http-concurrency 2 -o none; Ok
