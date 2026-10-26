@@ -96,6 +96,9 @@ def wrong_leader(line, pack):
     return out
 
 
+PRESS_NOUN = re.compile(r"^\W*(?:-\s*)?(?:press(?:ing)?|intensity|block|line|energy|tempo)\b", re.I)
+
+
 def wrong_ppda(line, pair):
     """PPDA called low / lower when it is the higher of the two sides' (the lighter press), or high / higher when it is the lower. pair: both
     sides' PPDA; a quoted value that is neither (a 15-minute figure, say) is left alone."""
@@ -105,6 +108,8 @@ def wrong_ppda(line, pair):
     out = []
     for m in re.finditer(r"\b(low|lower|high|higher)\b[^.\d]{0,25}?ppda[^.\d]{0,20}?(\d+(?:\.\d+)?)|ppda[^.\d]{0,20}?(\d+(?:\.\d+)?)[^.]{0,25}?\b(low|lower|high|higher)\b", line, flags=re.I):
         word, num = (m.group(1), m.group(2)) if m.group(1) else (m.group(4), m.group(3))
+        if PRESS_NOUN.search(m.group(0)[len(word):] if m.group(1) else line[m.end():m.end() + 20]):
+            continue  # "low intensity, with a PPDA of 29.3", "PPDA 7.2, a high press": the word describes the press, not the PPDA
         v = float(num)
         side = next((i for i, p in enumerate(vals) if abs(v - p) <= .5 * 10 ** -(len(num.split(".")[1]) if "." in num else 0) + 1e-9), None)
         if side is None:

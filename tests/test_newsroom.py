@@ -35,6 +35,8 @@ assert _first_json_list("no proposal") == []
 assert wrong_ppda("sharper chance creation, highlighted by a lower ppda of 23.0", [9.1, 23.0])  # the slip seen live
 assert not wrong_ppda("a lower PPDA of 9.1 against 23.0", [9.1, 23.0]) and not wrong_ppda("PPDA 23.0 is high: they sat off", [9.1, 23.0])
 assert not wrong_ppda("a lower PPDA of 7.5 in the last 15 minutes", [9.1, 23.0])  # a window figure: not checked
+assert not wrong_ppda("pressing was very low intensity, with a PPDA of 23.0", [9.1, 23.0]) and not wrong_ppda("PPDA 9.1, a high press", [9.1, 23.0])  # the word describes the press
+assert wrong_ppda("PPDA 23.0 was low", [9.1, 23.0])
 sq = {"Oakhaven FC": ["Ridor Novakley"], "Westmoor Wanderers": ["Arstor Vossez"]}
 assert wrong_team("the red card to Oakhaven's Arstor Vossez at 26'", sq) == ["Arstor Vossez plays for Westmoor Wanderers, not Oakhaven FC"]
 assert wrong_team("Westmoor's Arstor Vossez was sent off; Oakhaven FC's striker Ridor Novakley scored", sq) == []
