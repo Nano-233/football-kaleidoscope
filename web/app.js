@@ -1387,7 +1387,7 @@ function exportClip() {
   for (let i = i0; i <= i1; i++) { const o = i * 72; frames.push([...Array.from(F.subarray(o, o + 49), r), ...Array.from(F.subarray(o + 50, o + 72), r)]); }
   const squad = side => [...M[side].players, ...M[side].bench].map(p => ({ id: p.id, name: p.name, number: p.number, role: p.role }));
   const out = {
-    format: 'matchday-newsroom/clip@1', title: c.title, synthetic: true,
+    format: 'football-kaleidoscope/clip@1', title: c.title, synthetic: true,
     match: { id: S.id, home: M.home.name, away: M.away.name, final_score: M.score },
     range: { start: c.start, end: c.end, clock_start: clockAt(c.start), clock_end: clockAt(c.end) },
     squads: { home: squad('home'), away: squad('away') }, slots_at_start: Array.from({ length: 22 }, (_, k) => (who(k, c.start) || {}).id),
@@ -1411,7 +1411,7 @@ async function exportPack() {
     texts = texts.map(t => (TR[lang] || {})[t] || t);
   }
   const out = {
-    format: 'matchday-newsroom/broadcast@1', synthetic: true, match: { id: S.id, home: S.D.meta.home.name, away: S.D.meta.away.name, final_score: S.D.meta.score },
+    format: 'football-kaleidoscope/broadcast@1', synthetic: true, match: { id: S.id, home: S.D.meta.home.name, away: S.D.meta.away.name, final_score: S.D.meta.score },
     language: lang, persona: S.persona,
     overlays: items.map((it, i) => ({ t_in: it.overlay.t_in, t_out: it.overlay.t_out, clock: it.moment.clock, kind: it.moment.type, text: texts[i], fact_checked: true })),
     talking_points: recs.map((r, i) => ({ when: r.kind, depth: r.profile.depth, text: texts[items.length + i] })),
@@ -1432,7 +1432,7 @@ async function shareCard(t, kind, text) {
   x.fillStyle = css('--bg'); x.fillRect(0, 0, W_, H_);
   x.drawImage(cv, 40, 140, 660, 432);
   S.t = keep; S.view = keepView; draw();
-  x.fillStyle = css('--text'); x.font = '700 30px "Barlow Condensed", sans-serif'; x.fillText('MATCHDAY NEWSROOM', 40, 64);
+  x.fillStyle = css('--text'); x.font = '700 30px "Barlow Condensed", sans-serif'; x.fillText('FOOTBALL KALEIDOSCOPE', 40, 64);
   x.fillStyle = css('--text-3'); x.font = '600 18px "Barlow Condensed", sans-serif'; x.fillText('SYNTHETIC MATCH · FICTIONAL CLUBS', 40, 92);
   x.fillStyle = css('--text'); x.font = '700 56px "Barlow Condensed", sans-serif'; x.textAlign = 'right';
   x.fillText(`${M.home.code} ${h}–${a} ${M.away.code}`, W_ - 40, 72); x.textAlign = 'left';

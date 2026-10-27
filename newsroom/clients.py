@@ -55,7 +55,7 @@ def _tracing(cred):
         from azure.monitor.opentelemetry import configure_azure_monitor
         from agent_framework.observability import create_metric_views, create_resource, enable_instrumentation
         cs = os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING") or AIProjectClient(endpoint=os.environ["FOUNDRY_PROJECT_ENDPOINT"], credential=cred).telemetry.get_application_insights_connection_string()
-        configure_azure_monitor(connection_string=cs, views=create_metric_views(), resource=create_resource(service_name="matchday-newsroom"))
+        configure_azure_monitor(connection_string=cs, views=create_metric_views(), resource=create_resource(service_name="football-kaleidoscope"))
         enable_instrumentation(enable_sensitive_data=False)
     except Exception as ex:  # no Application Insights on the project, or the package is missing: run without traces
         logging.getLogger(__name__).warning("tracing off: %s", ex)
@@ -64,7 +64,7 @@ def _tracing(cred):
 def traced(name):
     """One span around a newsroom job (a question, a moment), so its agent runs and tool calls sit under one trace."""
     from opentelemetry import trace
-    tracer = trace.get_tracer("matchday-newsroom")
+    tracer = trace.get_tracer("football-kaleidoscope")
 
     def deco(fn):
         @functools.wraps(fn)

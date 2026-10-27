@@ -1,4 +1,4 @@
-# Handoff: Matchday Newsroom (state as of 2026-10-25, evening)
+# Handoff: Football Kaleidoscope (state as of 2026-10-25, evening)
 
 Read this first in a new session, then DEVLOG.md (newest entries just above "Is the tuner machine learning?") for detail.
 

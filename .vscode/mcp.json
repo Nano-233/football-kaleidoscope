@@ -1,6 +1,6 @@
 {
   "servers": {
-    "matchday-newsroom": {
+    "football-kaleidoscope": {
       "type": "stdio",
       "command": "${workspaceFolder}/.venv/Scripts/python.exe",
       "args": ["-m", "server.mcp_server"],

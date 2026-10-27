@@ -4,7 +4,7 @@ Drafts for the submission form and the video. Edit freely; every number here is 
 
 ## Elevator pitch (submission form)
 
-**Matchday Newsroom** is a newsroom of AI agents that watches a football match and explains it as it happens: what just
+**Football Kaleidoscope: Newsroom that explains.** A newsroom of AI agents that watches a football match and explains it as it happens: what just
 happened, why it matters, and what it means for you, whether you are a casual fan, an analyst or a scout, in nine languages.
 
 **What we built.** A synthetic football engine that plays full matches and records every event and every player's position
@@ -26,33 +26,40 @@ tools for GitHub Copilot agent mode, GitHub Actions (tests, image build).
 
 **Try it:** https://matchday-newsroom.ashywave-faaedb6c.eastus2.azurecontainerapps.io (free, no login; all data synthetic).
 
-## Video (under 2 minutes): shot list
+## Video (under 2 minutes): structure
 
-Record at 1920x1080 on the live link, browser full screen with the page zoom at 125% (Ctrl +) so the text reads on video, no music
-with rights issues (silence or a voice-over). Speed 5x unless noted. About 118 s total. Plain cuts and a voice-over; no transitions or effects (see the note below the table). Before recording: open the link once (the
-app wakes up), then open a private window so the welcome card shows; open the What-if tab once so the workers are warm.
+Built automatically from the live site (video/record.py drives a browser, video/build.py edits); the voice-over is read over the
+finished cut. Target 1:50, leaving room under the 2:00 limit. One match throughout (Harlow Athletic v Stonebay Albion, 3-3), so the
+story carries from shot to shot.
 
-| # | Time | Screen | Voice-over (suggested) |
-|---|---|---|---|
-| 1 | 0:00-0:08 | The link opening on the welcome card (Harlow Athletic v Stonebay Albion), then **Explore on my own** | "A scoreline doesn't say why. Matchday Newsroom is a team of AI agents that explains a match as it happens." |
-| 2 | 0:08-0:22 | Press **Next moment** twice: the 13' goal, the lower-third overlay and the Live feed | "Every key moment is covered by four agents: two analysts, a commentator, and a fact-checker that rejects anything the data doesn't show." |
-| 3 | 0:22-0:32 | Switch persona **Fan -> Analyst -> Scout** at the same minute | "The same moment, written for a fan, an analyst and a scout." |
-| 4 | 0:32-0:42 | **Supporting** dropdown above the panel: Stonebay Albion; Settings: language **Español**; feed and overlay re-render | "In nine languages, from your club's side." |
-| 5 | 0:42-0:58 | Analyst, **Feed** at about 76': the 72' shape-change line, then its **Show shape** button (the new shape drawn on the pitch) | "When a team changes shape, the newsroom says what the players actually did, measured from tracking: the back line, the block, the wing-backs." |
-| 6 | 0:58-1:12 | **Ask** at full time (3-3): "How did Harlow Athletic throw away a 3-1 lead?" (cached is fine); open "How the newsroom worked it out" | "Ask anything. An orchestrator sends specialists to the tools, a writer answers for you, a fact-checker signs it off, and the whole trail is visible." |
-| 7 | 1:12-1:30 | **What if** (open the tab first so the workers warm up): pressing up from 60', **Play it out**; pairs fill in | "What if they'd pressed higher? Twenty-four simulations run in parallel on Azure Container Apps, each pair with the same random numbers, so only the change differs." |
-| 8 | 1:30-1:38 | **Clips > Breakdown** of a goal: the move paused and drawn | "Every goal can be broken down: where the ball was won, the open lanes, the shot." |
-| 9 | 1:38-1:43 | Montage, about 1 s per cut with a one-word caption: **3D** view, **Voice** (spoken commentary), **Live run** (cards arriving), the **Recap** half-time report, GitHub Copilot agent mode calling one of the MCP tools in VS Code (guide Clip 12; Harbour records the Copilot cut) | "Plus a 3D view, spoken commentary, live runs, match reports, and seventeen tools for GitHub Copilot." |
-| 10 | 1:43-1:52 | **Stats**: "Answers vs ground truth" table | "And because the data is synthetic, we can grade the newsroom against what really happened." |
-| 11 | 1:52-1:58 | Architecture diagram from the README, or the logo with the link | "Microsoft Foundry, Agent Framework, Azure Container Apps. Matchday Newsroom." |
+**What matters, in order.** The judges score five things equally: technical build, agent design, real-world use, UX and category fit.
+The video spends its time where those are decided and only names the rest:
 
-The montage takes the slot of the old heat-map shot; the team heat map (guide Clip 9) is spare footage for it. Record with the
-computer in dark mode so the site uses its dark theme (it follows the system setting). Under the montage, keep the app's own
-spoken commentary low so the voice-over stays on top.
+1. *Agents you can trust* (agent design, category fit): fact-checked commentary, the Ask trail, the bench assistant testing its own advice.
+2. *Explainable match intelligence* (category fit, UX): the tactics board, a scout's player profile, the same moment for three viewers.
+3. *Proof and build* (technical, real-world): paired simulations on Container Apps, the newsroom graded against the engine's truth, the architecture.
 
-Tips: do one dry run first (it warms the What-if workers and caches the Ask answer); keep the cursor still while text renders;
-cut dead time in the editor rather than re-recording.
+Cut or shortened from the first draft: the manual what-if slider (the bench assistant does the same thing with agents, so it is shown
+instead), the shape-change card (folded into the Board), the long goal breakdown (one cut in the montage), the long welcome hold.
 
-Editing: hard cuts between shots, the voice-over carrying the story, short on-screen captions only where the voice-over names
-something (a number, "24 simulations"). Skip transitions, zooms and music beds: judges score clarity and what the product does,
-and effects cost time that the 2-minute limit needs for features.
+| # | Time | Screen | Voice-over | Why it is in |
+|---|---|---|---|---|
+| 1 | 0:00-0:05 | Welcome card, then **Explore on my own** | "A scoreline never tells you why. Football Kaleidoscope is a newsroom of AI agents that explains a match as it happens." | The problem and the product in one line |
+| 2 | 0:05-0:18 | **Next moment** to the 13' goal: the caption on the pitch, the Fan feed with its **Fact-checked** badge, Control vs chaos and the win probability above it | "Every key moment goes to two analysts and a commentator, and a fact-checker rejects any line the data doesn't support." | The core use; the brief's control vs chaos on screen |
+| 3 | 0:18-0:25 | Same minute: **Fan, Analyst, Scout** | "The same moment, for a fan, an analyst and a scout." | Personas (UX) |
+| 4 | 0:25-0:32 | **Supporting** Stonebay (the list opens on screen), Settings: **Español** | "Your club, your language: nine of them. The facts never change." | Personalisation, quickly |
+| 5 | 0:32-0:47 | **Ask**: "How did Harlow Athletic throw away a 3-1 lead?", the answer, then **How the newsroom worked it out** | "Ask anything. An orchestrator on Microsoft Foundry sends specialist agents to the tools, a writer answers for you, and a fact-checker signs it off. Every step is in the trail." | Agent design, the headline |
+| 6 | 0:47-0:56 | Analyst **Board**: the shape with and without the ball, then the **pass network** | "Tactics are read from the tracking: the shape in and out of possession, who passes to whom." | Explainable tactics |
+| 7 | 0:56-1:05 | Scout: hover a player on the pitch (the ring), click: rating breakdown, every touch on the pitch | "Click any player for a scout's view: what made his rating, and every touch." | The scout use case, hover to click |
+| 8 | 1:05-1:21 | **What if > Advise the manager** at 68': the two proposals, the paired results, the fact-checked recommendation | "At 68 minutes, the bench assistant proposes two changes and tests each one: the rest of the match replayed twelve times with and without it, on Azure Container Apps." | The strongest agent feature, and the scale-out |
+| 9 | 1:21-1:33 | Montage, about 2 s each with a one-word caption: **Breakdown** of a goal, **3D**, **Voice** (the app speaks), **Live run** (cards drafting), **Broadcast pack**, **GitHub Copilot** | "There's more: goal breakdowns, a 3D view, spoken commentary, live runs, a broadcast pack, and seventeen match tools for GitHub Copilot." | Breadth, named not explained |
+| 10 | 1:33-1:40 | Stats: **Answers vs ground truth** | "Because the data is synthetic, we grade the newsroom against the truth: eighty-five percent correct." | Evidence |
+| 11 | 1:40-1:47 | Architecture diagram | "Microsoft Foundry, the Agent Framework and Azure Container Apps, end to end." | Technical build, Microsoft stack |
+| 12 | 1:47-1:50 | End card with the link | "Football Kaleidoscope: newsroom that explains. Try it live." | The call to action |
+
+Left to the live link and the README: the Clips tab, the focus metric, the Studio style and themes, the other four matches, the
+manual what-if sliders, heat maps beyond the Live tab.
+
+Production: the cursor moves on an eased path (about 0.7 s a move) and rests before each click; a dropdown opens in the page as a
+list so its choice is visible; cuts inside a shot remove only waiting; crossfades of 0.35 s between shots, no zooms, no music, captions
+only in the montage. The app's spoken commentary in the montage is left quiet under the voice-over.

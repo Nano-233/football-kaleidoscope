@@ -27,7 +27,7 @@ for _lg in ("azure", "opentelemetry", "httpx", "agent_framework", "mcp.server.lo
     logging.getLogger(_lg).setLevel(logging.WARNING)
 DATA = pathlib.Path(__file__).resolve().parent / "data"
 _matches = {}
-mcp = FastMCP("matchday-newsroom", host="0.0.0.0", port=8787)
+mcp = FastMCP("football-kaleidoscope", host="0.0.0.0", port=8787)
 TOOLS = ("match_summary", "team_shape", "formation_changes", "pressing", "defensive_duties", "control_and_rhythm", "fatigue", "stat_leaders",
          "momentum", "passing_network", "player_report", "list_players", "find_moments", "moment_breakdown")
 

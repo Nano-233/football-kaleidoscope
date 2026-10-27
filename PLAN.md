@@ -1,4 +1,4 @@
-# Matchday Newsroom: product plan
+# Football Kaleidoscope: product plan
 
 An AI newsroom that **investigates** a match rather than just narrating it. The engine produces the facts, the analytics compute
 every number, and the agents decide what matters, investigate it with tools and explain it to each audience, with every line

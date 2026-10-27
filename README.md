@@ -1,5 +1,6 @@
-# Matchday Newsroom
+# Football Kaleidoscope
 
+**Newsroom that explains.** 
 A newsroom of AI agents that watches a synthetic football match and turns its events into explainable match
 intelligence: live fact-checked commentary, answers to any question, tactical breakdowns, what-if replays and
 half-time / full-time reports. The same match reads differently for a fan, an analyst and a scout, in nine

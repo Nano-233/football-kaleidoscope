@@ -394,7 +394,7 @@ async def speak(request):
         async with aiohttp.ClientSession() as http:
             async with http.post(f"{host.rstrip('/')}/tts/cognitiveservices/v1", data=ssml.encode(), headers={
                     "Authorization": f"Bearer aad#{rid}#{tok}", "Content-Type": "application/ssml+xml",
-                    "X-Microsoft-OutputFormat": "audio-24khz-48kbitrate-mono-mp3", "User-Agent": "matchday-newsroom"}) as r:
+                    "X-Microsoft-OutputFormat": "audio-24khz-48kbitrate-mono-mp3", "User-Agent": "football-kaleidoscope"}) as r:
                 if r.status != 200:
                     raise web.HTTPBadGateway(text=f"speech service {r.status}")
                 audio = await r.read()
