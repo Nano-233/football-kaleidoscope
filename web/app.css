@@ -121,7 +121,7 @@ select { background: var(--surface-2); border: 1px solid var(--line-strong); bor
 body.resizing { cursor: col-resize; user-select: none; }
 body.panel-off .layout { grid-template-columns: minmax(0, 1fr) 0 41px; }
 body.panel-off .sash { cursor: default; background: var(--line); }
-body.panel-off .tabs, body.panel-off .panel-body { display: none; }
+body.panel-off .tabs, body.panel-off .panel-body, body.panel-off .support { display: none; }
 body.panel-off .panel-head { height: 100%; align-items: flex-start; border-bottom: 0; }
 .stage { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--surface); }
 .view-head { display: flex; align-items: center; gap: 8px; height: 35px; padding: 0 12px; border-bottom: 1px solid var(--line); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text); background: var(--bg); }
@@ -171,6 +171,11 @@ body.panel-off .panel-head { height: 100%; align-items: flex-start; border-botto
 .tabs { flex: 1; display: flex; min-width: 0; overflow-x: auto; scrollbar-width: thin; }
 .tabs::-webkit-scrollbar { height: 3px; }
 .tabs button { flex: none; white-space: nowrap; background: var(--bg); border: 0; border-right: 1px solid var(--line); border-top: 2px solid transparent; padding: 0 11px; font-size: 13px; color: var(--text-2); }
+/* the fan's supported club: a slim row above the tabs */
+.support { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 12px; font-size: 12px; color: var(--text-2); border-bottom: 1px solid var(--line); }
+.support select { max-width: 220px; height: 26px; }
+.welcome-club { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; color: var(--text-2); }
+.welcome-club select { height: 28px; }
 .panel-toggle { flex: none; width: 40px; display: grid; place-items: center; background: var(--bg); border: 0; border-left: 1px solid var(--line); color: var(--text-2); }
 .panel-toggle:hover { color: var(--text-hi); background: var(--surface-3); }
 .panel-toggle svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.2; }

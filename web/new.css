@@ -1,5 +1,5 @@
-/* Redesign, behind a hidden switch (press Insert anywhere outside a text field; remembered per browser). Everything is scoped to
-   html.new so app.css stays the default. Rules from Hallmark (nutlope/hallmark, craft.md) and Impeccable (pbakaus/impeccable,
+/* Sleek, the default style (Settings > Style; Insert also switches it; remembered per browser). Everything is scoped to
+   html.new; without the class the page is Studio, the original look in app.css. Rules from Hallmark (nutlope/hallmark, craft.md) and Impeccable (pbakaus/impeccable,
    craft-floor.md): OKLCH tokens with neutrals tinted toward one hue, one accent used as a signal (under 5% of the screen), one
    standard face (Arial), sentence-case labels with no tracking, hairlines before
    wells before cards, square corners as in the original (2 px), one shadow, 120/220/420 ms ease-out, transform/opacity only, one authored reveal (the welcome card). */
@@ -162,6 +162,10 @@ html.new .tabs::-webkit-scrollbar { display: none; }
 html.new .tabs button { height: 34px; border: 0; border-radius: var(--r); padding: 0 12px; background: none; font-size: 14px; color: var(--text-2); }
 html.new .tabs button:hover { color: var(--text-hi); background: var(--surface-2); }
 html.new .tabs button[aria-selected="true"] { background: var(--text-hi); color: var(--paper); }
+html.new .support { font-size: 13px; padding: 8px 12px 8px 20px; background: var(--surface); }
+html.new .support select { height: 32px; }
+html.new .welcome-club { margin: 0 0 24px; font-size: 14px; }
+html.new .welcome-club select { height: 34px; }
 html.new .panel-toggle { width: 36px; height: 36px; border: 0; border-radius: var(--r); background: none; }
 html.new .panel-toggle:hover { background: var(--surface-2); }
 html.new .panel-body { background: var(--surface); padding: 16px 20px 32px; }

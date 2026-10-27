@@ -27,9 +27,9 @@ it, so the first load after a quiet spell is slow while the container starts.
    Redmere City 5-0 Ashmere Town.
 2. **Press play** or drag the timeline. Lower-third overlays and the feed follow the clock. Toggle **3D** under the pitch.
 3. **Switch persona** in the activity bar on the left (Fan / Analyst / Scout). The same moment is written three ways.
-4. **Settings** (the gear): pick a metric to follow, a language (for example Español or 日本語), the units and a
-   light or dark theme. The feed, overlays and answers all follow these settings. As a fan, pick the side you support
-   on the Live tab: answers are told from that club's side and its moments are marked (Analyst and Scout stay neutral).
+4. **Settings** (the gear): pick a metric to follow, a language (for example Español or 日本語), the units, a
+   light or dark theme and the style (Sleek, the default, or Studio). The feed, overlays and answers all follow these
+   settings. As a fan, pick the side you support in the Supporting dropdown above the panel (or on the welcome card): answers are told from that club's side and its moments are marked (Analyst and Scout stay neutral).
 5. **Ask** tab: type a question, for example "Why did the away side lose control after the break?". Each answer
    shows its audit trail: which agents ran, which tools they called and what the fact-checker said.
 6. **What-if** tab: change a team's pressing or tempo from any minute and replay the rest of the match against the

@@ -8,7 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="app.css">
 <link rel="stylesheet" href="new.css">
-<script>try { const h = document.documentElement, t = localStorage.getItem('theme'); if (localStorage.getItem('ui') === 'new') h.classList.add('new'); if (t) h.dataset.theme = t; } catch (e) {}</script>
+<script>try { const h = document.documentElement, t = localStorage.getItem('theme'); if (localStorage.getItem('style') !== 'studio') h.classList.add('new'); if (t) h.dataset.theme = t; } catch (e) {}</script>
 <script type="importmap">{"imports": {"three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 </head>
 <body>
@@ -32,6 +32,7 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg><span>Settings</span></summary>
     <div class="flyout" role="dialog" aria-label="Settings">
       <h2>Settings</h2>
+      <div class="field"><span>Style</span><div class="seg" id="style"><button data-s="sleek">Sleek</button><button data-s="studio">Studio</button></div></div>
       <div class="field"><span>Theme</span><div class="seg" id="theme"><button data-t="light">Light</button><button data-t="dark">Dark</button><button data-t="">System</button></div></div>
       <label class="field"><span>Focus metric<small>Leads the live view and the newsroom's answers</small></span><select id="metric"></select></label>
       <label class="field"><span>Language<small>Commentary, recaps and answers</small></span><select id="lang"></select></label>
@@ -67,7 +68,8 @@
         <h2 id="welcome-h">An AI-powered newsroom covering a football match</h2>
         <p>The match is synthetic: our engine played it, every club and player is fictional. Agents on Microsoft Foundry explain it as it
           happens: analysts, commentators, a writer and a fact-checker who signs off every line against the data.</p>
-        <p>Watching as a fan? Pick the side you support on the Live tab: answers are then told from that club's point of view and its moments are marked. The facts stay the same, and the Analyst and Scout views always stay neutral.</p>
+        <p>Watching as a fan? Pick the side you support: Fan answers are then told from that club's point of view and its moments are marked. The facts stay the same, and the Analyst and Scout views always stay neutral. You can change it any time above the panel on the right.</p>
+        <label class="welcome-club"><span>Supporting</span><select class="club-pick" aria-label="Club you support"></select></label>
         <div class="bar">
           <button class="btn primary" data-welcome="highlights">Watch the goals</button>
           <button class="btn" data-welcome="analyst">See the tactics</button>
@@ -104,6 +106,7 @@
 
   <div class="sash" id="sash" role="separator" aria-orientation="vertical" title="Drag to resize the panel (double-click: default width)"></div>
   <aside class="panel" id="panel">
+    <label class="support" id="support" title="The club you support: Fan answers are told from its side and its moments are marked. Analyst and Scout stay neutral."><span>Supporting</span><select class="club-pick" aria-label="Club you support"></select></label>
     <div class="panel-head"><nav class="tabs" id="tabs" role="tablist"></nav>
       <button class="panel-toggle" id="panel-toggle" aria-expanded="true" aria-controls="panel" title="Hide the panel">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2.5h12v11H2zM10 2.5v11"/></svg></button></div>

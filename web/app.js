@@ -195,6 +195,7 @@ async function load(id) {
   $('seek').max = D.meta.duration;
   if (S.profile.playerId && !S.info[S.profile.playerId]) Object.assign(S.profile, { player: '', playerId: '' });
   if (S.profile.club && ![D.meta.home.name, D.meta.away.name].includes(S.profile.club)) S.profile.club = '';
+  fillClubs();
   setTimeout(pretranslate, 0);  // a club from another match is not playing in this one
   S.asks = []; S.reveal = false; S.bench = null; S.view = null; S.reel = null;  // a new match starts clean: no answers, what-ifs or advice from the last one
   S.wi = { team: 1, change: {}, formation: '', busy: false, res: null, err: '' };
@@ -447,6 +448,7 @@ const KEY = e => ['goal', 'own_goal', 'penalty', 'var_check', 'goal_disallowed']
 function setPersona(p) {
   S.persona = p; S.tab = TABS[p][0];
   for (const b of $('persona').children) b.setAttribute('aria-selected', b.dataset.p === p);
+  $('support').hidden = p !== 'fan';  // the supported club is the fan's
   $('tabs').innerHTML = TABS[p].map(t => `<button role="tab" data-tab="${t}" aria-selected="${t === S.tab}">${t}</button>`).join('');
   if (S.id) syncUrl();
   render(true);
@@ -467,7 +469,7 @@ function render(force) {
 }
 
 const VIEWS = {
-  Live: () => clubPicker() + metricCard() + liveStrip() + feedView('fan'),
+  Live: () => metricCard() + liveStrip() + feedView('fan'),
   Feed: () => metricCard() + feedView('analyst'),
   Stats: () => S.persona === 'fan' ? compareView() : tableView(),
   Players: () => S.player ? playerView() : squadView(),
@@ -503,10 +505,17 @@ function playerNotes() {
 
 // the club a fan supports (picked on the Live tab): answers are told from its side and its moments marked. Analyst and Scout stay neutral.
 const fanClub = () => (S.persona === 'fan' ? S.profile.club : '');
-function clubPicker() {
-  const M = S.D.meta, c = S.profile.club;
-  return `<div class="label">${esc(tr('Supporting'))}</div><div class="chips">${['', M.home.name, M.away.name].map(n => `<button class="chip" data-club="${esc(n)}" aria-pressed="${c === n}">${esc(n || tr('Neutral'))}</button>`).join('')}</div>`;
+function fillClubs() {  // the Supporting pickers (panel header, welcome card): Neutral or one of the two clubs
+  const M = S.D.meta;
+  for (const sel of document.querySelectorAll('.club-pick'))
+    sel.innerHTML = ['', M.home.name, M.away.name].map(n => `<option value="${esc(n)}"${S.profile.club === n ? ' selected' : ''}>${esc(n || 'Neutral')}</option>`).join('');
 }
+document.addEventListener('change', e => {
+  if (!e.target.matches('.club-pick')) return;
+  S.profile.club = e.target.value; saveProfile();
+  for (const sel of document.querySelectorAll('.club-pick')) sel.value = S.profile.club;
+  render(true);
+});
 // whether a feed item is about the viewer's club: the event's own team where there is one (the scoring side for a goal), else the side the
 // line names first
 function isOurs(it, club) {
@@ -1462,7 +1471,7 @@ function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = fals
 // the page's own labels (buttons, persona names, settings, status bar) in the reader's language: each element's text nodes keep their
 // English in a map and are swapped for the translation as it arrives
 const EN = new WeakMap();
-const LABELS = '#persona span, #settings summary span, .flyout h2, .flyout .field > span, .flyout small, #u-preset button, #theme button,#next, #voice, #v3d, #live, '
+const LABELS = '#persona span, #settings summary span, .flyout h2, .flyout .field > span, .flyout small, #u-preset button, #theme button, #style button, .support > span, .welcome-club > span, #next, #voice, #v3d, #live, '
   + '.transport .speed > span, .view-head, .warn-item, .statusbar .opt, .welcome h2, .welcome p, .welcome button';
 // and in the panel, after every render: its buttons, badges, headings and notes (text with digits is left alone: a clock or a score
 // changes every minute and would be a new translation each time)
@@ -1538,12 +1547,17 @@ document.addEventListener('keydown', e => {
   if (e.key === 'ArrowRight' && e.target.type !== 'range') seek(S.t + 5);
   if (e.key === 'ArrowLeft' && e.target.type !== 'range') seek(S.t - 5);
 });
-// Hidden switch: the Insert key toggles the redesign (new.css), remembered per browser
+// Style: Sleek (new.css, the default) or Studio (the original look), from Settings or the Insert key; remembered per browser
+function setStyle(s) {
+  document.documentElement.classList.toggle('new', s === 'sleek');
+  try { localStorage.setItem('style', s); } catch (err) { /* storage off: the style lasts for this visit */ }
+  for (const b of $('style').children) b.setAttribute('aria-selected', b.dataset.s === s);
+  recolour();
+}
+$('style').onclick = e => { const b = e.target.closest('button'); if (b) setStyle(b.dataset.s); };
 document.addEventListener('keydown', e => {
   if (e.key !== 'Insert' || e.target.matches('input[type=text], select, textarea')) return;
-  const on = document.documentElement.classList.toggle('new');
-  try { localStorage.setItem('ui', on ? 'new' : ''); } catch (err) {}
-  recolour();
+  setStyle(document.documentElement.classList.contains('new') ? 'studio' : 'sleek');
 });
 // Theme: light, dark or the system's (the default); the CSS follows html[data-theme], the canvas re-reads its colours
 const recolour = () => { Object.assign(COL, readCol()); render(true); };
@@ -1595,7 +1609,6 @@ $('panel-body').addEventListener('click', e => {
   else if (d.act === 'highlights') playHighlights();
   else if (d.act === 'reveal') { S.reveal = true; render(true); }
   else if (d.heatteam !== undefined) { S.heatTeam = +d.heatteam; render(true); }
-  else if (d.club !== undefined) { S.profile.club = d.club; saveProfile(); render(true); }
   else if (d.act === 'wi-run') runWhatIf();
   else if (d.act === 'bench') runBench();
   else if (d.act === 'bench-apply') { const rc = S.bench.r.recommendation; S.wi.change = Object.fromEntries(Object.entries(rc).filter(([k]) => k !== 'formation')); S.wi.formation = rc.formation || ''; render(true); }
@@ -1639,6 +1652,7 @@ $('u-preset').onclick = e => { const b = e.target.closest('button'); if (b) setU
 for (const id of ['u-len', 'u-spd', 'u-dist']) $(id).onchange = () => setUnits([$('u-len').value, $('u-spd').value, $('u-dist').value].join(','));
 setUnits(S.profile.units || 'm,kmh,km');
 setTheme(document.documentElement.dataset.theme || '');
+setStyle(document.documentElement.classList.contains('new') ? 'sleek' : 'studio');
 // live run: the server streams the match from here on its own clock and the newsroom covers each moment as it arrives (GET /api/live)
 const liveKey = m => `${m.t}|${m.type}`;
 function stopLive(keep) {
