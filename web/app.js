@@ -49,7 +49,7 @@ const FAN_ROWS = ['goals', 'xg', 'shots', 'shots_on_target', 'corners', 'yellow_
 
 const S = {
   D: null, F: null, n: 0, dt: .2, id: null, t: 0, playing: false, last: 0,
-  persona: 'fan', tab: 'Live', player: null, group: 'All', clip: null, custom: [], panelKey: '', info: {}, slots: [],
+  persona: 'fan', tab: 'Live', player: null, hover: -1, group: 'All', clip: null, custom: [], panelKey: '', info: {}, slots: [],
   bd: null, profile: loadProfile(), asks: [], askVer: 0, askDraft: '', board: { mode: 'Shape', team: 0, phase: 'in_possession' }, wi: { team: 1, change: {}, formation: '', busy: false, res: null, err: '' },
 };
 const SUGGEST = {
@@ -279,7 +279,6 @@ function toggle3d() {
   if (S.v3 && !$('pitch3d')) { View3D.init(cv.parentElement); View3D.setMode($('cam3d').value); }
   if (S.v3) teams3d();
   $('v3d').setAttribute('aria-pressed', String(S.v3)); $('cam3d-wrap').hidden = !S.v3;
-  $('view-mode').textContent = S.v3 ? '3D · animated players' : '2D · tracking at 5 Hz';
   draw();
 }
 
@@ -315,7 +314,7 @@ function draw() {
     if (p && p.role === 'GK') { g.lineWidth = 2; g.strokeStyle = '#0c0d0e'; g.stroke(); }
     g.fillStyle = '#0c0d0e'; g.font = '600 10px "Segoe UI", system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
     g.fillText(p ? p.number : '', X, Y + .5);
-    if (k === f[3]) { g.beginPath(); g.arc(X, Y, 13, 0, 7); g.strokeStyle = 'rgba(255,255,255,.8)'; g.lineWidth = 1.5; g.stroke(); }
+    if (k === f[3] || k === S.hover) { g.beginPath(); g.arc(X, Y, 13, 0, 7); g.strokeStyle = 'rgba(255,255,255,.8)'; g.lineWidth = 1.5; g.stroke(); }
     if (k === sel) { g.beginPath(); g.arc(X, Y, 15, 0, 7); g.strokeStyle = COL.accent; g.lineWidth = 3; g.stroke(); }
     if (k === fol && k !== sel) {  // the player the viewer follows: a dashed ring and his name, wherever he is
       g.setLineDash([3, 3]); g.beginPath(); g.arc(X, Y, 15, 0, 7); g.strokeStyle = COL.accent; g.lineWidth = 2; g.stroke(); g.setLineDash([]);
@@ -492,7 +491,7 @@ function playerNotes() {
     else if (e.type === 'shot' && e.player === id && e.outcome !== 'goal') line = `${nm} shoots: ${e.outcome.replace('_', ' ')} (xG ${e.xg.toFixed(2)}).`;
     else if ((e.type === 'pass' || e.type === 'cross') && e.player === id && e.assist) line = `${nm} sets up the goal.`;
     else if ((e.type === 'pass' || e.type === 'cross') && e.player === id && e.key_pass) line = `${nm} creates a chance.`;
-    else if (e.type === 'take_on' && e.player === id && e.outcome === 'won') line = `${nm} beats his man.`;
+    else if (e.type === 'take_on' && e.player === id && e.outcome === 'won') line = `${nm} wins a take-on.`;
     else if (e.type === 'tackle' && e.player === id && e.outcome === 'won') line = `${nm} wins the ball back.`;
     else if (e.type === 'save' && e.player === id) line = `${nm} makes a save.`;
     else if (e.type === 'card' && e.player === id) line = `${nm} is booked (${e.card.replace('_', ' ')}).`;
@@ -596,7 +595,7 @@ function tableView() {
   const poss = `<tr><td>Possession (tracking)</td><td class="${ph > pa ? 'lead' : ''}">${ph}%</td><td class="${pa > ph ? 'lead' : ''}">${pa}%</td></tr>`;
   return `<div class="label">Team stats · ${esc(clockAt(S.t))}</div>
     <table class="stats"><thead><tr><th>Metric</th><th>${esc(M.home.code)}</th><th>${esc(M.away.code)}</th></tr></thead><tbody>${poss}${rows}</tbody></table>
-    <div class="label">Source</div><div class="mono">Computed from the event stream by the analytics layer; the newsroom may only quote these numbers.</div>${truthPanel()}`;
+    ${truthPanel()}`;
 }
 
 // what the reader saw against what the engine actually did: the data is synthetic, so the truth is known
@@ -741,7 +740,7 @@ function paintHeats(root) {
 function heatSvg(grid, team) {  // 6 x 4 zones, own goal on the left, attacking left to right
   const w = 300, h = 194, cw = w / 6, ch = h / 4, mx = Math.max(...grid.flat(), .001);
   const cells = grid.map((col, i) => col.map((v, j) => `<rect x="${i * cw}" y="${j * ch}" width="${cw - 1}" height="${ch - 1}" fill="${team ? 'var(--away)' : 'var(--home)'}" fill-opacity="${(.08 + .9 * v / mx).toFixed(2)}"/>`).join('')).join('');
-  return `<svg viewBox="0 0 ${w} ${h}" width="100%" role="img" aria-label="Where he spent his time; his own goal on the left">${cells}
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" role="img" aria-label="Heatmap; own goal on the left">${cells}
     <rect x="0" y="0" width="${w}" height="${h}" fill="none" stroke="var(--line-strong)"/><line x1="${w / 2}" x2="${w / 2}" y1="0" y2="${h}" stroke="var(--line-strong)"/></svg>`;
 }
 const TERM_LABEL = { attack: 'Attack', passing: 'Passing', carrying: 'Carrying', defending: 'Defending', keeping: 'Keeping', conceded: 'Goals conceded', result: 'Result', discipline: 'Discipline' };
@@ -762,7 +761,7 @@ function profileBlocks(pid, p) {
     <div class="label">Heatmap</div>${heatCanvas(team, pid, 0, S.D.meta.duration, `Where ${p.name} played over the match`)}
     ${terms.length ? `<div class="label">Rating breakdown</div><table class="stats"><tbody>${terms.map(([k, v]) => `<tr><td>${TERM_LABEL[k] || k}</td>
       <td style="width:45%"><span class="termbar ${v < 0 ? 'neg' : ''}" style="width:${Math.round(Math.abs(v) / mt * 100)}%"></span></td><td class="${v >= 0 ? 'lead' : ''}">${v > 0 ? '+' : ''}${v.toFixed(2)}</td></tr>`).join('')}</tbody></table>` : ''}
-    ${vs.length ? `<div class="label">Per 90 vs position average</div><table class="stats"><thead><tr><th>Metric</th><th>Him</th><th>Avg</th></tr></thead><tbody>${vs.map(([k, him, avg, d]) => `<tr><td>${PER90_LABEL[k] || k}</td>
+    ${vs.length ? `<div class="label">Per 90 vs position average</div><table class="stats"><thead><tr><th>Metric</th><th>Player</th><th>Avg</th></tr></thead><tbody>${vs.map(([k, him, avg, d]) => `<tr><td>${PER90_LABEL[k] || k}</td>
       <td class="${(d > 0) !== ['aerial_lost', 'dribbled_past', 'dispossessed', 'fouls'].includes(k) ? 'lead' : ''}">${him}</td><td>${avg}</td></tr>`).join('')}</tbody></table>` : ''}
     <div class="label">Reels</div><div class="chips">${reels.map(r => `<button class="chip" data-reel="${esc(r)}">${esc(r)}</button>`).join('')}</div>`;
 }
@@ -775,7 +774,7 @@ function fatigueBlock(pid, tm) {  // high-intensity running by 15 minutes (analy
   const mx = Math.max(...ws.map(([, v]) => v), 1);
   return `<div class="label">High-intensity running (m/min above ${conv('spd', 19.8, 1)})</div>
     <div style="display:flex;gap:4px;align-items:flex-end;height:46px">${ws.map(([w, v]) => `<i title="${esc(w)}: ${v} m a minute" style="flex:1;background:var(--accent);opacity:.75;height:${Math.max(3, v / mx * 44)}px;border-radius:2px"></i>`).join('')}</div>
-    <div class="mono" style="margin-top:4px">${ws[0][0].split('-')[0]} to ${ws[ws.length - 1][0].split('-')[1]}${q.latest_drop_pct != null && ws.length === Object.keys(q.hi_m_per_min_by_window).length ? ` · down ${q.latest_drop_pct}% on his first half-hour (team ${F_.team_drop_pct}%)${q.tiring ? ' · tiring' : ''}` : ''}</div>`;
+    <div class="mono" style="margin-top:4px">${ws[0][0].split('-')[0]} to ${ws[ws.length - 1][0].split('-')[1]}${q.latest_drop_pct != null && ws.length === Object.keys(q.hi_m_per_min_by_window).length ? ` · down ${q.latest_drop_pct}% vs first 30 min (team ${F_.team_drop_pct}%)${q.tiring ? ' · tiring' : ''}` : ''}</div>`;
 }
 function dutyBlock(pid, tm) {  // his job without the ball, window by window (completed windows only, as on the board)
   const D_ = (S.D.duties || [])[tm];
@@ -818,20 +817,20 @@ function playerView() {
     <button class="btn${following ? ' primary' : ''}" data-follow="${esc(S.player)}">${following ? 'Following' : 'Follow'}</button></div>
     <div class="player-head"><span class="big-num">${p.number}</span><div><h2>${esc(p.name)}</h2>
       <div class="sub">${esc(S.D.meta[side].name)} · ${esc(p.label || p.role)}${(p.traits || []).length ? ' · ' + esc(p.traits.map(x => x.replace(/_/g, ' ')).join(', ')) : ''}</div>
-      <div class="sub">${live ? sf.minutes : s.minutes ?? 0} minutes played${live ? ' so far' : ''}${p.foot ? ` · ${p.foot === 'left' ? 'Left' : 'Right'}-footed, weak foot ${Math.round(p.weak_foot)}/20` : ''}</div></div><span class="rating" title="${live ? 'The rating comes at full time' : 'Full-match rating'}">${live ? '–' : s.rating ?? '–'}</span></div>
+      <div class="sub">${live ? sf.minutes : s.minutes ?? 0}' played${p.foot ? ` · ${p.foot === 'left' ? 'Left' : 'Right'}-footed, weak foot ${Math.round(p.weak_foot)}/20` : ''}</div></div><span class="rating" title="${live ? 'The rating comes at full time' : 'Full-match rating'}">${live ? '–' : s.rating ?? '–'}</span></div>
     <div class="label">${live ? `So far · ${esc(clockAt(S.t))}` : 'Full match'}</div><div class="kv">${kv}</div>
     ${s.passes && !live ? `<div class="label">Pass quality${s.shots ? ' and shooting' : ''}</div><div class="kv"><div><b>${conv('len', s.avg_pass_length_m, 1)}</b><span>Avg pass length</span></div>
-      <div title="How hard a pass was: 1 minus the chance the engine's pass model gave it of reaching the team-mate when he chose it (like xG, but for passes). 0.5 or more counts as a hard pass."><b>${s.avg_pass_difficulty?.toFixed(2) ?? '–'}</b><span>Avg difficulty ⓘ</span></div><div><b>${s.hard_passes_completed}/${s.hard_passes}</b><span>Hard passes completed</span></div>
+      <div title="How hard a pass was: 1 minus the chance the engine's pass model gave it of reaching the team-mate when chosen (like xG, for passes). 0.5 or more is a hard pass."><b>${s.avg_pass_difficulty?.toFixed(2) ?? '–'}</b><span>Avg difficulty ⓘ</span></div><div><b>${s.hard_passes_completed}/${s.hard_passes}</b><span>Hard passes completed</span></div>
       ${s.shots ? `<div><b>${conv('spd', s.top_shot_speed_kmh)}</b><span>Fastest shot</span></div>` : ''}</div>` : ''}
     <div class="bar" style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
-      ${S.persona === 'scout' ? `<button class="btn primary" data-report="${esc(S.player)}">Scout report</button>` : `<button class="btn primary" data-hismatch="${esc(S.player)}">His match</button>`}
+      ${S.persona === 'scout' ? `<button class="btn primary" data-report="${esc(S.player)}">Scout report</button>` : `<button class="btn primary" data-hismatch="${esc(S.player)}">Match story</button>`}
       <button class="btn" data-reel="Highlights">Highlights reel</button></div>
     ${live ? `<div class="label">Heatmap · so far</div>${heatCanvas(p.team, S.player, 0, S.t, `Where ${p.name} has played so far`)}
-      <div class="mono" style="margin-top:12px">His full-match numbers and rating come at the final whistle.</div>${S.persona === 'scout' ? '<div class="bar" style="margin-top:8px"><button class="btn" data-act="reveal">Show full-match profile (spoils the result)</button></div>' : ''}`
+      <div class="mono" style="margin-top:12px">Full-match numbers and rating at full time.</div>${S.persona === 'scout' ? '<div class="bar" style="margin-top:8px"><button class="btn" data-act="reveal">Show full-match profile (spoils the result)</button></div>' : ''}`
       : profileBlocks(S.player, p) + fatigueBlock(S.player, p.team) + dutyBlock(S.player, p.team)}
     <div class="label">Actions (${acts.length})</div><div class="chips">${chips}</div>
     <ul class="actions" style="margin-top:10px">${rows || '<li><span></span><span class="empty">No actions in this group.</span></li>'}</ul>
-    ${S.group === 'All' ? '<div class="mono" style="margin-top:8px">Pressures are under Defending.</div>' : ''}`;
+    `;
 }
 
 // ---------------------------------------------------------------- hover and click on what is drawn over the pitch
@@ -856,6 +855,14 @@ function nextPass(tm, a, b, row) {  // a passing-network link: each click watche
   if (!ps.length) return;
   const e = ps.find(e => e.t > S.t + .5) || ps[0];
   jumpTo(e.t); toast(`${pname(a)} → ${pname(b)}: pass ${ps.indexOf(e) + 1} of ${ps.length}, ${e.clock}`);
+}
+// the clickable player under the pointer (slot index, -1 for none): only where a view has the Players tab, and not in 3D
+function playerAt(ev) {
+  if (!TABS[S.persona].includes('Players') || cv.style.display === 'none') return -1;
+  const r = cv.getBoundingClientRect(), mx = (ev.clientX - r.left) * cv.width / r.width, my = (ev.clientY - r.top) * cv.height / r.height, f = frame(S.t);
+  let best = -1, bd = 16;
+  for (let k = 0; k < 22; k++) { const d = Math.hypot(px(f[5 + 2 * k]) - mx, py(f[6 + 2 * k]) - my); if (d < bd) { bd = d; best = k; } }
+  return best;
 }
 function hitAt(ev) {
   const r = cv.getBoundingClientRect(), mx = (ev.clientX - r.left) * cv.width / r.width, my = (ev.clientY - r.top) * cv.height / r.height;
@@ -965,7 +972,7 @@ function paintShape(tm, sh) {
       g.setLineDash([6, 5]); g.strokeStyle = teamCol(tm); g.lineWidth = 1.5; g.beginPath(); g.moveTo(px(lx), py(0)); g.lineTo(px(lx), py(W)); g.stroke(); g.setLineDash([]);
       for (const [id, x, y] of sh.positions) {
         const [wx, wy] = toWorld(tm, x, y);
-        hitPt(px(wx), py(wy), `${pname(id)}\naverage position ${conv('len', x)} from his own goal`);
+        hitPt(px(wx), py(wy), `${pname(id)}\naverage position ${conv('len', x)} from own goal`);
         g.beginPath(); g.arc(px(wx), py(wy), 12, 0, 7); g.fillStyle = 'rgba(12,13,14,.75)'; g.fill(); g.lineWidth = 2.5; g.strokeStyle = teamCol(tm); g.stroke();
         g.fillStyle = '#f1f2f4'; g.font = '600 11px "Segoe UI", system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(num(id), px(wx), py(wy) + .5);
       }
@@ -986,7 +993,7 @@ function paintNetwork(tm, row) {
       for (const [id, xy] of Object.entries(row.nodes)) {
         const [wx, wy] = toWorld(tm, ...xy);
         g.beginPath(); g.arc(px(wx), py(wy), 11, 0, 7); g.fillStyle = teamCol(tm); g.fill();
-        hitPt(px(wx), py(wy), `${pname(id)}\naverage position on the ball · ${row.links.reduce((s, l) => s + (l[0] === id || l[1] === id ? l[2] : 0), 0)} passes in his links`);
+        hitPt(px(wx), py(wy), `${pname(id)}\naverage position on the ball · ${row.links.reduce((s, l) => s + (l[0] === id || l[1] === id ? l[2] : 0), 0)} passes in links`);
         g.fillStyle = '#0c0d0e'; g.font = '600 10px "Segoe UI", system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(num(id), px(wx), py(wy) + .5);
       }
   }
@@ -995,8 +1002,8 @@ function paintNetwork(tm, row) {
 const dutyRow = tm => { const D_ = (S.D.duties || [])[tm]; return D_ ? D_.rows.filter(r => r.t1 <= S.t).pop() || null : null; };  // windows restart at the second-half kick-off
 const pct = v => (v == null ? '–' : Math.round(v * 100) + '%');
 function dutyTip(id, q) {
-  return `${pname(id)}\ncloses the ball down ${pct(q.press)} of their possession${q.press_height_m != null ? `, ${conv('len', q.press_height_m)} from his goal` : ''}`
-    + `\ntracks a man ${pct(q.mark)}${q.tracks ? `, mostly ${q.tracks} (${pct(q.tracks_share)})` : ''}${q.holds ? `\nholds his space ${q.holds}` : ''}`;
+  return `${pname(id)}\ncloses the ball down ${pct(q.press)} of their possession${q.press_height_m != null ? `, ${conv('len', q.press_height_m)} from own goal` : ''}`
+    + `\ntracks a man ${pct(q.mark)}${q.tracks ? `, mostly ${q.tracks} (${pct(q.tracks_share)})` : ''}${q.holds ? `\nholds space ${q.holds}` : ''}`;
 }
 function paintDuties(tm, row) {
   if (!row) return;
@@ -1085,7 +1092,7 @@ function winSvg() {
   return `<svg viewBox="0 0 ${w} ${h}" width="100%" role="img" aria-label="Win probability for each side over the match; dashed lines mark turning points">${tps}
     <polyline points="${line('home')}" fill="none" stroke="var(--home)" stroke-width="2"/><polyline points="${line('away')}" fill="none" stroke="var(--away)" stroke-width="2"/>
     <polyline points="${line('draw')}" fill="none" stroke="var(--text-3)" stroke-width="1.5" stroke-dasharray="4 3"/></svg>
-    <div class="mono">Simple model: the league scoring rate blended with each side's xG so far; dashed lines are the turning points.</div>`;
+    <div class="mono">Dashed lines: turning points.</div>`;
 }
 function boardView() {
   const B = S.D.board;
@@ -1097,7 +1104,7 @@ function boardView() {
     body = !row ? '<div class="empty">The first five minutes are not over yet.</div>' : !sh ? '<div class="empty">Too little of that phase in this window.</div>' :
       `<div class="label">${esc(M[b.team ? 'away' : 'home'].name)} · ${clockAt(row.t0)}–${clockAt(row.t1)} · ${b.phase === 'in_possession' ? 'in possession' : 'out of possession'}</div>
        <div class="kv"><div><b>${esc(sh.formation)}</b><span>Shape</span></div><div><b>${conv('len', sh.line)}</b><span>Defensive line</span></div><div><b>${conv('len', sh.length).split(' ')[0]} × ${conv('len', sh.width)}</b><span>Block</span></div></div>
-       <div class="mono" style="margin-top:8px">Average positions over the last completed five minutes; the dashed line is the defensive line. The two phases are read separately: a team can line up one way with the ball and another without it.</div>`;
+       <div class="mono" style="margin-top:8px">Average positions, last completed 5 min. Dashed line: defensive line.</div>`;
   } else if (b.mode === 'Network') {
     const row = lastWin(B.network[b.team], B.net_window);
     body = !row ? '<div class="empty">The first fifteen minutes are not over yet.</div>' :
@@ -1112,16 +1119,16 @@ function boardView() {
       const seen = D_.changes.filter(c => c.confirmed_t <= S.t), sc = D_.score;
       body = !row ? '<div class="empty">The first fifteen minutes are not over yet.</div>' :
         `<div class="label">${esc(M[b.team ? 'away' : 'home'].name)} · out of possession · ${clockAt(row.t0)}–${clockAt(row.t1)}</div>
-        <table class="stats"><thead><tr><th>Player</th><th title="Share of their possession spent closing the ball down">Closes down</th><th title="Where, from his own goal">Where</th><th>Tracks</th></tr></thead><tbody>
+        <table class="stats"><thead><tr><th>Player</th><th title="Share of their possession spent closing the ball down">Closes down</th><th title="Distance from own goal">Press height</th><th>Tracks</th></tr></thead><tbody>
         ${ps.map(([id, q]) => `<tr title="${esc(dutyTip(id, q))}"><td>${num(id)} ${esc(S.info[id].name)}</td><td>${pct(q.press)}</td><td>${q.press_height_m != null ? conv('len', q.press_height_m) : '–'}</td><td>${q.tracks && q.tracks_share >= .5 ? esc(q.tracks) : '<span class="mono">zone</span>'}</td></tr>`).join('')}</tbody></table>
         <div class="label">Changes</div>${seen.length ? `<ul class="actions">${seen.map(c => `<li><span class="clk">${esc(c.at)}</span><span>${esc(c.player)} ${esc(c.change)}</span><span></span><span><button class="link" data-seek="${c.t}">Watch</button></span></li>`).join('')}</ul>` : '<div class="mono">None confirmed yet (a change counts once two windows show it).</div>'}
-        <div class="mono" style="margin-top:8px">Read from tracking alone, as with real data: who closes the ball down, who follows a man (dashed line to him) and where each holds his space (the ring grows with closing down). Against the engine's own instructions: ${pct(sc && sc.frame_agreement)} of moments agree; the man read as tracked is the one he was given ${pct(sc && sc.tracked_man_right)} of the time; pressing height ${sc ? conv('len', sc.press_height_read_m) : '–'} read, ${sc ? conv('len', sc.press_height_true_m) : '–'} true.</div>`;
+        <div class="mono" style="margin-top:8px">Read from tracking. Dashed line: man-marking; ring size: pressing. Vs engine instructions: ${pct(sc && sc.frame_agreement)} of moments agree; marking target correct ${pct(sc && sc.tracked_man_right)}; pressing height ${sc ? conv('len', sc.press_height_read_m) : '–'} read, ${sc ? conv('len', sc.press_height_true_m) : '–'} true.</div>`;
     }
   } else if (b.mode === 'Press') {
     const rows = B.pressing[b.team], cur = Math.floor(S.t / B.net_window);
     body = `<div class="label">${esc(M[b.team ? 'away' : 'home'].name)} · pressing · 15 min windows</div>
       <table class="stats"><thead><tr><th>Window</th><th>PPDA</th><th>Height</th><th>Counter-press</th></tr></thead><tbody>${rows.slice(0, cur).map(r => `<tr><td>${esc(r.window.join('–'))}</td><td>${r.ppda ?? '–'}</td><td>${conv('len', r.action_height_m)}</td><td>${r.counterpress_wins}</td></tr>`).join('') || '<tr><td colspan="4">First window not over yet.</td></tr>'}</tbody></table>
-      <div class="mono" style="margin-top:8px">PPDA: opponent passes per defensive action in their build-up (lower = harder press). Dots on the pitch: where the ball was won in the last fifteen minutes.</div>`;
+      <div class="mono" style="margin-top:8px">Dots: ball wins, last 15 min.</div>`;
   } else {
     const sp = B.momentum.dominant_spells.filter(x => x.end_t <= S.t);
     body = `${winBar()}<div class="label">Win probability</div>${winSvg()}${rhythmStrip(true)}<div class="label">xG momentum · 5 min</div>${momentumSvg()}
@@ -1509,13 +1516,14 @@ $('bd-exit').onclick = () => { S.bd = null; setPlaying(false); };
 const tipEl = $('pitch-tip');
 cv.addEventListener('mousemove', e => {
   const h = hitAt(e);
-  tipEl.hidden = !h; cv.style.cursor = h && h.go ? 'pointer' : '';
+  S.hover = h ? -1 : playerAt(e);  // a hovered player gets the ball carrier's ring: a click opens their actions
+  tipEl.hidden = !h; cv.style.cursor = (h && h.go) || S.hover >= 0 ? 'pointer' : '';
   if (!h) return;
   const w = cv.parentElement.getBoundingClientRect();
   tipEl.textContent = h.tip;
   tipEl.style.left = Math.min(e.clientX - w.left + 14, w.width - tipEl.offsetWidth - 8) + 'px'; tipEl.style.top = (e.clientY - w.top + 14) + 'px';
 });
-cv.addEventListener('mouseleave', () => { tipEl.hidden = true; });
+cv.addEventListener('mouseleave', () => { tipEl.hidden = true; S.hover = -1; });
 $('reel').addEventListener('click', e => { if (e.target.id === 'hide-view') { S.view = null; render(true); } });
 document.addEventListener('keydown', e => {
   if (e.target.matches('input[type=text], select')) return;
@@ -1593,8 +1601,8 @@ $('panel-body').addEventListener('click', e => {
     askNewsroom(`What if ${r.team_name} had changed to ${parts.join(', ')} from ${r.at.clock}? Run what_if and explain what the simulations show and why.`);
   }
   else if (d.reel) playReel(S.player, d.reel);
-  else if (d.report) { const nm = S.info[d.report].name; S.tab = 'Ask'; setTabs(); askNewsroom(`Write a scout report on ${nm}: strengths, weaknesses and how he compares with his position, with the evidence.`); }
-  else if (d.hismatch) { const nm = S.info[d.hismatch].name; S.tab = 'Ask'; setTabs(); askNewsroom(`Tell the story of ${nm}'s match so far: his key moments, how he played and his rating.`); }
+  else if (d.report) { const nm = S.info[d.report].name; S.tab = 'Ask'; setTabs(); askNewsroom(`Scout report on ${nm}: strengths, weaknesses and comparison with the position average, with evidence.`); }
+  else if (d.hismatch) { const nm = S.info[d.hismatch].name; S.tab = 'Ask'; setTabs(); askNewsroom(`Match story for ${nm} so far: key moments, performance and rating.`); }
   else if (d.act === 'ask') askNewsroom($('ask-q').value);
   else if (d.ask) askNewsroom(d.ask);
   else if (d.follow !== undefined) {
@@ -1673,10 +1681,7 @@ $('panel-body').addEventListener('input', e => {
 cv.addEventListener('click', e => {  // a drawn event or link jumps to it; otherwise click a player on the pitch to open his actions
   const h = hitAt(e);
   if (h && h.go) return h.go();
-  if (!TABS[S.persona].includes('Players')) return;
-  const r = cv.getBoundingClientRect(), mx = (e.clientX - r.left) * cv.width / r.width, my = (e.clientY - r.top) * cv.height / r.height, f = frame(S.t);
-  let best = -1, bd = 16;
-  for (let k = 0; k < 22; k++) { const d = Math.hypot(px(f[5 + 2 * k]) - mx, py(f[6 + 2 * k]) - my); if (d < bd) { bd = d; best = k; } }
+  const best = playerAt(e);
   if (best >= 0) { S.player = who(best, S.t).id; S.group = 'All'; S.tab = 'Players'; setTabs(); render(true); }
 });
 

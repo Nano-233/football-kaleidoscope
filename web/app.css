@@ -125,7 +125,6 @@ body.panel-off .tabs, body.panel-off .panel-body { display: none; }
 body.panel-off .panel-head { height: 100%; align-items: flex-start; border-bottom: 0; }
 .stage { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--surface); }
 .view-head { display: flex; align-items: center; gap: 8px; height: 35px; padding: 0 12px; border-bottom: 1px solid var(--line); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text); background: var(--bg); }
-.view-head .crumb { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-2); font-size: 12px; }
 .pitch-wrap { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 14px 16px; }
 #pitch3d { max-width: 100%; display: block; }
 #pitch { max-width: 100%; max-height: 100%; aspect-ratio: 1100 / 720; background: var(--pitch); display: block; border: 1px solid var(--line); }

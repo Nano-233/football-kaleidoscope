@@ -113,7 +113,6 @@ html.new .sash { background: var(--line); position: relative; }
 html.new .sash::after { content: ""; position: absolute; inset: 0 -4px; }
 html.new .stage { background: var(--paper); }
 html.new .view-head { height: 44px; padding: 0 20px; border-bottom: 0; background: var(--paper); font: 600 15px/1 var(--serif); color: var(--text-hi); gap: 10px; }
-html.new .view-head .crumb { font: 13px/1 var(--ui); color: var(--text-2); }
 html.new .pitch-wrap { padding: 0 20px 16px; }
 html.new #pitch { border: 0; border-radius: var(--r-card); }
 html.new .loading { color: var(--text-2); font-family: var(--serif); font-size: 16px; }
