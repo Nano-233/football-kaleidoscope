@@ -193,7 +193,6 @@ async function load(id) {
   $('sb-match').textContent = `${D.meta.home.name} v ${D.meta.away.name}`;
   $('a-code').textContent = D.meta.away.code; $('a-name').textContent = D.meta.away.name;
   $('seek').max = D.meta.duration;
-  $('club').innerHTML = '<option value="">Neutral</option>' + ['home', 'away'].map(k => `<option${S.profile.club === D.meta[k].name ? ' selected' : ''}>${esc(D.meta[k].name)}</option>`).join('');
   if (S.profile.playerId && !S.info[S.profile.playerId]) Object.assign(S.profile, { player: '', playerId: '' });
   if (S.profile.club && ![D.meta.home.name, D.meta.away.name].includes(S.profile.club)) S.profile.club = '';
   setTimeout(pretranslate, 0);  // a club from another match is not playing in this one
@@ -468,7 +467,7 @@ function render(force) {
 }
 
 const VIEWS = {
-  Live: () => metricCard() + liveStrip() + feedView('fan'),
+  Live: () => clubPicker() + metricCard() + liveStrip() + feedView('fan'),
   Feed: () => metricCard() + feedView('analyst'),
   Stats: () => S.persona === 'fan' ? compareView() : tableView(),
   Players: () => S.player ? playerView() : squadView(),
@@ -502,6 +501,12 @@ function playerNotes() {
   return out.sort((a, b) => a.t - b.t);
 }
 
+// the club a fan supports (picked on the Live tab): answers are told from its side and its moments marked. Analyst and Scout stay neutral.
+const fanClub = () => (S.persona === 'fan' ? S.profile.club : '');
+function clubPicker() {
+  const M = S.D.meta, c = S.profile.club;
+  return `<div class="label">${esc(tr('Supporting'))}</div><div class="chips">${['', M.home.name, M.away.name].map(n => `<button class="chip" data-club="${esc(n)}" aria-pressed="${c === n}">${esc(n || tr('Neutral'))}</button>`).join('')}</div>`;
+}
 // whether a feed item is about the viewer's club: the event's own team where there is one (the scoring side for a goal), else the side the
 // line names first
 function isOurs(it, club) {
@@ -516,7 +521,7 @@ function feedView(mode) {
   for (const r of S.D.milestones || []) if (r.t <= S.t && r.player !== S.profile.playerId && (mode !== 'fan' || big(r))) notes.push({ note: true, milestone: true, moment: { t: r.t, clock: r.clock, type: 'milestone' }, line: `${S.info[r.player].name}: ${r.text}.`, approved: true });
   const items = [...feed().filter(it => it.moment.t <= S.t), ...notes].sort((a, b) => a.moment.t - b.moment.t).reverse();
   if (!items.length) return `<div class="empty">${esc(tr('The newsroom files its first story when something happens.'))}</div>`;
-  const club = S.profile.club;  // moments that name the viewer's club are marked as theirs
+  const club = fanClub();  // moments that name the fan's club are marked as theirs
   return `<ul class="feed ${mode}">` + items.map(it => {
     if (it.note) return `<li class="note"><div class="meta"><span class="t">${esc(it.moment.clock)}</span><span class="kind">${esc(it.milestone ? tr('Milestone') : S.profile.player)}</span>
       <button class="jump" data-seek="${it.moment.t - 6}">Watch</button></div><p dir="auto">${esc(tr(it.line))}</p></li>`;
@@ -559,7 +564,7 @@ function winBar() {
   const over = S.t >= M.duration - 1;
   if (over) { const [h, a] = M.score; w = { ...w, home: +(h > a), draw: +(h === a), away: +(a > h) }; }  // at the whistle: the result, not a last estimate
   const p = x => over ? Math.round(x * 100) : x < .005 ? '<1' : x > .995 ? '>99' : Math.round(x * 100);  // nothing is certain before the final whistle
-  const club = S.profile.club, side = club === M.home.name ? 'home' : club === M.away.name ? 'away' : '';
+  const club = fanClub(), side = club === M.home.name ? 'home' : club === M.away.name ? 'away' : '';
   const mine = side ? (() => {  // the fan's own side: score from their end and the chance to win
     const g = S.D.events.filter(e => e.t <= S.t && (e.type === 'goal' || e.type === 'own_goal')).pop(), sc = g ? [g.home, g.away] : [0, 0];
     const us = side === 'home' ? 0 : 1;
@@ -1284,7 +1289,7 @@ function askView() {
   }).join('');
   return `<div class="ask-controls">
       <label>Depth <select id="p-depth">${opt('quick', P.depth, 'Quick')}${opt('standard', P.depth, 'Standard')}${opt('deep', P.depth, 'Deep')}</select></label>
-      ${P.player ? `<span class="badge">Following ${esc(P.player)}</span>` : ''}${P.club ? `<span class="badge">${esc(P.club)} fan</span>` : ''}</div>
+      ${P.player ? `<span class="badge">Following ${esc(P.player)}</span>` : ''}${fanClub() ? `<span class="badge">${esc(fanClub())} fan</span>` : ''}</div>
     <div class="ask-box"><input type="text" id="ask-q" placeholder="Ask about this match" value="${esc(S.askDraft)}" maxlength="300" aria-label="Your question"><button class="btn primary" data-act="ask">Ask</button></div>
     <div class="chips" style="margin:10px 0 4px">${sug.map(q => `<button class="chip" data-ask="${esc(q)}">${esc(q)}</button>`).join('')}</div>
     <div class="mono" style="margin-bottom:6px">Answers use only what has happened up to the current minute.</div>
@@ -1299,7 +1304,7 @@ async function askNewsroom(q) {
   S.asks.push(a); S.askDraft = ''; S.askVer++; render(true);
   try {
     const res = await fetch('api/ask?stream=1', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ match: S.id, question: q, t: Math.max(60, S.t), profile: { persona: S.persona, depth: P.depth, language: P.language, club: P.club, player: P.player, units: P.units, metric: P.metric ? METRICS[P.metric] : '' } }) });
+      body: JSON.stringify({ match: S.id, question: q, t: Math.max(60, S.t), profile: { persona: S.persona, depth: P.depth, language: P.language, club: fanClub(), player: P.player, units: P.units, metric: P.metric ? METRICS[P.metric] : '' } }) });
     if (!res.ok) throw new Error(res.status === 404 || res.status === 405 || res.status === 501 ? NO_SERVER : res.status === 429 ? await res.text() : `The newsroom could not answer (${res.status}).`);
     // server-sent events: each step of the newsroom as it happens, then the answer
     const reader = res.body.getReader(), dec = new TextDecoder();
@@ -1590,6 +1595,7 @@ $('panel-body').addEventListener('click', e => {
   else if (d.act === 'highlights') playHighlights();
   else if (d.act === 'reveal') { S.reveal = true; render(true); }
   else if (d.heatteam !== undefined) { S.heatTeam = +d.heatteam; render(true); }
+  else if (d.club !== undefined) { S.profile.club = d.club; saveProfile(); render(true); }
   else if (d.act === 'wi-run') runWhatIf();
   else if (d.act === 'bench') runBench();
   else if (d.act === 'bench-apply') { const rc = S.bench.r.recommendation; S.wi.change = Object.fromEntries(Object.entries(rc).filter(([k]) => k !== 'formation')); S.wi.formation = rc.formation || ''; render(true); }
@@ -1623,7 +1629,6 @@ $('panel-body').addEventListener('change', e => {
   if (e.target.id === 'p-depth') { S.profile.depth = e.target.value; saveProfile(); }
 });
 $('panel-body').addEventListener('keydown', e => { if (e.target.id === 'ask-q' && e.key === 'Enter') askNewsroom(e.target.value); });
-$('club').onchange = e => { S.profile.club = e.target.value; saveProfile(); render(true); };
 function setUnits(u) {
   S.profile.units = u; saveProfile();
   const [len, spd, dist] = u.split(','); $('u-len').value = len; $('u-spd').value = spd; $('u-dist').value = dist;

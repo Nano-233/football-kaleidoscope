@@ -71,6 +71,8 @@ async def ask(request):
     if not q:
         raise web.HTTPBadRequest(text="empty question")
     prof = {k: str(v)[:60] for k, v in (body.get("profile") or {}).items() if k in PROFILE_KEYS and v}
+    if prof.get("persona", "fan") != "fan":
+        prof.pop("club", None)  # a supported club is the fan's; Analyst and Scout answers stay neutral
     m = match(str(body.get("match", "")))
     t = body.get("t")
     t = None if t is None else max(60., min(float(t), m["meta"]["duration"]))

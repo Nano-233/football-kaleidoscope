@@ -27,8 +27,9 @@ it, so the first load after a quiet spell is slow while the container starts.
    Redmere City 5-0 Ashmere Town.
 2. **Press play** or drag the timeline. Lower-third overlays and the feed follow the clock. Toggle **3D** under the pitch.
 3. **Switch persona** in the activity bar on the left (Fan / Analyst / Scout). The same moment is written three ways.
-4. **Settings** (the gear): pick a favourite club, a metric to follow, a language (for example Español or 日本語)
-   and the units. The feed, overlays and answers all follow these settings.
+4. **Settings** (the gear): pick a metric to follow, a language (for example Español or 日本語), the units and a
+   light or dark theme. The feed, overlays and answers all follow these settings. As a fan, pick the side you support
+   on the Live tab: answers are told from that club's side and its moments are marked (Analyst and Scout stay neutral).
 5. **Ask** tab: type a question, for example "Why did the away side lose control after the break?". Each answer
    shows its audit trail: which agents ran, which tools they called and what the fact-checker said.
 6. **What-if** tab: change a team's pressing or tempo from any minute and replay the rest of the match against the
@@ -50,7 +51,7 @@ The free demo has a daily allowance for new model calls. Everything that is cach
 | **Interpret** | `analytics/` computes every displayed number deterministically: stats and ratings, PPDA, pass length and difficulty, ball and shot speed, sprints and distance, formation reader, pressing, momentum, win probability, control vs chaos, fatigue, defensive duties, milestones. |
 | **Explain** | The agents choose which numbers matter and explain why the moment happened (shape changes, pressing spells, tiring players), using only tool output. Every engine decision also carries a `why` rationale. |
 | **Render** | Match centre with timed lower thirds, a live feed, team and player heat maps from tracking, a tactics board (shapes, pass networks, press, momentum), breakdowns you can pause and draw on, a 3D view, and a machine-readable broadcast pack. |
-| **Personalise** | Fan / Analyst / Scout personas, favourite club, followed player, a metric to follow, nine languages (localizer agent plus a number-preservation check), metric / imperial units, spoken commentary. |
+| **Personalise** | Fan / Analyst / Scout personas, a supported club for fans, followed player, a metric to follow, nine languages (localizer agent plus a number-preservation check), metric / imperial units, spoken commentary. |
 
 ## Architecture
 

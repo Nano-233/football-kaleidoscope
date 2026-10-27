@@ -118,7 +118,8 @@ def in_units(obj, units):
 def _writer_text(profile):
     p = profile or {}
     who = PERSONA.get(p.get("persona", "fan"), PERSONA["fan"])
-    side = (f" The reader supports {p['club']}: tell it from that side, warmly but honestly." if p.get("club") else "") + \
+    side = (f" The reader supports {p['club']}: tell it from that side, but do not flatter it: praise and blame only where the "
+            "FINDINGS show them, say plainly when the club played badly, and credit the opponent where they earned it." if p.get("club") else "") + \
            (f" The reader follows the player {p['player']}: put him at the centre where the facts allow." if p.get("player") else "") + \
            (f" The reader's metric is {p['metric']}: lead with it where the facts have it (ask the specialists for it)." if p.get("metric") else "")
     lang = p.get("language", "English")
