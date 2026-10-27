@@ -41,3 +41,9 @@ sq = {"Oakhaven FC": ["Ridor Novakley"], "Westmoor Wanderers": ["Arstor Vossez"]
 assert wrong_team("the red card to Oakhaven's Arstor Vossez at 26'", sq) == ["Arstor Vossez plays for Westmoor Wanderers, not Oakhaven FC"]
 assert wrong_team("Westmoor's Arstor Vossez was sent off; Oakhaven FC's striker Ridor Novakley scored", sq) == []
 print("team check ok")
+from newsroom.desk import _until  # noqa: E402
+early = _until(match, 60.)  # an early question sees nothing from later in the match
+assert early["meta"]["score"] == [0, 0] and "ball_in_play" not in early["meta"] and "added_time" not in early["meta"]
+assert all(a <= 60 and b <= 60 for a, b, _ in early["meta"]["dead_log"]) and all(e["t"] <= 60 for e in early["events"])
+assert not match.get("stamina") or len(early["stamina"]) == 61
+print("no spoilers ok")

@@ -129,6 +129,9 @@ def _writer_text(profile):
             "(a formation's name says nothing about how the side played; call a formation by the name the findings use). No hedged guesses ('may have', "
             "'such as', 'possibly'): say what the findings show, or leave it out; for a goal, tell the move as the findings give it (who won the ball, the pass, the finish). "
             "Never say two things that contradict each other about the same player or team; when you discuss a player who scored, say so; "
+            "The match may not be over: describe only what has happened up to MATCH STATE.minute, and never say 'throughout the match', "
+            "'all game' or anything about how it ends unless MATCH STATE.full_time is true; when a finding says too_early, say it is too early to tell "
+            "and give only the starting line-ups. "
             "check the question against MATCH STATE first: if it takes something for granted that the match state or the findings contradict "
             "(a likely draw when one side leads), open by correcting it. "
             "Write in British English (metres, centre, defence). "
@@ -175,6 +178,10 @@ def _looks_english(text):
     return len(words) > 20 and sum(w in common for w in words) / len(words) > .15
 
 
+EARLY_S = 300.  # before five minutes of play there is no finished window to read a shape, a press or a rhythm from
+WINDOWED = {"team_shape", "formation_changes", "pressing", "defensive_duties", "control_and_rhythm", "fatigue", "momentum", "passing_network"}
+
+
 def _until(match, t):
     """The match as it stood at time t (seconds): later events and frames removed."""
     if t is None:
@@ -182,9 +189,16 @@ def _until(match, t):
     m = dict(match)
     m["events"] = [e for e in match["events"] if e["t"] <= t]
     m["frames"] = match["frames"][:int(t / match["meta"]["dt"]) + 1]
-    m["meta"] = dict(match["meta"], duration=float(t), scheduled=max(float(t), 2. * match["meta"]["half_time"]))  # how long the match is due to run, for the time left
+    goals = [e for e in m["events"] if e["type"] in ("goal", "own_goal")]
+    meta = {k: v for k, v in match["meta"].items() if k not in ("ball_in_play", "added_time")}  # whole-match figures: unknown at t
+    meta.update(duration=float(t), scheduled=max(float(t), 2. * match["meta"]["half_time"]),  # how long the match is due to run, for the time left
+                score=[goals[-1]["home"], goals[-1]["away"]] if goals else [0, 0],  # the score then, not the final one
+                dead_log=[[a, min(b, float(t)), k] for a, b, k in match["meta"].get("dead_log", []) if a <= t])  # stoppages so far
+    m["meta"] = meta
     if match.get("jobs"):
         m["jobs"] = match["jobs"][:len(m["frames"])]
+    if match.get("stamina"):
+        m["stamina"] = match["stamina"][:int(t) + 1]  # logged once a second
     return m
 
 
@@ -217,11 +231,14 @@ class Desk:
                 return hits[0]
             raise ValueError(f"unknown or ambiguous player {player!r}")
 
+        early = mv.meta["duration"] < EARLY_S
         def logged(agent, fn):
             @functools.wraps(fn)  # keeps the signature: the framework builds the tool's parameters from it
             def wrap(**kw):
                 try:
-                    out = fn(**kw)
+                    out = (dict(too_early=f"only {mv.events[-1]['clock'] if mv.events else chr(49) + chr(39)} played: shapes, pressing, rhythm, momentum and "
+                                "running are read over five-minute windows, so there is nothing to read yet; the starting formations are in match_summary")
+                           if early and fn.__name__ in WINDOWED else fn(**kw))
                 except Exception as ex:  # the model gets the error back and can retry with better arguments
                     out = {"error": str(ex)}
                 self.raw.append(out)
@@ -488,7 +505,8 @@ class Desk:
         wp = mv.win_probability()["series"]
         w = wp[-1] if wp else {}
         return dict(minute=mv.events[-1]["clock"] if mv.events else "1'", score=f"{mv.team_names[0]} {g[-1]['home'] if g else 0}-{g[-1]['away'] if g else 0} {mv.team_names[1]}",
-                    win_probability_now={mv.team_names[0]: w.get("home"), "draw": w.get("draw"), mv.team_names[1]: w.get("away")})
+                    win_probability_now={mv.team_names[0]: w.get("home"), "draw": w.get("draw"), mv.team_names[1]: w.get("away")},
+                    full_time=any(e["type"] == "full_time" for e in mv.events))
 
     async def _write_checked(self, question, found):
         """The writer drafts from the findings; the LLM fact-checker and the deterministic checks judge it; up to MAX_REWRITES rewrites."""
