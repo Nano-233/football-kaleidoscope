@@ -47,3 +47,7 @@ assert early["meta"]["score"] == [0, 0] and "ball_in_play" not in early["meta"] 
 assert all(a <= 60 and b <= 60 for a, b, _ in early["meta"]["dead_log"]) and all(e["t"] <= 60 for e in early["events"])
 assert not match.get("stamina") or len(early["stamina"]) == 61
 print("no spoilers ok")
+from newsroom.agents import fan_jargon  # noqa: E402
+assert len(fan_jargon("a low block 27.6 metres from goal, PPDA 12.2, xG 0.4")) == 3 and fan_jargon("a compact low block, 2-1 up at 74'") == []
+assert fan_jargon("sitting 30 m deep") and not fan_jargon("the 4-1-4-1 shape held for 15 minutes")
+print("fan words ok")

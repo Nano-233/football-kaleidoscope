@@ -164,6 +164,7 @@ html.new .tabs button:hover { color: var(--text-hi); background: var(--surface-2
 html.new .tabs button[aria-selected="true"] { background: var(--text-hi); color: var(--paper); }
 html.new .support { font-size: 13px; padding: 8px 12px 8px 20px; background: var(--surface); }
 html.new .support select { height: 32px; }
+html.new .info { border-radius: 50%; font-family: Arial, sans-serif; font-style: normal; }
 html.new .welcome-club { margin: 0 0 24px; font-size: 14px; }
 html.new .welcome-club select { height: 34px; }
 html.new .panel-toggle { width: 36px; height: 36px; border: 0; border-radius: var(--r); background: none; }

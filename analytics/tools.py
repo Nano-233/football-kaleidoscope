@@ -63,6 +63,14 @@ nrm = lambda a, axis=-1: np.linalg.norm(a, axis=axis)
 # ball the ten demo sides read 25-40 m (median 31.5), the deep blocks (line_height 0.25-0.4) at 25-28 m and the high lines (0.65-0.72) at 40 m.
 # Agents given the bare number called a 25 m line "high"; with the ball the whole team is further up, so the word is only given without it.
 LINE_WORD = lambda m, phase: (None if phase != "out" else f"{'deep' if m < 29 else 'high' if m > 36 else 'medium'} (sides in these matches defend 25-40 m from their goal)")
+# the block out of possession in football words, against the same league: over the five demo matches (15-minute windows, both sides) the
+# average-position block reads 29-38 m long (quartiles 31 and 36) and 37-47 m wide (quartiles 40 and 44); the line as LINE_WORD. For fans,
+# who are told "a compact low block", not "line 26 m, block 30 m long"; the metres stay in the facts for the analyst.
+def BLOCK_WORDS(line_m, length_m, width_m):
+    height = "low block" if line_m < 29 else "high line" if line_m > 36 else "mid block"
+    size = [w for w in ("compact" if length_m < 31 else "stretched" if length_m > 36 else "",
+                        "narrow" if width_m < 40 else "wide" if width_m > 44 else "") if w]
+    return f"a {' and '.join(size) + ' ' if size else ''}{height}".replace("a  ", "a ")
 DUTY_PRESS_R, DUTY_APPROACH, DUTY_MARK_R = 8., 2., 8.  # m, m/s, m: closing down (within 8 m and running at the carrier at 2 m/s or more), tracking a man (within 8 m)
 ROLE_NORMS = pathlib.Path(__file__).with_name("role_norms.json")  # per-role per-90 averages over many simulated matches (scripts/role_norms.py)
 GROUPS = {
@@ -173,6 +181,7 @@ class MatchView:
             formation=reads[0][0], runner_up=reads[1][0] if len(reads) > 1 else None, fit=round(reads[0][1], 3),
             defensive_line_m=round(float(np.mean(line[:4])), 1), block_length_m=round(float(np.ptp(P[:, 0])), 1), block_width_m=round(float(np.ptp(P[:, 1])), 1),
             defensive_line_is=LINE_WORD(float(np.mean(line[:4])), phase),
+            block_is=BLOCK_WORDS(float(np.mean(line[:4])), float(np.ptp(P[:, 0])), float(np.ptp(P[:, 1]))) if phase == "out" else None,
             positions=[dict(player=self.names[pid], id=pid, x=round(float(xy[0]), 1), y=round(float(xy[1]), 1)) for pid, xy in rows],
         )
 
@@ -214,7 +223,18 @@ class MatchView:
             now_ = f"{v} m above the rest of the back line" if v >= 2 else f"{-v} m behind the rest of the back line" if v <= -2 else "level with the rest of the back line"
             moved = round(v - was, 1) if was is not None else 0
             words.append(f"the two widest of the back {k} now {now_}" + (f", {abs(moved)} m {'further forward' if moved > 0 else 'further back'} than before" if abs(moved) >= 2 else ""))
-        return dict(phase=c["phase"].replace("_", " "), in_words=words, compared="the five minutes before the change against the time since")
+        # the same moves without numbers, for a fan: only what moved clearly (2 m or more), in the words a pundit would use
+        plain = [w for w in (
+            ("dropped deeper" if d("back_line_m") < 0 else "pushed higher up the pitch") if abs(d("back_line_m")) >= 2 else "",
+            ("a shorter block" if d("block_length_m") < 0 else "a longer block") if abs(d("block_length_m")) >= 2 else "",
+            ("a narrower block" if d("block_width_m") < 0 else "a wider block") if abs(d("block_width_m")) >= 2 else "",
+            ("the wide defenders pushed on" if since["wide_backs_above_others_m"] - (before.get("wide_backs_above_others_m") or 0) >= 2 else
+             "the wide defenders tucked back in" if since["wide_backs_above_others_m"] - (before.get("wide_backs_above_others_m") or 0) <= -2 else "")
+            if "wide_backs_above_others_m" in since else "") if w]
+        if ph == "out":
+            plain.append("now " + BLOCK_WORDS(since["back_line_m"], since["block_length_m"], since["block_width_m"]))
+        return dict(phase=c["phase"].replace("_", " "), in_words=words, in_plain=plain or ["much the same shape on the pitch"],
+                    compared="the five minutes before the change against the time since")
 
     @staticmethod
     def _norm(P):

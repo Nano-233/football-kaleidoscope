@@ -22,14 +22,17 @@ from agent_framework import Agent
 from analytics.tools import MatchView
 from matchsim.teams import FORMATIONS
 from matchsim.whatif import TACTIC_KEYS, cached_what_if, snapshot, t_at_minute
-from newsroom.agents import _run, _verdict, unsupported_numbers, wrong_leader, wrong_ppda, wrong_team
+from newsroom.agents import _run, _verdict, fan_jargon, unsupported_numbers, wrong_leader, wrong_ppda, wrong_team
 from newsroom.clients import strong, traced
 
 MAX_REWRITES = 2
 DEPTH = {"quick": "two or three short sentences, plain words, at most one number",
          "standard": "a short paragraph that quotes the two or three numbers that prove the point (with their minutes)",
          "deep": "a thorough answer with the evidence: numbers, phases, players, minutes"}
-PERSONA = {"fan": "a football fan who wants the story and why it matters", "analyst": "an analyst who wants mechanisms and evidence",
+PERSONA = {"fan": "a football fan who wants the story and why it matters, in the words a pundit would use: a shape as a high line, a low "
+                  "or mid block, compact or stretched, narrow or wide (the findings' block_is, defensive_line_is and in_plain words), pressing as high "
+                  "or sitting off, not metres; keep at most one or two numbers that matter (the score, a minute, a chance), and use a football term only "
+                  "where the findings give it", "analyst": "an analyst who wants mechanisms and evidence",
            "scout": "a scout who judges players: strengths, weaknesses, role fit"}
 
 TACTICS = """You are the tactics analyst of a football newsroom. Investigate the question with your tools before answering; never guess.
@@ -118,7 +121,10 @@ def in_units(obj, units):
 def _writer_text(profile):
     p = profile or {}
     who = PERSONA.get(p.get("persona", "fan"), PERSONA["fan"])
-    side = (f" The reader supports {p['club']}: tell it from that side, but do not flatter it: praise and blame only where the "
+    side = (" This reader is a fan, and that comes before the length and style above: no metres and no metric names or abbreviations "
+            "(PPDA, xG, field tilt); say what they mean (pressed high or sat off, a big chance) and give a shape in the football words the "
+            "findings use; the score and minutes are fine, and at most one other number in the whole answer." if p.get("persona", "fan") == "fan" else "") + \
+           (f" The reader supports {p['club']}: tell it from that side, but do not flatter it: praise and blame only where the "
             "FINDINGS show them, say plainly when the club played badly, and credit the opponent where they earned it." if p.get("club") else "") + \
            (f" The reader follows the player {p['player']}: put him at the centre where the facts allow." if p.get("player") else "") + \
            (f" The reader's metric is {p['metric']}: lead with it where the facts have it (ask the specialists for it)." if p.get("metric") else "")
@@ -524,6 +530,8 @@ class Desk:
             verdict = _verdict(v.text)
             bad = unsupported_numbers(answer, facts)
             lead = wrong_leader(answer, self._score_pack()) + wrong_team(answer, self._squads()) + wrong_ppda(answer, [self.mv.pressing(t)["match_ppda"] for t in (0, 1)])
+            if self.profile.get("persona", "fan") == "fan":
+                lead += fan_jargon(answer)  # a fan's answer: football words, not metres or metric names
             approved = bool(verdict["approved"]) and not bad and not lead
             issues = list(verdict.get("issues") or []) + ([f"numbers not in the tool results: {bad}"] if bad else []) + lead
             attempts.append(dict(answer=answer, approved=approved, issues=issues))

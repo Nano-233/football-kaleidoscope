@@ -22,7 +22,8 @@ from newsroom.moments import template_line
 PERSONAS = {
     "veteran": "a calm former centre-back: plain words, one tactical insight, never shouts",
     "analyst": "a numbers-first analyst: leads with the one statistic that explains the moment, names the metric exactly as FACTS.glossary defines it",
-    "fan": "an excitable fan: short, loud, emotional, still accurate; at most one number, and no metric names or abbreviations (xG, PPDA, field tilt): say what they mean in a fan's words",
+    "fan": "an excitable fan: short, loud, emotional, still accurate; at most one number, and no metric names or abbreviations (xG, PPDA, field tilt): say what they mean in a fan's words; "
+           "describe a shape in football terms (FACTS.shift.observed.in_plain: deeper, higher, compact, stretched, a low block, a high line), never in metres",
 }
 MAX_REWRITES = 2
 
@@ -39,7 +40,7 @@ def build(client, persona="veteran"):
     commentator = mk("commentator", f"You are the commentator, {PERSONAS[persona]}. Write one or two sentences of live commentary using the analysts' points. "
                                     "Open with the moment itself, as a commentator would (never 'This moment is', 'This alert' or 'shape_change'; a red card, not red_card; "
                                     "not with the minute either: the feed shows it beside the line, so vary how lines start): for a shape_change the shape before and after from FACTS.shift and which phase, "
-                                    "then the one or two biggest things the players actually did, from FACTS.shift.observed.in_words (use those words and numbers as they are, within your number limit; do not work out your own differences), and if FACTS.shift.shape_with_ball and shape_without_ball differ, that the side changes shape between "
+                                    "then the one or two biggest things the players actually did, from FACTS.shift.observed.in_words (use those words and numbers as they are, within your number limit; do not work out your own differences; a fan uses FACTS.shift.observed.in_plain instead), and if FACTS.shift.shape_with_ball and shape_without_ball differ, that the side changes shape between "
                                     "the phases; never read a meaning into the formation's name (a 5-4-1 is not 'defensive' unless the observed line went deeper), and say nothing "
                                     "about what the players did that FACTS.shift.observed does not show; "
                                     "for a spell who dominated and when from FACTS.spell; for a substitution who came on and off; for an alert (a shift the newsroom spotted, "
@@ -97,6 +98,16 @@ def wrong_leader(line, pack):
 
 
 PRESS_NOUN = re.compile(r"^\W*(?:-\s*)?(?:press(?:ing)?|intensity|block|line|energy|tempo)\b", re.I)
+
+
+FAN_JARGON = re.compile(r"\b\d+(?:\.\d+)?\s?(?:m|metres|meters|yd|yards)\b|\b(?:PPDA|xG|field tilt)\b", re.I)
+
+
+def fan_jargon(line):
+    """What a fan's answer should say in football words instead: distances in metres and metric names (a shape is a low block, a
+    press is high or sitting off). Unit-converted answers count too."""
+    return [f"for a fan, say it in football words instead of {m!r} (a low block, a high line, compact, pressed high or sat off)"
+            for m in dict.fromkeys(x.group(0) for x in FAN_JARGON.finditer(line))]
 
 
 def wrong_ppda(line, pair):
@@ -176,6 +187,8 @@ def _verdict(text):
 async def cover(client, pack, persona="veteran"):
     """One moment through the newsroom. Returns the published item with every agent's contribution kept for the audit trail."""
     stats, tactics, commentator, checker = build(client, persona)
+    if persona == "fan" and (obs := (pack.get("shift") or {}).get("observed")) and obs.get("in_plain"):  # a fan hears a shape in football words, not metres
+        pack = {**pack, "shift": {**pack["shift"], "observed": {**obs, "in_words": obs["in_plain"]}}}
     facts = "FACTS: " + json.dumps(pack) + "\n"
     s, t = await asyncio.gather(_run(stats, facts), _run(tactics, facts))
     brief = facts + f"STATS: {s.text}\nTACTICS: {t.text}\n"
