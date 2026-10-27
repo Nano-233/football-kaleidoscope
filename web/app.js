@@ -34,14 +34,14 @@ const GOOD_T = new Set(['goal', 'interception', 'ball_recovery', 'block', 'keepe
 const verdict = e => GOOD.has(e.outcome) || (!e.outcome && GOOD_T.has(e.type)) ? 1 : BAD.has(e.outcome) || (!e.outcome && BAD_T.has(e.type)) ? -1 : 0;
 const LABEL = { ball_receipt: 'Received', ball_recovery: 'Recovery', fifty_fifty: '50-50', foul_won: 'Foul won', keeper_claim: 'Claim', dribbled_past: 'Dribbled past', take_on: 'Take-on' };
 const HARD = .5;  // a hard pass: difficulty (1 - its completion chance when chosen) of 0.5 or more, as in analytics/stats.py
-const SPOTTED = { duty: 'without the ball', tiring: 'tiring', spell: 'control vs chaos', flank: 'down one flank' };
+const SPOTTED = { duty: 'out of possession', tiring: 'tiring', spell: 'control vs chaos', flank: 'down one flank' };
 const kindLabel = m => (m.type === 'alert' ? `Spotted · ${SPOTTED[m.kind] || m.kind}` : m.type.replace(/_/g, ' '));  // an alert: a shift the newsroom flagged unasked
 const label = ty => LABEL[ty] || ty.charAt(0).toUpperCase() + ty.slice(1).replace(/_/g, ' ');
 const STAT_ROWS = [  // key, label, format, lower-is-better
-  ['goals', 'Goals'], ['xg', 'Expected goals (xG)', v => v.toFixed(2)], ['shots', 'Shots'], ['shots_on_target', 'On target'], ['big_chances', 'Big chances'],
+  ['goals', 'Goals'], ['xg', 'xG', v => v.toFixed(2)], ['shots', 'Shots'], ['shots_on_target', 'On target'], ['big_chances', 'Big chances'],
   ['passes', 'Passes'], ['pass_accuracy', 'Pass accuracy', v => Math.round(v * 100) + '%'], ['avg_pass_length_m', 'Average pass length', v => conv('len', v, 1)],
-  ['avg_pass_difficulty', 'Average pass difficulty (0-1)', v => v.toFixed(2)], ['hard_pass_accuracy', 'Hard passes completed', v => Math.round(v * 100) + '%'], ['progressive_passes', 'Progressive passes'],
-  ['final_third_passes', 'Final-third passes'], ['ppda', 'PPDA (lower = harder press)', v => v.toFixed(1), true], ['possession_gains', 'Possession gains'],
+  ['avg_pass_difficulty', 'Pass difficulty (0-1)', v => v.toFixed(2)], ['hard_pass_accuracy', 'Hard passes completed', v => Math.round(v * 100) + '%'], ['progressive_passes', 'Progressive passes'],
+  ['final_third_passes', 'Final-third passes'], ['ppda', 'PPDA', v => v.toFixed(1), true], ['possession_gains', 'Possession gains'],
   ['tackles_won', 'Tackles won'], ['interceptions', 'Interceptions'], ['take_on_rate', 'Take-on success', v => Math.round(v * 100) + '%'],
   ['top_shot_speed_kmh', 'Fastest shot', v => conv('spd', v)], ['corners', 'Corners'], ['fouls', 'Fouls', null, true], ['yellow_cards', 'Yellow cards', null, true], ['red_cards', 'Red cards', null, true],
 ];
@@ -58,8 +58,8 @@ const SUGGEST = {
   scout: ['Report on the highest-rated player', 'Who won their duels, and how?', 'Compare the two centre-forwards'],
 };
 // the metric a viewer follows (scripts/build_site.py FOCUS: top three players by the end of each minute; control is the rhythm reader's)
-const METRICS = { '': 'No focus metric', xg: 'Chances (xG)', pressing: 'Pressing and winning it back', running: 'Running', passing: 'Hard passes', duels: 'Duels won', control: 'Control vs chaos' };
-const METRIC_UNIT = { xg: v => `xG ${v.toFixed(2)}`, pressing: v => `${v} pressures, tackles and interceptions`, running: v => conv('dist', v, 2), passing: v => `${v} hard passes completed`, duels: v => `${v} duels won` };
+const METRICS = { '': 'No focus metric', xg: 'xG', pressing: 'Defensive actions', running: 'Distance covered', passing: 'Hard passes', duels: 'Duels won', control: 'Control vs chaos' };
+const METRIC_UNIT = { xg: v => `xG ${v.toFixed(2)}`, pressing: v => `${v} defensive actions`, running: v => conv('dist', v, 2), passing: v => `${v} hard passes completed`, duels: v => `${v} duels won` };
 function metricCard() {
   const k = S.profile.metric;
   if (!k || !S.D) return '';
@@ -594,7 +594,7 @@ function tableView() {
   }).join('');
   const [ph, pa] = possessionAt(S.t);
   const poss = `<tr><td>Possession (tracking)</td><td class="${ph > pa ? 'lead' : ''}">${ph}%</td><td class="${pa > ph ? 'lead' : ''}">${pa}%</td></tr>`;
-  return `<div class="label">Team statistics · after ${esc(clockAt(S.t))}</div>
+  return `<div class="label">Team stats · ${esc(clockAt(S.t))}</div>
     <table class="stats"><thead><tr><th>Metric</th><th>${esc(M.home.code)}</th><th>${esc(M.away.code)}</th></tr></thead><tbody>${poss}${rows}</tbody></table>
     <div class="label">Source</div><div class="mono">Computed from the event stream by the analytics layer; the newsroom may only quote these numbers.</div>${truthPanel()}`;
 }
@@ -607,7 +607,7 @@ function evalBlock() {
   const e = EVAL.summary, name = { formation: 'Formations and changes', goals: 'Scorers and minutes', best: 'Best player by rating', pressing: 'Which side pressed harder',
     bench: 'Bench assistant names the tested pick', control: 'Which side controlled the game', duties: 'Who did which defensive job', fatigue: 'Who is tiring',
     milestones: 'Milestones (braces, hat-tricks)', passing: 'Most hard passes completed' };
-  return `<div class="label">Newsroom answers scored against the truth</div>
+  return `<div class="label">Answers vs ground truth</div>
     <table class="stats"><tbody>${Object.entries(e.accuracy).map(([k, v]) => `<tr><td>${name[k] || k}</td><td>${Math.round(v * 100)}%</td></tr>`).join('')}
       <tr><td><b>All ${e.answers} answers, ${e.matches} matches</b></td><td class="lead">${Math.round(e.overall * 100)}%</td></tr>
       ${e.changes && e.changes.true ? `<tr><td>System changes found (formation and minute)</td><td>${e.changes.found} of ${e.changes.true}</td></tr>
@@ -621,15 +621,15 @@ function truthPanel() {
   return truthMatch() + evalBlock();
 }
 function truthMatch() {
-  if (!S.D.reading || S.t < S.D.meta.duration - 1) return '<div class="label">Tactics read against the truth</div><div class="mono">Shown at full time: the engine\'s own record of every system change, against what the newsroom read from the tracking data.</div>';
-  return '<div class="label">Tactics read against the truth</div>' + S.D.reading.map(r => {
+  if (!S.D.reading || S.t < S.D.meta.duration - 1) return '<div class="label">Tactics vs ground truth</div><div class="mono">Shown at full time: the engine\'s own record of every system change, against what the newsroom read from the tracking data.</div>';
+  return '<div class="label">Tactics vs ground truth</div>' + S.D.reading.map(r => {
     const sc = r.score;
     const tch = r.truth.changes.map(c => `${esc(c.at)} ${esc(c.previous)} → ${esc(c.formation)} <span class="mono">(${esc(c.reason)})</span>`).join('<br>') || 'none';
-    const rch = r.read.changes.map(c => `${esc(c.at)} ${esc(c.formation)} <span class="mono">${c.phase === 'in_possession' ? 'with the ball' : 'without the ball'}</span>`).join('<br>') || 'none';
+    const rch = r.read.changes.map(c => `${esc(c.at)} ${esc(c.formation)} <span class="mono">${c.phase === 'in_possession' ? 'in possession' : 'out of possession'}</span>`).join('<br>') || 'none';
     return `<div class="truth"><b>${esc(r.team)}</b>
       <table class="stats"><tbody>
         <tr><td>Set up in (engine)</td><td>${esc(r.truth.starting)}</td></tr>
-        <tr><td>Read, with / without the ball</td><td class="${sc.starting_right ? 'lead' : ''}">${esc(r.read.starting.in_possession)} / ${esc(r.read.starting.out_of_possession)}</td></tr>
+        <tr><td>Read, in / out of possession</td><td class="${sc.starting_right ? 'lead' : ''}">${esc(r.read.starting.in_possession)} / ${esc(r.read.starting.out_of_possession)}</td></tr>
         <tr><td>System changes (engine)</td><td>${tch}</td></tr>
         <tr><td>Changes read</td><td>${rch}</td></tr>
         <tr><td>Found · false alarms</td><td>${sc.found}/${sc.true_changes} · ${sc.false_alarms}</td></tr>
@@ -759,10 +759,10 @@ function profileBlocks(pid, p) {
     .sort((a, b) => Math.abs(b[3]) - Math.abs(a[3])).slice(0, 6);
   const reels = S.persona === 'scout' ? Object.keys(REELS).filter(r => r !== 'Highlights') : ['Shots', 'Chances created', 'Duels won'];
   return `<div class="label">Physical</div><div class="kv"><div><b>${conv('dist', ph.distance_km, 1)}</b><span>Distance</span></div><div><b>${ph.sprints ?? '–'}</b><span>Sprints</span></div><div><b>${conv('spd', ph.top_speed_kmh, 1)}</b><span>Top speed</span></div></div>
-    <div class="label">Where he played</div>${heatCanvas(team, pid, 0, S.D.meta.duration, `Where ${p.name} played over the match`)}
-    ${terms.length ? `<div class="label">What made his rating</div><table class="stats"><tbody>${terms.map(([k, v]) => `<tr><td>${TERM_LABEL[k] || k}</td>
+    <div class="label">Heatmap</div>${heatCanvas(team, pid, 0, S.D.meta.duration, `Where ${p.name} played over the match`)}
+    ${terms.length ? `<div class="label">Rating breakdown</div><table class="stats"><tbody>${terms.map(([k, v]) => `<tr><td>${TERM_LABEL[k] || k}</td>
       <td style="width:45%"><span class="termbar ${v < 0 ? 'neg' : ''}" style="width:${Math.round(Math.abs(v) / mt * 100)}%"></span></td><td class="${v >= 0 ? 'lead' : ''}">${v > 0 ? '+' : ''}${v.toFixed(2)}</td></tr>`).join('')}</tbody></table>` : ''}
-    ${vs.length ? `<div class="label">Per 90 against his position</div><table class="stats"><thead><tr><th>Metric</th><th>Him</th><th>Avg</th></tr></thead><tbody>${vs.map(([k, him, avg, d]) => `<tr><td>${PER90_LABEL[k] || k}</td>
+    ${vs.length ? `<div class="label">Per 90 vs position average</div><table class="stats"><thead><tr><th>Metric</th><th>Him</th><th>Avg</th></tr></thead><tbody>${vs.map(([k, him, avg, d]) => `<tr><td>${PER90_LABEL[k] || k}</td>
       <td class="${(d > 0) !== ['aerial_lost', 'dribbled_past', 'dispossessed', 'fouls'].includes(k) ? 'lead' : ''}">${him}</td><td>${avg}</td></tr>`).join('')}</tbody></table>` : ''}
     <div class="label">Reels</div><div class="chips">${reels.map(r => `<button class="chip" data-reel="${esc(r)}">${esc(r)}</button>`).join('')}</div>`;
 }
@@ -773,7 +773,7 @@ function fatigueBlock(pid, tm) {  // high-intensity running by 15 minutes (analy
   const ws = Object.entries(q.hi_m_per_min_by_window).filter(([w]) => (F_.window_ends || {})[w] <= S.t);  // completed windows only
   if (ws.length < 2) return '';
   const mx = Math.max(...ws.map(([, v]) => v), 1);
-  return `<div class="label">Running hard · metres a minute above ${conv('spd', 19.8, 1)}</div>
+  return `<div class="label">High-intensity running (m/min above ${conv('spd', 19.8, 1)})</div>
     <div style="display:flex;gap:4px;align-items:flex-end;height:46px">${ws.map(([w, v]) => `<i title="${esc(w)}: ${v} m a minute" style="flex:1;background:var(--accent);opacity:.75;height:${Math.max(3, v / mx * 44)}px;border-radius:2px"></i>`).join('')}</div>
     <div class="mono" style="margin-top:4px">${ws[0][0].split('-')[0]} to ${ws[ws.length - 1][0].split('-')[1]}${q.latest_drop_pct != null && ws.length === Object.keys(q.hi_m_per_min_by_window).length ? ` · down ${q.latest_drop_pct}% on his first half-hour (team ${F_.team_drop_pct}%)${q.tiring ? ' · tiring' : ''}` : ''}</div>`;
 }
@@ -782,7 +782,7 @@ function dutyBlock(pid, tm) {  // his job without the ball, window by window (co
   const ws = D_ ? D_.rows.filter(r => r.t1 <= S.t && r.players[pid]).map(r => [r, r.players[pid]]) : [];
   if (!ws.length) return '';
   const ch = D_.changes.filter(c => c.id === pid && c.confirmed_t <= S.t);
-  return `<div class="label">Without the ball</div><table class="stats"><thead><tr><th>Window</th><th>Closes down</th><th>Where</th><th>Tracks</th><th>Holds</th></tr></thead><tbody>
+  return `<div class="label">Out of possession</div><table class="stats"><thead><tr><th>Window</th><th>Press %</th><th>Press height</th><th>Marking</th><th>Holds</th></tr></thead><tbody>
     ${ws.map(([r, q]) => `<tr><td>${clockAt(r.t0)}–${clockAt(r.t1)}</td><td>${pct(q.press)}</td><td>${q.press_height_m != null ? conv('len', q.press_height_m) : '–'}</td>
       <td>${q.tracks && q.tracks_share >= .5 ? esc(q.tracks) : 'zone'}</td><td>${esc(q.holds || '–')}</td></tr>`).join('')}</tbody></table>
     ${ch.length ? `<div class="mono" style="margin-top:6px">${ch.map(c => `${esc(c.at)}: ${esc(c.change)}`).join('<br>')}</div>` : ''}`;
@@ -826,7 +826,7 @@ function playerView() {
     <div class="bar" style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
       ${S.persona === 'scout' ? `<button class="btn primary" data-report="${esc(S.player)}">Scout report</button>` : `<button class="btn primary" data-hismatch="${esc(S.player)}">His match</button>`}
       <button class="btn" data-reel="Highlights">Highlights reel</button></div>
-    ${live ? `<div class="label">Where he has played · so far</div>${heatCanvas(p.team, S.player, 0, S.t, `Where ${p.name} has played so far`)}
+    ${live ? `<div class="label">Heatmap · so far</div>${heatCanvas(p.team, S.player, 0, S.t, `Where ${p.name} has played so far`)}
       <div class="mono" style="margin-top:12px">His full-match numbers and rating come at the final whistle.</div>${S.persona === 'scout' ? '<div class="bar" style="margin-top:8px"><button class="btn" data-act="reveal">Show full-match profile (spoils the result)</button></div>' : ''}`
       : profileBlocks(S.player, p) + fatigueBlock(S.player, p.team) + dutyBlock(S.player, p.team)}
     <div class="label">Actions (${acts.length})</div><div class="chips">${chips}</div>
@@ -1054,10 +1054,10 @@ function momentumSvg(h = 150) {
 function liveStrip() {  // the fan's glance at the game: who is on top, five minutes at a time, and the chances now
   if (!S.D.board || S.t < 300) return '';
   const ht = S.heatTeam || 0, M = S.D.meta, from = Math.max(0, S.t - 900);
-  const heat = `<div class="label" style="margin-top:10px">${esc(tr('Where they have played · last 15 minutes'))}</div>
+  const heat = `<div class="label" style="margin-top:10px">${esc(tr('Heatmap · last 15 min'))}</div>
     <div class="chips">${[0, 1].map(k => `<button class="chip" data-heatteam="${k}" aria-pressed="${ht === k}">${esc(M[k ? 'away' : 'home'].name)}</button>`).join('')}</div>
     ${heatCanvas(ht, '', from, S.t, `Where ${M[ht ? 'away' : 'home'].name} have played in the last 15 minutes`)}`;
-  return `${winBar()}${rhythmStrip()}${heat}<div class="label" style="margin-top:10px">${esc(tr('Who is making the chances · five minutes at a time'))}</div>${momentumSvg(90)}`;
+  return `${winBar()}${rhythmStrip()}${heat}<div class="label" style="margin-top:10px">${esc(tr('xG momentum · 5 min'))}</div>${momentumSvg(90)}`;
 }
 // control vs chaos by five minutes (analytics/tools.py rhythm): a chip per finished window, the side in control in its colour
 const RH_COL = st => (st.startsWith('control') ? (st.endsWith(S.D.meta.home.name) ? 'var(--home)' : 'var(--away)') : st === 'chaos' ? 'var(--bad)' : st === 'stop-start' ? 'var(--text-3)' : 'var(--surface-3)');
@@ -1067,8 +1067,8 @@ function rhythmStrip(full) {
   const done = R.by_window.filter(r => r.t1 <= S.t), last = done[done.length - 1];
   if (!last) return '';
   const word = st => (st.startsWith('control') ? `${st.slice(9)} in control` : st === 'chaos' ? 'Chaos' : st === 'stop-start' ? 'Stop-start' : 'Even');
-  const plain = st => (st.startsWith('control') ? `${st.slice(9)} keeping the ball and building their moves` : st === 'chaos' ? 'End to end: the ball keeps changing hands'
-    : st === 'stop-start' ? 'Lots of stoppages, little flowing play' : 'Neither side on top');  // the fan's version of the same reading
+  const plain = st => (st.startsWith('control') ? `${st.slice(9)} dominating possession` : st === 'chaos' ? 'End to end, frequent turnovers'
+    : st === 'stop-start' ? 'Frequent stoppages' : 'Evenly matched');  // the fan's version of the same reading
   const tip = r => `${r.window}: ${word(r.state)} · settled ${r.settled_pct}% · broken ${r.broken_pct}% · ${r.turnovers_per_min} turnovers a minute · ${r.passes_per_min} passes a minute · ball in play ${r.ball_in_play_pct}%`;
   const chips = R.by_window.map(r => `<i title="${esc(r.t1 <= S.t ? tip(r) : '')}" style="flex:1;height:10px;border-radius:2px;background:${r.t1 <= S.t ? RH_COL(r.state) : 'transparent'};border:1px solid var(--line)"></i>`).join('');
   const spells = full ? R.spells.filter(x => x.end_t <= S.t) : [];
@@ -1095,13 +1095,13 @@ function boardView() {
   if (b.mode === 'Shape') {
     const row = lastWin(B.shape[b.team], B.shape_window), sh = row && row[b.phase];
     body = !row ? '<div class="empty">The first five minutes are not over yet.</div>' : !sh ? '<div class="empty">Too little of that phase in this window.</div>' :
-      `<div class="label">${esc(M[b.team ? 'away' : 'home'].name)} · ${clockAt(row.t0)}–${clockAt(row.t1)} · ${b.phase === 'in_possession' ? 'with the ball' : 'without the ball'}</div>
+      `<div class="label">${esc(M[b.team ? 'away' : 'home'].name)} · ${clockAt(row.t0)}–${clockAt(row.t1)} · ${b.phase === 'in_possession' ? 'in possession' : 'out of possession'}</div>
        <div class="kv"><div><b>${esc(sh.formation)}</b><span>Shape</span></div><div><b>${conv('len', sh.line)}</b><span>Defensive line</span></div><div><b>${conv('len', sh.length).split(' ')[0]} × ${conv('len', sh.width)}</b><span>Block</span></div></div>
        <div class="mono" style="margin-top:8px">Average positions over the last completed five minutes; the dashed line is the defensive line. The two phases are read separately: a team can line up one way with the ball and another without it.</div>`;
   } else if (b.mode === 'Network') {
     const row = lastWin(B.network[b.team], B.net_window);
     body = !row ? '<div class="empty">The first fifteen minutes are not over yet.</div>' :
-      `<div class="label">${esc(M[b.team ? 'away' : 'home'].name)} · passing network ${clockAt(row.t0)}–${clockAt(row.t1)}</div>
+      `<div class="label">${esc(M[b.team ? 'away' : 'home'].name)} · pass network ${clockAt(row.t0)}–${clockAt(row.t1)}</div>
        <table class="stats"><tbody>${row.links.slice(0, 6).map(([a, c, n]) => `<tr><td>${num(a)} ${esc(S.info[a].name)} → ${num(c)} ${esc(S.info[c].name)}</td><td>${n}</td></tr>`).join('')}</tbody></table>
        <div class="mono" style="margin-top:8px">Entries into the final third, left / centre / right: ${row.entries.join(' / ')}</div>`;
   } else if (b.mode === 'Duties') {
@@ -1111,7 +1111,7 @@ function boardView() {
       const ps = row ? Object.entries(row.players).sort((x, y) => y[1].press - x[1].press) : [];
       const seen = D_.changes.filter(c => c.confirmed_t <= S.t), sc = D_.score;
       body = !row ? '<div class="empty">The first fifteen minutes are not over yet.</div>' :
-        `<div class="label">${esc(M[b.team ? 'away' : 'home'].name)} · without the ball · ${clockAt(row.t0)}–${clockAt(row.t1)}</div>
+        `<div class="label">${esc(M[b.team ? 'away' : 'home'].name)} · out of possession · ${clockAt(row.t0)}–${clockAt(row.t1)}</div>
         <table class="stats"><thead><tr><th>Player</th><th title="Share of their possession spent closing the ball down">Closes down</th><th title="Where, from his own goal">Where</th><th>Tracks</th></tr></thead><tbody>
         ${ps.map(([id, q]) => `<tr title="${esc(dutyTip(id, q))}"><td>${num(id)} ${esc(S.info[id].name)}</td><td>${pct(q.press)}</td><td>${q.press_height_m != null ? conv('len', q.press_height_m) : '–'}</td><td>${q.tracks && q.tracks_share >= .5 ? esc(q.tracks) : '<span class="mono">zone</span>'}</td></tr>`).join('')}</tbody></table>
         <div class="label">Changes</div>${seen.length ? `<ul class="actions">${seen.map(c => `<li><span class="clk">${esc(c.at)}</span><span>${esc(c.player)} ${esc(c.change)}</span><span></span><span><button class="link" data-seek="${c.t}">Watch</button></span></li>`).join('')}</ul>` : '<div class="mono">None confirmed yet (a change counts once two windows show it).</div>'}
@@ -1119,17 +1119,17 @@ function boardView() {
     }
   } else if (b.mode === 'Press') {
     const rows = B.pressing[b.team], cur = Math.floor(S.t / B.net_window);
-    body = `<div class="label">${esc(M[b.team ? 'away' : 'home'].name)} · pressing by 15 minutes</div>
+    body = `<div class="label">${esc(M[b.team ? 'away' : 'home'].name)} · pressing · 15 min windows</div>
       <table class="stats"><thead><tr><th>Window</th><th>PPDA</th><th>Height</th><th>Counter-press</th></tr></thead><tbody>${rows.slice(0, cur).map(r => `<tr><td>${esc(r.window.join('–'))}</td><td>${r.ppda ?? '–'}</td><td>${conv('len', r.action_height_m)}</td><td>${r.counterpress_wins}</td></tr>`).join('') || '<tr><td colspan="4">First window not over yet.</td></tr>'}</tbody></table>
       <div class="mono" style="margin-top:8px">PPDA: opponent passes per defensive action in their build-up (lower = harder press). Dots on the pitch: where the ball was won in the last fifteen minutes.</div>`;
   } else {
     const sp = B.momentum.dominant_spells.filter(x => x.end_t <= S.t);
-    body = `${winBar()}<div class="label">Win probability over the match</div>${winSvg()}${rhythmStrip(true)}<div class="label">Momentum · xG by five minutes</div>${momentumSvg()}
+    body = `${winBar()}<div class="label">Win probability</div>${winSvg()}${rhythmStrip(true)}<div class="label">xG momentum · 5 min</div>${momentumSvg()}
       <div class="label">Spells of dominance</div>${sp.length ? `<table class="stats"><tbody>${sp.map(x => `<tr><td>${esc(x.team)} ${esc(x.start)}–${esc(x.end)}</td><td>xG ${x.xg} v ${x.opponent_xg}</td></tr>`).join('')}</tbody></table>` : '<div class="mono">None yet.</div>'}`;
   }
   return `<div class="chips">${['Shape', 'Network', 'Press', 'Duties', 'Momentum'].map(m => chip('bmode', m, m, b.mode === m)).join('')}</div>
     ${b.mode !== 'Momentum' ? `<div class="chips" style="margin-top:8px">${[0, 1].map(t => chip('bteam', t, M[t ? 'away' : 'home'].code, b.team === t)).join('')}
-      ${b.mode === 'Shape' ? chip('bphase', 'in_possession', 'With the ball', b.phase === 'in_possession') + chip('bphase', 'out_of_possession', 'Without the ball', b.phase === 'out_of_possession') : ''}</div>` : ''}
+      ${b.mode === 'Shape' ? chip('bphase', 'in_possession', 'In possession', b.phase === 'in_possession') + chip('bphase', 'out_of_possession', 'Out of possession', b.phase === 'out_of_possession') : ''}</div>` : ''}
     <div style="margin-top:12px">${body}</div>`;
 }
 
@@ -1331,8 +1331,8 @@ function clipsView() {
   const li = x => `<li><button data-clip="${esc(x.id)}" aria-current="${!!c && c.id === x.id}"><span>${esc(x.title)}</span><span class="dur">${(x.end - x.start).toFixed(0)} s</span></button></li>`;
   const seen = x => x.t <= S.t + .5;  // only what has happened by now: a later goal in the list would spoil the replay
   const bds = (S.D.breakdowns || []).map((b, i) => !seen(b) ? '' : `<li><button data-bd="${i}"><span>${esc(b.title)}</span><span class="dur">${b.stops.length} stops</span></button></li>`).join('');
-  return editor + (bds ? `<div class="label">Breakdowns: the move paused and drawn on the pitch</div><ul class="clips">${bds}</ul>` : '') + (S.custom.length ? `<div class="label">Your clips</div><ul class="clips">${S.custom.map(li).join('')}</ul>` : '')
-    + `<div class="label">Suggested by the newsroom (${S.D.clips.filter(seen).length})</div><ul class="clips">${S.D.clips.filter(seen).map(li).join('') || '<li class="empty">The first suggestions arrive with the first chances.</li>'}</ul>
+  return editor + (bds ? `<div class="label">Breakdowns</div><ul class="clips">${bds}</ul>` : '') + (S.custom.length ? `<div class="label">Your clips</div><ul class="clips">${S.custom.map(li).join('')}</ul>` : '')
+    + `<div class="label">Suggested clips (${S.D.clips.filter(seen).length})</div><ul class="clips">${S.D.clips.filter(seen).map(li).join('') || '<li class="empty">The first suggestions arrive with the first chances.</li>'}</ul>
     <div class="mono" style="margin-top:10px">Clips export as JSON: the events and tracking frames inside the range, ready for an overlay or edit tool.</div>
     <div class="label">Broadcast pack</div>
     <div class="mono" style="margin-bottom:8px">Timed overlay cues (lower thirds) in ${esc(S.profile.language)}, the half-time and full-time reports as studio talking points, and the clip list, as one JSON file.</div>
@@ -1479,10 +1479,10 @@ function setTabs() {
 $('persona').onclick = e => { const b = e.target.closest('button'); if (b) setPersona(b.dataset.p); };
 $('tabs').onclick = e => { const b = e.target.closest('button'); if (b) { S.tab = b.dataset.tab; setTabs(); render(true); if (document.body.classList.contains('panel-off')) panelOpen(true); } };
 // the side panel, like an IDE's side bar: drag its edge to resize it, collapse it to give the replay the whole width (remembered on this device)
-const PANEL_KEY = 'mn.panel', layoutEl = document.querySelector('.layout');
+const PANEL_KEY = 'mn.panel';
 const panelSave = v => { try { localStorage.setItem(PANEL_KEY, JSON.stringify(v)); } catch (_) { /* storage blocked: the panel still works */ } };
 const panelPrefs = (() => { try { return JSON.parse(localStorage.getItem(PANEL_KEY)) || {}; } catch (_) { return {}; } })();
-function panelWidth(w) { w = Math.round(Math.max(300, Math.min(w, innerWidth * .6))); layoutEl.style.setProperty('--panel-w', w + 'px'); return w; }
+function panelWidth(w) { w = Math.round(Math.max(300, Math.min(w, innerWidth * .6))); document.documentElement.style.setProperty('--panel-w', w + 'px'); return w; }
 function panelOpen(on) {
   document.body.classList.toggle('panel-off', !on);
   $('panel-toggle').setAttribute('aria-expanded', String(on)); $('panel-toggle').title = on ? 'Hide the panel' : 'Show the panel';
