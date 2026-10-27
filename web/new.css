@@ -118,6 +118,7 @@ html.new .loading { color: var(--text-2); font-family: var(--serif); font-size: 
 html.new .welcome { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 28px; box-shadow: var(--shadow); width: min(600px, calc(100% - 32px));
   animation: new-rise 420ms var(--ease-out) both; }
 html.new .welcome h2 { font: 400 28px/1.12 var(--serif); letter-spacing: -0.02em; margin: 0 0 12px; text-wrap: balance; }
+html.new .welcome .tagline { margin-top: 6px; font-size: 17px; letter-spacing: 0; color: var(--text-2); }
 html.new .welcome p { font-size: 15px; line-height: 1.6; color: var(--text); margin: 0 0 24px; max-width: 62ch; text-wrap: pretty; }
 html.new .welcome .bar { gap: 8px; }
 @keyframes new-rise { from { opacity: 0; transform: translate(-50%, calc(-50% + 12px)); } to { opacity: 1; transform: translate(-50%, -50%); } }

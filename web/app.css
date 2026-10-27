@@ -132,6 +132,7 @@ body.panel-off .panel-head { height: 100%; align-items: flex-start; border-botto
 .welcome { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(560px, calc(100% - 32px)); z-index: 5;
   background: var(--surface); border: 1px solid var(--line-strong); border-top: 2px solid var(--accent); border-radius: var(--r); padding: 18px 20px; box-shadow: 0 8px 32px rgba(0,0,0,.5); }
 .welcome h2 { margin: 0 0 8px; font-size: 16px; color: var(--text-hi); }
+.welcome .tagline { display: block; margin-top: 2px; font-size: 13px; font-weight: 400; color: var(--text-2); }
 .welcome p { margin: 0 0 14px; color: var(--text); line-height: 20px; }
 .welcome .bar { display: flex; flex-wrap: wrap; gap: 8px; }
 .lower-third { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); width: min(86%, 760px); background: var(--overlay); border: 1px solid var(--line-strong); border-left: 3px solid var(--accent); padding: 8px 12px 9px; }
