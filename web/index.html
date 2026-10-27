@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="app.css">
 <link rel="stylesheet" href="new.css">
-<script>try { if (localStorage.getItem('ui') === 'new') document.documentElement.classList.add('new'); } catch (e) {}</script>
+<script>try { const h = document.documentElement, t = localStorage.getItem('theme'); if (localStorage.getItem('ui') === 'new') h.classList.add('new'); if (t) h.dataset.theme = t; } catch (e) {}</script>
 <script type="importmap">{"imports": {"three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 </head>
 <body>
@@ -33,6 +33,7 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg><span>Settings</span></summary>
     <div class="flyout" role="dialog" aria-label="Settings">
       <h2>Settings</h2>
+      <div class="field"><span>Theme</span><div class="seg" id="theme"><button data-t="light">Light</button><button data-t="dark">Dark</button><button data-t="">System</button></div></div>
       <label class="field"><span>Your club<small>Answers are written from its side (the facts stay the same) and its moments are marked in the feed</small></span><select id="club"></select></label>
       <label class="field"><span>Focus metric<small>Leads the live view and the newsroom's answers</small></span><select id="metric"></select></label>
       <label class="field"><span>Language<small>Commentary, recaps and answers</small></span><select id="lang"></select></label>

@@ -1,25 +1,40 @@
 /* Match centre. Layout after the FotMob match page (a match header with teams, score, clock and scorers over the content; the main view
    and a side column of panels). Chrome and colours from Visual Studio Code's default Dark Modern theme (microsoft/vscode,
    extensions/theme-defaults/themes/dark_modern.json, MIT): title bar, editor tabs with an accent top border, uppercase section headers,
-   2 px radii, hairline borders, a status bar. Team colours appear only on data. */
+   2 px radii, hairline borders, a status bar. Team colours appear only on data.
+   Theme: Settings sets html[data-theme] to light or dark; without it the system's choice holds. Each token is light-dark(light, dark),
+   the light side from VS Code's Light Modern theme. The pitch stays dark in both. */
 :root {
-  --bg: #181818;            /* titleBar / sideBar / panel / statusBar */
-  --surface: #1f1f1f;       /* editor.background */
-  --surface-2: #313131;     /* input / dropdown background */
-  --surface-3: #2b2b2b;     /* borders, quiet fills */
-  --line: #2b2b2b;          /* sideBar.border, tab.border */
-  --line-strong: #3c3c3c;   /* input.border */
-  --text: #cccccc;          /* foreground */
-  --text-hi: #ffffff;       /* tab.activeForeground */
-  --text-2: #9d9d9d;        /* descriptionForeground */
-  --text-3: #6e7681;        /* editorLineNumber.foreground */
-  --accent: #0078d4;        /* focusBorder, button.background */
-  --link: #4daafc;          /* textLink.foreground */
-  --home: #e9edf2;
+  color-scheme: light dark;
+  --bg: light-dark(#f8f8f8, #181818);            /* titleBar / sideBar / panel / statusBar */
+  --surface: light-dark(#ffffff, #1f1f1f);       /* editor.background */
+  --surface-2: light-dark(#ffffff, #313131);     /* input / dropdown background */
+  --surface-3: light-dark(#ededed, #2b2b2b);     /* borders, quiet fills */
+  --field: light-dark(#ffffff, #2a2a2a);         /* the match picker */
+  --hover: light-dark(#f2f2f2, #2a2d2e);         /* list.hoverBackground */
+  --current: light-dark(#e4eefa, #04395e);       /* list.activeSelectionBackground */
+  --pop: light-dark(#f8f8f8, #252526);           /* menus, tooltips */
+  --pop-line: light-dark(#cecece, #454545);
+  --overlay: light-dark(rgba(255, 255, 255, .96), rgba(24, 24, 24, .96));  /* captions over the pitch */
+  --line: light-dark(#e5e5e5, #2b2b2b);          /* sideBar.border, tab.border */
+  --line-strong: light-dark(#cecece, #3c3c3c);   /* input.border */
+  --text: light-dark(#3b3b3b, #cccccc);          /* foreground */
+  --text-hi: light-dark(#1f1f1f, #ffffff);       /* tab.activeForeground */
+  --text-2: light-dark(#616161, #9d9d9d);        /* descriptionForeground */
+  --text-3: light-dark(#6e7681, #6e7681);        /* editorLineNumber.foreground */
+  --icon: light-dark(#616161, #868686);          /* activityBar.inactiveForeground */
+  --accent: light-dark(#005fb8, #0078d4);        /* focusBorder, button.background */
+  --accent-hover: light-dark(#0258a8, #026ec1);
+  --link: light-dark(#005fb8, #4daafc);          /* textLink.foreground */
+  --badge: light-dark(#e5e5e5, #616161);
+  --ok-ink: light-dark(#116329, #6fdd8b);
+  --home: #e9edf2;                               /* on the dark pitch in both themes */
   --away: #f2a33a;
+  --home-ink: light-dark(#44546a, var(--home));  /* the team colours on the page itself */
+  --away-ink: light-dark(#b85f00, var(--away));
   --good: #2ea043;          /* editorGutter.addedBackground */
   --bad: #f85149;           /* errorForeground */
-  --warn: #e2c08d;
+  --warn: light-dark(#7a4b00, #e2c08d);
   --pitch: #1d2a22;
   --pitch-line: rgba(220, 232, 224, .26);
   --r: 2px;
@@ -27,8 +42,9 @@
   --display: var(--ui);
   --mono: "Cascadia Mono", Consolas, "IBM Plex Mono", ui-monospace, monospace;
   --status-h: 22px;
-  color-scheme: dark;
 }
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html, body { margin: 0; background: var(--bg); color: var(--text); font: 13px/20px var(--ui); font-variant-numeric: tabular-nums; }
@@ -52,8 +68,8 @@ select { background: var(--surface-2); border: 1px solid var(--line-strong); bor
 .brand-mark { width: 14px; height: 14px; background: var(--accent); border-radius: 2px; }
 .command { position: relative; display: flex; align-items: center; width: min(520px, 46vw); }
 .command svg { position: absolute; left: 10px; width: 16px; height: 16px; fill: none; stroke: var(--text-2); stroke-width: 1.2; pointer-events: none; }
-.command select { width: 100%; height: 28px; padding: 0 30px 0 34px; border-radius: 6px; background: #2a2a2a; border: 1px solid var(--line-strong); color: var(--text-hi); font-size: 13px; text-align: center; text-align-last: center; }
-.command select:hover { background: #313131; }
+.command select { width: 100%; height: 28px; padding: 0 30px 0 34px; border-radius: 6px; background: var(--field); border: 1px solid var(--line-strong); color: var(--text-hi); font-size: 13px; text-align: center; text-align-last: center; }
+.command select:hover { background: var(--hover); }
 .seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: var(--r); overflow: hidden; }
 .seg button { background: none; border: 0; border-right: 1px solid var(--line-strong); padding: 0 14px; height: 28px; font-size: 13px; color: var(--text-2); }
 .seg button:last-child { border-right: 0; }
@@ -62,22 +78,22 @@ select { background: var(--surface-2); border: 1px solid var(--line-strong); bor
 
 /* Activity bar: the three views, settings at the foot */
 .activity { display: flex; flex-direction: column; justify-content: space-between; background: var(--bg); border-right: 1px solid var(--line); }
-.activity button, .settings summary { position: relative; width: 48px; height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; background: none; border: 0; color: #868686; font-size: 10px; line-height: 12px; cursor: pointer; }
+#persona button, .settings summary { position: relative; width: 48px; height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; background: none; border: 0; color: var(--icon); font-size: 10px; line-height: 12px; cursor: pointer; }
 .activity svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-.activity button:hover, .settings summary:hover { color: var(--text-hi); }
-.activity button[aria-selected="true"] { color: var(--text-hi); }
-.activity button[aria-selected="true"]::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--accent); }
+#persona button:hover, .settings summary:hover { color: var(--text-hi); }
+#persona button[aria-selected="true"] { color: var(--text-hi); }
+#persona button[aria-selected="true"]::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--accent); }
 .settings { position: relative; }
 .settings summary { list-style: none; }
 .settings summary::-webkit-details-marker { display: none; }
 .settings[open] summary { color: var(--text-hi); }
-.flyout { position: fixed; left: 52px; bottom: calc(var(--status-h) + 6px); z-index: 40; width: 360px; display: grid; gap: 12px; padding: 14px 16px 16px; background: #252526; border: 1px solid #454545; box-shadow: 0 0 8px 2px rgba(0, 0, 0, .36); }
+.flyout { position: fixed; left: 52px; bottom: calc(var(--status-h) + 6px); z-index: 40; width: 360px; display: grid; gap: 12px; padding: 14px 16px 16px; background: var(--pop); border: 1px solid var(--pop-line); box-shadow: 0 0 8px 2px rgba(0, 0, 0, .36); }
 .flyout h2 { margin: 0 0 2px; font-size: 11px; line-height: 16px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text); }
 .field { display: grid; grid-template-columns: 1fr 160px; align-items: center; gap: 10px; font-size: 13px; color: var(--text-hi); }
 .field small { display: block; font-size: 11px; line-height: 15px; color: var(--text-2); }
 .field select { width: 100%; height: 28px; }
 .field.sub { color: var(--text-2); font-size: 12px; }
-.field .seg button { flex: 1; }
+.field .seg button { flex: 1; padding: 0 6px; }
 
 /* Match header (FotMob's header: competition line, teams either side of the score, the clock, the scorers) */
 .scoreboard { display: grid; grid-template-columns: 1fr auto 1fr; grid-template-areas: "home score away" "hs clock as"; align-items: center; column-gap: 28px; row-gap: 2px; padding: 12px 20px 10px; border-bottom: 1px solid var(--line); background: var(--surface); }
@@ -86,8 +102,8 @@ select { background: var(--surface-2); border: 1px solid var(--line-strong); bor
 .team.away { grid-area: away; }
 .team .code { font: 600 13px/1 var(--mono); letter-spacing: .04em; padding: 4px 6px; border: 1px solid var(--line-strong); border-radius: var(--r); color: var(--text-hi); }
 .team .name { font-size: 18px; line-height: 24px; color: var(--text-hi); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.team.home .code { border-left: 3px solid var(--home); }
-.team.away .code { border-right: 3px solid var(--away); }
+.team.home .code { border-left: 3px solid var(--home-ink); }
+.team.away .code { border-right: 3px solid var(--away-ink); }
 .score { grid-area: score; font: 600 30px/1 var(--ui); display: flex; gap: 12px; color: var(--text-hi); }
 .score .dash { color: var(--text-3); }
 .clock { grid-area: clock; display: flex; justify-content: center; align-items: baseline; gap: 8px; font: 500 13px/18px var(--mono); color: var(--text); }
@@ -119,7 +135,7 @@ body.panel-off .panel-head { height: 100%; align-items: flex-start; border-botto
 .welcome h2 { margin: 0 0 8px; font-size: 16px; color: var(--text-hi); }
 .welcome p { margin: 0 0 14px; color: var(--text); line-height: 20px; }
 .welcome .bar { display: flex; flex-wrap: wrap; gap: 8px; }
-.lower-third { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); width: min(86%, 760px); background: rgba(24, 24, 24, .96); border: 1px solid var(--line-strong); border-left: 3px solid var(--accent); padding: 8px 12px 9px; }
+.lower-third { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); width: min(86%, 760px); background: var(--overlay); border: 1px solid var(--line-strong); border-left: 3px solid var(--accent); padding: 8px 12px 9px; }
 .lower-third p { margin: 2px 0 0; font-size: 14px; line-height: 21px; color: var(--text-hi); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .lt-kind { font-size: 11px; line-height: 16px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--link); }
 
@@ -127,14 +143,14 @@ body.panel-off .panel-head { height: 100%; align-items: flex-start; border-botto
 .transport { display: flex; flex-wrap: wrap; align-items: center; min-height: 48px; padding: 0 8px 8px; border-top: 1px solid var(--line); background: var(--bg); }
 .transport .group { display: flex; align-items: center; gap: 6px; padding: 0 10px; border-right: 1px solid var(--line); height: 28px; }
 .icon-btn { width: 32px; height: 28px; display: grid; place-items: center; background: var(--accent); border: 0; border-radius: var(--r); }
-.icon-btn:hover { background: #026ec1; }
+.icon-btn:hover { background: var(--accent-hover); }
 .icon-btn svg { width: 13px; height: 13px; fill: #fff; }
 .text-btn, .btn { display: inline-flex; align-items: center; gap: 6px; background: transparent; border: 1px solid var(--line-strong); border-radius: var(--r); padding: 0 12px; height: 28px; font-size: 13px; white-space: nowrap; color: var(--text); }
 .text-btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linejoin: round; }
 .text-btn:hover, .btn:hover { background: var(--surface-3); }
 .text-btn[aria-pressed="true"] { background: rgba(36, 137, 219, .25); border-color: #2488db; color: var(--text-hi); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.btn.primary:hover { background: #026ec1; }
+.btn.primary:hover { background: var(--accent-hover); }
 .speed { display: flex; align-items: center; gap: 6px; color: var(--text-2); font-size: 13px; }
 .speed select { height: 28px; }
 .timeline { position: relative; flex: 1 1 100%; order: -1; height: 28px; margin: 4px 6px 2px; }  /* the scrubber on its own row, full width, as in a video player */
@@ -174,12 +190,12 @@ body.panel-off .panel-head { height: 100%; align-items: flex-start; border-botto
 .feed .meta { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
 .feed .t { font: 500 12px/1 var(--mono); color: var(--text-2); }
 .kind { font-size: 11px; line-height: 16px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-2); }
-.badge { font: 11px/16px var(--ui); color: var(--text); background: #616161; border-radius: var(--r); padding: 0 5px; white-space: nowrap; }
-.badge.ok { background: rgba(46, 160, 67, .25); color: #6fdd8b; }
+.badge { font: 11px/16px var(--ui); color: var(--text); background: var(--badge); border-radius: var(--r); padding: 0 5px; white-space: nowrap; }
+.badge.ok { background: rgba(46, 160, 67, .25); color: var(--ok-ink); }
 .badge.warn { background: rgba(187, 128, 9, .3); color: var(--warn); }
 .badge.live { background: var(--accent); color: #fff; }
 .feed li.alert { border-left: 2px solid var(--accent); padding-left: 10px; }
-.feed li.mine { border-left: 2px solid var(--home); padding-left: 10px; }  /* the viewer's club */
+.feed li.mine { border-left: 2px solid var(--home-ink); padding-left: 10px; }  /* the viewer's club */
 .badge.mine { background: var(--accent); color: #fff; }
 .feed li.pending p { color: var(--text-2); font-style: italic; }
 .feed p { margin: 0; color: var(--text-hi); }
@@ -204,20 +220,20 @@ details.trail summary { padding: 4px 8px; font-size: 12px; color: var(--text-2);
 .cmp-row .cmp-head span:last-child { text-align: right; }
 .cmp-bar { display: flex; gap: 3px; height: 3px; margin-top: 4px; }
 .cmp-bar i { display: block; height: 100%; background: var(--line-strong); }
-.cmp-bar i.lead.h { background: var(--home); }
-.cmp-bar i.lead.a { background: var(--away); }
+.cmp-bar i.lead.h { background: var(--home-ink); }
+.cmp-bar i.lead.a { background: var(--away-ink); }
 table.stats { width: 100%; border-collapse: collapse; font-size: 12px; }
 table.stats th { font-size: 11px; line-height: 16px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-2); text-align: right; padding: 0 0 6px; }
 table.stats th:first-child, table.stats td:first-child { text-align: left; }
 table.stats td { padding: 4px 0; border-top: 1px solid var(--line); text-align: right; font-family: var(--mono); }
 table.stats td:first-child { color: var(--text-2); font-family: var(--ui); }
 table.stats td.lead { color: var(--text-hi); font-weight: 600; }
-table.stats tr:hover td { background: #2a2d2e; }
+table.stats tr:hover td { background: var(--hover); }
 
 /* Squad + player */
 .squad { list-style: none; margin: 0 0 4px; padding: 0; }
 .squad li button { width: 100%; display: grid; grid-template-columns: 28px 1fr 36px 36px; align-items: center; gap: 8px; background: none; border: 0; border-bottom: 1px solid var(--line); padding: 5px 4px; text-align: left; }
-.squad li button:hover { background: #2a2d2e; }
+.squad li button:hover { background: var(--hover); }
 .squad .num { font: 12px/1 var(--mono); color: var(--text-2); }
 .squad .role { font-size: 12px; color: var(--text-2); }
 .squad .rt { text-align: right; font-family: var(--mono); color: var(--text-hi); }
@@ -234,7 +250,7 @@ table.stats tr:hover td { background: #2a2d2e; }
 .kv span { font-size: 11px; color: var(--text-2); }
 .chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .chip { background: var(--surface-3); border: 1px solid transparent; border-radius: var(--r); padding: 0 8px; height: 22px; font-size: 12px; color: var(--text); }
-.chip:hover { background: #3c3c3c; }
+.chip:hover { background: var(--line-strong); }
 .chip[aria-pressed="true"] { border-color: #2488db; background: rgba(36, 137, 219, .25); color: var(--text-hi); }
 .actions { list-style: none; margin: 0; padding: 0; font-size: 12px; }
 .actions li { display: grid; grid-template-columns: 52px 1fr auto auto; gap: 8px; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--line); }
@@ -247,8 +263,8 @@ table.stats tr:hover td { background: #2a2d2e; }
 /* Clips */
 .clips { list-style: none; margin: 0; padding: 0; }
 .clips li button { width: 100%; display: grid; grid-template-columns: 1fr auto; gap: 8px; background: none; border: 0; border-bottom: 1px solid var(--line); padding: 6px 4px; text-align: left; }
-.clips li button:hover { background: #2a2d2e; }
-.clips li button[aria-current="true"] { background: #04395e; }
+.clips li button:hover { background: var(--hover); }
+.clips li button[aria-current="true"] { background: var(--current); }
 .clips .dur { font-family: var(--mono); font-size: 12px; color: var(--text-2); }
 .editor { border: 1px solid var(--line); padding: 12px; background: var(--bg); margin-bottom: 16px; }
 .editor h3 { margin: 0 0 10px; font-size: 13px; font-weight: 600; color: var(--text-hi); }
@@ -281,8 +297,8 @@ table.stats tr:hover td { background: #2a2d2e; }
   .command { width: 100%; }
   .activity { flex-direction: row; border-right: 0; border-bottom: 1px solid var(--line); }
   #persona { display: flex; }
-  .activity button, .settings summary { width: 72px; height: 48px; }
-  .activity button[aria-selected="true"]::before { top: auto; right: 0; width: auto; height: 2px; }
+  #persona button, .settings summary { width: 72px; height: 48px; }
+  #persona button[aria-selected="true"]::before { top: auto; right: 0; width: auto; height: 2px; }
   .flyout { left: 8px; right: 8px; width: auto; top: 110px; bottom: auto; }
   .transport .group { border-right: 0; padding: 0 4px; }
   .layout { grid-template-rows: auto; }
@@ -323,7 +339,7 @@ table.stats tr:hover td { background: #2a2d2e; }
 .truth { margin-bottom: 14px; }
 .truth b { display: block; margin-bottom: 4px; }
 .truth td:last-child { text-align: right; }
-.reel-tag { position: absolute; top: 22px; left: 24px; background: rgba(24, 24, 24, .96); border: 1px solid var(--accent); padding: 2px 8px; font-size: 11px; line-height: 18px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.reel-tag { position: absolute; top: 22px; left: 24px; background: var(--overlay); border: 1px solid var(--accent); padding: 2px 8px; font-size: 11px; line-height: 18px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .termbar { display: inline-block; height: 5px; background: var(--good); vertical-align: middle; }
 .termbar.neg { background: var(--bad); }
 .steps.live { font-size: 12px; color: var(--text-2); }
@@ -333,9 +349,9 @@ table.stats tr:hover td { background: #2a2d2e; }
 .wi-scale { display: flex; justify-content: space-between; margin: -6px 92px 6px 104px; font-size: 10px; }
 .winbar { display: flex; gap: 1px; height: 8px; overflow: hidden; }
 .winbar i { display: block; }
-.bd-box { position: absolute; top: 22px; left: 24px; width: min(62%, 540px); background: rgba(24, 24, 24, .96); border: 1px solid var(--line-strong); border-left: 3px solid var(--accent); padding: 8px 12px 9px; }
+.bd-box { position: absolute; top: 22px; left: 24px; width: min(62%, 540px); background: var(--overlay); border: 1px solid var(--line-strong); border-left: 3px solid var(--accent); padding: 8px 12px 9px; }
 .bd-box p { margin: 3px 0 8px; font-size: 13px; line-height: 20px; color: var(--text-hi); }
 .bd-box .bar { display: flex; gap: 6px; }
-.pitch-tip { position: absolute; pointer-events: none; z-index: 5; max-width: 300px; background: #252526; border: 1px solid #454545; padding: 4px 8px; font-size: 12px; line-height: 17px; white-space: pre-line; }
+.pitch-tip { position: absolute; pointer-events: none; z-index: 5; max-width: 300px; background: var(--pop); border: 1px solid var(--pop-line); padding: 4px 8px; font-size: 12px; line-height: 17px; white-space: pre-line; }
 
 canvas.heat { display: block; width: 100%; height: auto; border-radius: var(--r); margin-top: 6px; }  /* team and player heat maps */

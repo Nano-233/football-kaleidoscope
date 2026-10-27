@@ -5,7 +5,16 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const L = 105, W = 68, cv = $('pitch'), g = cv.getContext('2d'), PAD = 26;
 const SX = (cv.width - 2 * PAD) / L, SY = (cv.height - 2 * PAD) / W, px = x => PAD + x * SX, py = y => PAD + y * SY;
-const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+// a token's colour as the page resolves it (the tokens are light-dark() and oklch(), which only an element's computed colour settles),
+// painted on one pixel and read back as hex (rgba when translucent) so three.js and shade() can parse it
+const probe = document.body.appendChild(document.createElement('i')), dot = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+probe.hidden = true;
+const css = name => {
+  probe.style.color = `var(${name})`;
+  dot.clearRect(0, 0, 1, 1); dot.fillStyle = getComputedStyle(probe).color; dot.fillRect(0, 0, 1, 1);
+  const [r, g, b, a] = dot.getImageData(0, 0, 1, 1).data;
+  return a === 255 ? '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('') : `rgba(${r}, ${g}, ${b}, ${(a / 255).toFixed(3)})`;
+};
 const readCol = () => ({ home: css('--home'), away: css('--away'), accent: css('--accent'), good: css('--good'), bad: css('--bad'), pitch: css('--pitch'), line: css('--pitch-line') });
 const COL = readCol();
 
@@ -1441,7 +1450,7 @@ function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = fals
 // the page's own labels (buttons, persona names, settings, status bar) in the reader's language: each element's text nodes keep their
 // English in a map and are swapped for the translation as it arrives
 const EN = new WeakMap();
-const LABELS = '#persona span, #settings summary span, .flyout h2, .flyout .field > span, .flyout small, #u-preset button, #next, #voice, #v3d, #live, '
+const LABELS = '#persona span, #settings summary span, .flyout h2, .flyout .field > span, .flyout small, #u-preset button, #theme button,#next, #voice, #v3d, #live, '
   + '.transport .speed > span, .view-head, .warn-item, .statusbar .opt, .welcome h2, .welcome p, .welcome button';
 // and in the panel, after every render: its buttons, badges, headings and notes (text with digits is left alone: a clock or a score
 // changes every minute and would be a new translation each time)
@@ -1516,16 +1525,23 @@ document.addEventListener('keydown', e => {
   if (e.key === 'ArrowRight' && e.target.type !== 'range') seek(S.t + 5);
   if (e.key === 'ArrowLeft' && e.target.type !== 'range') seek(S.t - 5);
 });
-// Hidden switch: typing "new" toggles the redesign (new.css), remembered per browser
-let typed = '';
+// Hidden switch: the Insert key toggles the redesign (new.css), remembered per browser
 document.addEventListener('keydown', e => {
-  if (e.target.matches('input[type=text], select, textarea')) return;
-  typed = (typed + e.key).slice(-3).toLowerCase();
-  if (typed !== 'new') return;
+  if (e.key !== 'Insert' || e.target.matches('input[type=text], select, textarea')) return;
   const on = document.documentElement.classList.toggle('new');
   try { localStorage.setItem('ui', on ? 'new' : ''); } catch (err) {}
-  Object.assign(COL, readCol()); render(true);
+  recolour();
 });
+// Theme: light, dark or the system's (the default); the CSS follows html[data-theme], the canvas re-reads its colours
+const recolour = () => { Object.assign(COL, readCol()); render(true); };
+function setTheme(t) {
+  if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+  try { localStorage.setItem('theme', t); } catch (err) { /* storage off: the theme lasts for this visit */ }
+  for (const b of $('theme').children) b.setAttribute('aria-selected', b.dataset.t === t);
+  recolour();
+}
+$('theme').onclick = e => { const b = e.target.closest('button'); if (b) setTheme(b.dataset.t); };
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', recolour);
 $('panel-body').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   const d = b.dataset;
@@ -1609,6 +1625,7 @@ function setUnits(u) {
 $('u-preset').onclick = e => { const b = e.target.closest('button'); if (b) setUnits(b.dataset.u); };
 for (const id of ['u-len', 'u-spd', 'u-dist']) $(id).onchange = () => setUnits([$('u-len').value, $('u-spd').value, $('u-dist').value].join(','));
 setUnits(S.profile.units || 'm,kmh,km');
+setTheme(document.documentElement.dataset.theme || '');
 // live run: the server streams the match from here on its own clock and the newsroom covers each moment as it arrives (GET /api/live)
 const liveKey = m => `${m.t}|${m.type}`;
 function stopLive(keep) {
