@@ -1736,7 +1736,7 @@ User: 3-7 minutes is too long for an app. Profile of one continuation (RED-ASH f
 core is about twice as slow as the desktop's. Options weighed: always-warm workers (about $9 a day for 6 x 2 vCPU idle), dedicated
 workload profiles (trial quota 0), runs in the browser (slower), fewer pairs (noisier), a lower tick rate (a different football model:
 rejected), vectorising `team_targets` (same results, the real gain; deferred past the deadline as engine risk).
-Built: a second Container App, `matchday-newsroom-sim` (internal ingress, 0-12 replicas of 2 vCPU, HTTP scale rule 2 concurrent); the
+Built: a second Container App, `matchday-newsroom-sim` (now `football-kaleidoscope-sim`) (internal ingress, 0-12 replicas of 2 vCPU, HTTP scale rule 2 concurrent); the
 front sends each run as one request (`FANOUT_URL`, `_remote` in whatif.py), and `what_if_steps` yields the result over the finished pairs
 after each pair, streamed to the page as SSE `partial` events ("4 of 12 pairs in").
 Measured: warm, 52 s for all 12 pairs and 27 s to the first (was 198 s). Cold, 267 s, then 171 s to the first pair with one run timed

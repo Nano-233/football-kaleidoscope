@@ -11,7 +11,7 @@
 param(
     [string]$Rg = "rg-matchday-newsroom",
     [string]$Location = "eastus2",
-    [string]$App = "matchday-newsroom",
+    [string]$App = "football-kaleidoscope",
     [string]$Account = "matchday-newsroom-$((az account show --query id -o tsv).Substring(0, 6))",
     [string]$Project = "newsroom",
     [string]$Model = "gpt-4.1-mini",

@@ -10,7 +10,7 @@ Framework**, deployed on **Azure Container Apps**.
 > All data is synthetic. Clubs, players and results are fictional and made by our own match engine. No real
 > footage, data, names or badges are used.
 
-**Live demo:** https://matchday-newsroom.ashywave-faaedb6c.eastus2.azurecontainerapps.io · **Video:** _link added after upload_
+**Live demo:** https://football-kaleidoscope.ashywave-faaedb6c.eastus2.azurecontainerapps.io · **Video:** _link added after upload_
 
 | Fan: live feed, fact-checked | Analyst: the tactics board |
 |---|---|

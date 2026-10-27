@@ -24,7 +24,7 @@ the newsroom against the engine's own record of what happened: 60 answers, 0.85 
 (a front end plus simulation workers that scale out per what-if and back to zero; managed identity, no keys), an MCP server with 17
 tools for GitHub Copilot agent mode, GitHub Actions (tests, image build).
 
-**Try it:** https://matchday-newsroom.ashywave-faaedb6c.eastus2.azurecontainerapps.io (free, no login; all data synthetic).
+**Try it:** https://football-kaleidoscope.ashywave-faaedb6c.eastus2.azurecontainerapps.io (free, no login; all data synthetic).
 
 ## Video (under 2 minutes): structure
 
