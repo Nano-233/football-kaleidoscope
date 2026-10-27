@@ -10,7 +10,7 @@ football match engine (`matchsim/`) feeds deterministic analytics (`analytics/`)
 Personas: Fan, Analyst, Scout. Features: live feed with fact-checked commentary, Ask (Q&A with the agent desk), Board (shapes,
 networks, press, momentum), What-if (paired simulations from any minute), Recap (half/full-time reports), Breakdowns (pause and
 draw on key moments), Clips + JSON/broadcast-pack export, units (metric/imperial) passed to the agents, languages, voice.
-Team of two: the user (technical) and a partner (football knowledge, no coding). Repo: github.com/Nano-233/matchday-newsroom (main).
+Team of two: the user (technical) and a partner (football knowledge, no coding). Repo: github.com/Nano-233/football-kaleidoscope (main).
 
 ## Status
 
