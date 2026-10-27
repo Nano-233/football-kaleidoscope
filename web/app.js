@@ -6,7 +6,8 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '
 const L = 105, W = 68, cv = $('pitch'), g = cv.getContext('2d'), PAD = 26;
 const SX = (cv.width - 2 * PAD) / L, SY = (cv.height - 2 * PAD) / W, px = x => PAD + x * SX, py = y => PAD + y * SY;
 const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-const COL = { home: css('--home'), away: css('--away'), accent: css('--accent'), good: css('--good'), bad: css('--bad'), pitch: css('--pitch'), line: css('--pitch-line') };
+const readCol = () => ({ home: css('--home'), away: css('--away'), accent: css('--accent'), good: css('--good'), bad: css('--bad'), pitch: css('--pitch'), line: css('--pitch-line') });
+const COL = readCol();
 
 const TABS = { fan: ['Live', 'Ask', 'Recap', 'Players', 'Stats', 'Clips'], analyst: ['Feed', 'Board', 'What if', 'Ask', 'Players', 'Recap', 'Stats', 'Clips'], scout: ['Players', 'Ask', 'Clips'] };
 const VOICE = { fan: 'fan', analyst: 'analyst', scout: 'analyst' };  // which newsroom feed each persona reads
@@ -1514,6 +1515,16 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { S.view = null; S.reel = null; S.bd = null; }
   if (e.key === 'ArrowRight' && e.target.type !== 'range') seek(S.t + 5);
   if (e.key === 'ArrowLeft' && e.target.type !== 'range') seek(S.t - 5);
+});
+// Hidden switch: typing "new" toggles the redesign (new.css), remembered per browser
+let typed = '';
+document.addEventListener('keydown', e => {
+  if (e.target.matches('input[type=text], select, textarea')) return;
+  typed = (typed + e.key).slice(-3).toLowerCase();
+  if (typed !== 'new') return;
+  const on = document.documentElement.classList.toggle('new');
+  try { localStorage.setItem('ui', on ? 'new' : ''); } catch (err) {}
+  Object.assign(COL, readCol()); render(true);
 });
 $('panel-body').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
