@@ -42,9 +42,13 @@ app wakes up), then open a private window so the welcome card shows; open the Wh
 | 6 | 0:58-1:12 | **Ask** at full time (3-3): "How did Harlow Athletic throw away a 3-1 lead?" (cached is fine); open "How the newsroom worked it out" | "Ask anything. An orchestrator sends specialists to the tools, a writer answers for you, a fact-checker signs it off, and the whole trail is visible." |
 | 7 | 1:12-1:30 | **What if** (open the tab first so the workers warm up): pressing up from 60', **Play it out**; pairs fill in | "What if they'd pressed higher? Twenty-four simulations run in parallel on Azure Container Apps, each pair with the same random numbers, so only the change differs." |
 | 8 | 1:30-1:38 | **Clips > Breakdown** of a goal: the move paused and drawn | "Every goal can be broken down: where the ball was won, the open lanes, the shot." |
-| 9 | 1:38-1:43 | Fan: the team heat map in the live strip (last 15 minutes), then tap a player: "Where he has played so far" | "Where every player actually played, from the tracking." |
-| 10 | 1:43-1:52 | **Stats**: "Newsroom answers scored against the truth" table | "And because the data is synthetic, we can grade the newsroom against what really happened." |
+| 9 | 1:38-1:43 | Montage, about 1 s per cut with a one-word caption: **3D** view, **Voice** (spoken commentary), **Live run** (cards arriving), the **Recap** half-time report, GitHub Copilot agent mode calling one of the MCP tools in VS Code (guide Clip 12; Harbour records the Copilot cut) | "Plus a 3D view, spoken commentary, live runs, match reports, and seventeen tools for GitHub Copilot." |
+| 10 | 1:43-1:52 | **Stats**: "Answers vs ground truth" table | "And because the data is synthetic, we can grade the newsroom against what really happened." |
 | 11 | 1:52-1:58 | Architecture diagram from the README, or the logo with the link | "Microsoft Foundry, Agent Framework, Azure Container Apps. Matchday Newsroom." |
+
+The montage takes the slot of the old heat-map shot; the team heat map (guide Clip 9) is spare footage for it. Record with the
+computer in dark mode so the site uses its dark theme (it follows the system setting). Under the montage, keep the app's own
+spoken commentary low so the voice-over stays on top.
 
 Tips: do one dry run first (it warms the What-if workers and caches the Ask answer); keep the cursor still while text renders;
 cut dead time in the editor rather than re-recording.
