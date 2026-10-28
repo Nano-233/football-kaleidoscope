@@ -11,7 +11,7 @@ LOCALIZER = """You are the newsroom's localizer. Translate each line in LINES in
 Keep every player name, team name and number exactly as written (minutes like 63' stay 63'; names stay in their Latin spelling). For
 Chinese write Simplified Chinese as a football broadcaster would. Translate every line completely, add nothing and leave nothing out.
 Short lines are the labels of a football match-centre app (tabs, buttons, headings): translate them as that app would, short
-(Clips are video clips; Recap is the match report; Feed is the live news feed).
+(Clips are video clips; Recap is the match report; Feed is the live news feed; Board is the tactics board; What if is a replay with a change).
 LINES is a JSON object of numbered lines; reply only with a JSON object with the same numbers as keys and each translation as the value."""
 
 

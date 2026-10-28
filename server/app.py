@@ -36,6 +36,7 @@ ASK_SLOTS = int(os.environ.get("ASK_SLOTS", "2"))  # ponytail: one process-wide 
 PROFILE_KEYS = ("persona", "depth", "club", "player", "language", "units", "metric")
 _matches, _gate, _client = {}, asyncio.Semaphore(ASK_SLOTS), None
 _tr_gate = asyncio.Semaphore(4)  # translations have their own lane: a label must not wait behind questions to the newsroom
+_tr_pending = set()  # lines being translated now, so a page asking again does not start them twice
 # What the public demo may spend a day (UTC) on the model and speech; cached answers, the replay and everything precomputed stay free.
 BUDGET = dict(ask=int(os.environ.get("ASKS_PER_DAY", "300")), live=int(os.environ.get("LIVE_RUNS_PER_DAY", "30")),
               translate=int(os.environ.get("TRANSLATIONS_PER_DAY", "3000")), speak=int(os.environ.get("SPEECH_PER_DAY", "1500")))
@@ -131,21 +132,28 @@ async def tr(request):
     keys = [hashlib.sha1(json.dumps([lang, t]).encode()).hexdigest() for t in texts]
     got = {k: json.loads(p.read_text(encoding="utf-8")) for k in keys
            if (p := next((d / f"tr-{k}.json" for d in (CACHE, SEED) if (d / f"tr-{k}.json").exists()), None))}  # this run's, or shipped (scripts/seed_translations.py)
-    todo = [i for i, k in enumerate(keys) if k not in got]
+    todo = [i for i, k in enumerate(keys) if k not in got and k not in _tr_pending]
     if todo:
         spend("translate", len(todo))
         _client = _client or make_client()
+        _tr_pending.update(keys[i] for i in todo)
 
         async def batch(ix):  # short batches in parallel: a slow model call holds up ten lines, not thirty
-            async with _tr_gate:
-                return ix, await translate(_client, lang, [texts[i] for i in ix])
-        CACHE.mkdir(parents=True, exist_ok=True)
-        for ix, new in await asyncio.gather(*(batch(todo[j:j + 10]) for j in range(0, len(todo), 10))):
-            for i, t in zip(ix, new):
-                if t is None:  # failed: the reader gets null and asks again later; nothing wrong is cached
-                    continue
-                got[keys[i]] = t
-                (CACHE / f"tr-{keys[i]}.json").write_text(json.dumps(t, ensure_ascii=False), encoding="utf-8")
+            try:
+                async with _tr_gate:
+                    new = await translate(_client, lang, [texts[i] for i in ix])
+                CACHE.mkdir(parents=True, exist_ok=True)
+                for i, t in zip(ix, new):
+                    if t is not None:  # failed: the reader gets null and asks again later; nothing wrong is cached
+                        got[keys[i]] = t
+                        (CACHE / f"tr-{keys[i]}.json").write_text(json.dumps(t, ensure_ascii=False), encoding="utf-8")
+            finally:
+                _tr_pending.difference_update(keys[i] for i in ix)
+        work = asyncio.gather(*(batch(todo[j:j + 10]) for j in range(0, len(todo), 10)))
+        if got:  # some lines are known: answer those now and let the rest finish behind; the page asks for them again
+            asyncio.ensure_future(work)
+        else:
+            await work
     return web.json_response(dict(texts=[got.get(k) for k in keys]))
 
 

@@ -110,7 +110,7 @@ function tr(text) {
 }
 // short labels (tabs, buttons, headings) go first and in big batches, so the page reads in the language within a second or two;
 // the long feed and report lines follow ten at a time. At most two requests are out at once; a line that comes back untranslated
-// is asked for again (three times at most) instead of being kept in English.
+// is asked for again a little later (five times at most) instead of being kept in English.
 let trBusy = 0;
 const trTries = {};
 async function flushTr() {
@@ -118,7 +118,7 @@ async function flushTr() {
   for (const t of trQueue) if (known[t]) trQueue.delete(t);  // asked for twice and already here
   const queued = [...trQueue];
   if (!queued.length || trBusy >= 2) { if (queued.length) { clearTimeout(trTimer); trTimer = setTimeout(flushTr, 300); } return; }
-  const short = queued.filter(t => t.length <= 60), texts = short.length ? short.slice(0, 40) : queued.slice(0, 10);
+  const short = queued.filter(t => t.length <= 60), texts = short.length ? short.slice(0, 30) : queued.slice(0, 10);  // the server reads 30 at most
   for (const t of texts) trQueue.delete(t);
   if (trQueue.size) { clearTimeout(trTimer); trTimer = setTimeout(flushTr, 50); }
   trBusy++;
@@ -130,7 +130,7 @@ async function flushTr() {
     let got = 0;
     texts.forEach((t, i) => {
       if (out[i]) { TR[lang][t] = out[i]; got++; }
-      else if ((trTries[t] = (trTries[t] || 0) + 1) <= 3) trQueue.add(t);  // try again later
+      else if ((trTries[t] = (trTries[t] || 0) + 1) <= 5) setTimeout(() => { trQueue.add(t); flushTr(); }, 700 * trTries[t]);  // still being translated, or failed: ask again a little later
     });
     if (got && lang === S.profile.language) { S.trVer = (S.trVer || 0) + 1; $('lt-line').dataset.id = ''; setTabs(); render(true); }
   } catch { /* no server: the lines stay in English */ } finally {
