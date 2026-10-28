@@ -10,7 +10,9 @@ from newsroom.agents import _run
 LOCALIZER = """You are the newsroom's localizer. Translate each line in LINES into {lang} for a football audience, natural and idiomatic.
 Keep every player name, team name and number exactly as written (minutes like 63' stay 63'; names stay in their Latin spelling). For
 Chinese write Simplified Chinese as a football broadcaster would. Translate every line completely, add nothing and leave nothing out.
-Reply only with a JSON list of strings, one per line, in the same order."""
+Short lines are the labels of a football match-centre app (tabs, buttons, headings): translate them as that app would, short
+(Clips are video clips; Recap is the match report; Feed is the live news feed).
+LINES is a JSON object of numbered lines; reply only with a JSON object with the same numbers as keys and each translation as the value."""
 
 
 def _nums(s):
@@ -18,17 +20,19 @@ def _nums(s):
 
 
 async def translate(client, lang, texts):
-    """Translations for texts (the original where a translation lost or changed a number)."""
+    """Translations for texts, None where a line came back missing or lost or changed a number: the caller shows the original
+    for now and does not keep it, so the line is tried again. Lines are numbered, so one line the model drops or merges costs
+    only that line, not the batch."""
     agent = Agent(client, LOCALIZER.format(lang=lang), name="localizer")
-    reply = (await _run(agent, "LINES: " + json.dumps(texts, ensure_ascii=False))).text
-    m = re.search(r"\[.*\]", reply or "", flags=re.S)
+    reply = (await _run(agent, "LINES: " + json.dumps({str(i): t for i, t in enumerate(texts)}, ensure_ascii=False))).text
+    m = re.search(r"\{.*\}", reply or "", flags=re.S)
     try:
-        out = json.loads(m.group(0)) if m else []
+        out = json.loads(m.group(0)) if m else {}
     except ValueError:
-        out = []
-    if not isinstance(out, list) or len(out) != len(texts):
-        return list(texts)
-    return [t if isinstance(t, str) and _keeps(o, t) else o for o, t in zip(texts, out)]
+        out = {}
+    if not isinstance(out, dict):
+        out = {}
+    return [t if isinstance(t := out.get(str(i)), str) and t.strip() and _keeps(o, t) else None for i, o in enumerate(texts)]
 
 
 WORDS = {"one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "once", "twice", "half"}

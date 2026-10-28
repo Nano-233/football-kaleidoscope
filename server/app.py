@@ -31,9 +31,11 @@ from matchsim.whatif import FORMATIONS, TACTIC_KEYS, _run, cached_what_if_steps,
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DATA, CACHE, WEB = ROOT / "server" / "data", ROOT / "server" / "cache", ROOT / "web"
+SEED = ROOT / "server" / "tr_seed"  # translations that ship with the image
 ASK_SLOTS = int(os.environ.get("ASK_SLOTS", "2"))  # ponytail: one process-wide limit; per-user quotas if it is ever opened wider
 PROFILE_KEYS = ("persona", "depth", "club", "player", "language", "units", "metric")
 _matches, _gate, _client = {}, asyncio.Semaphore(ASK_SLOTS), None
+_tr_gate = asyncio.Semaphore(4)  # translations have their own lane: a label must not wait behind questions to the newsroom
 # What the public demo may spend a day (UTC) on the model and speech; cached answers, the replay and everything precomputed stay free.
 BUDGET = dict(ask=int(os.environ.get("ASKS_PER_DAY", "300")), live=int(os.environ.get("LIVE_RUNS_PER_DAY", "30")),
               translate=int(os.environ.get("TRANSLATIONS_PER_DAY", "3000")), speak=int(os.environ.get("SPEECH_PER_DAY", "1500")))
@@ -127,18 +129,24 @@ async def tr(request):
     if not lang or lang == "English" or not texts:
         return web.json_response(dict(texts=texts))
     keys = [hashlib.sha1(json.dumps([lang, t]).encode()).hexdigest() for t in texts]
-    got = {k: json.loads((CACHE / f"tr-{k}.json").read_text(encoding="utf-8")) for k in keys if (CACHE / f"tr-{k}.json").exists()}
+    got = {k: json.loads(p.read_text(encoding="utf-8")) for k in keys
+           if (p := next((d / f"tr-{k}.json" for d in (CACHE, SEED) if (d / f"tr-{k}.json").exists()), None))}  # this run's, or shipped (scripts/seed_translations.py)
     todo = [i for i, k in enumerate(keys) if k not in got]
     if todo:
         spend("translate", len(todo))
-        async with _gate:
-            _client = _client or make_client()
-            new = await translate(_client, lang, [texts[i] for i in todo])
+        _client = _client or make_client()
+
+        async def batch(ix):  # short batches in parallel: a slow model call holds up ten lines, not thirty
+            async with _tr_gate:
+                return ix, await translate(_client, lang, [texts[i] for i in ix])
         CACHE.mkdir(parents=True, exist_ok=True)
-        for i, t in zip(todo, new):
-            got[keys[i]] = t
-            (CACHE / f"tr-{keys[i]}.json").write_text(json.dumps(t, ensure_ascii=False), encoding="utf-8")
-    return web.json_response(dict(texts=[got[k] for k in keys]))
+        for ix, new in await asyncio.gather(*(batch(todo[j:j + 10]) for j in range(0, len(todo), 10))):
+            for i, t in zip(ix, new):
+                if t is None:  # failed: the reader gets null and asks again later; nothing wrong is cached
+                    continue
+                got[keys[i]] = t
+                (CACHE / f"tr-{keys[i]}.json").write_text(json.dumps(t, ensure_ascii=False), encoding="utf-8")
+    return web.json_response(dict(texts=[got.get(k) for k in keys]))
 
 
 _live_gate = asyncio.Semaphore(1)  # ponytail: one live run at a time for the whole site (each costs model calls); a queue if it is ever opened wider

@@ -108,19 +108,35 @@ function tr(text) {
   clearTimeout(trTimer); trTimer = setTimeout(flushTr, 150);
   return text;
 }
+// short labels (tabs, buttons, headings) go first and in big batches, so the page reads in the language within a second or two;
+// the long feed and report lines follow ten at a time. At most two requests are out at once; a line that comes back untranslated
+// is asked for again (three times at most) instead of being kept in English.
+let trBusy = 0;
+const trTries = {};
 async function flushTr() {
-  const lang = S.profile.language, texts = [...trQueue].filter(t => !(TR[lang] || {})[t]).slice(0, 20);
-  for (const t of texts) trQueue.delete(t);  // send 20 at a time; the rest stay queued for the next round
-  if (trQueue.size) { clearTimeout(trTimer); trTimer = setTimeout(flushTr, 400); }
-  if (!texts.length) return;
+  const lang = S.profile.language, known = TR[lang] || {};
+  for (const t of trQueue) if (known[t]) trQueue.delete(t);  // asked for twice and already here
+  const queued = [...trQueue];
+  if (!queued.length || trBusy >= 2) { if (queued.length) { clearTimeout(trTimer); trTimer = setTimeout(flushTr, 300); } return; }
+  const short = queued.filter(t => t.length <= 60), texts = short.length ? short.slice(0, 40) : queued.slice(0, 10);
+  for (const t of texts) trQueue.delete(t);
+  if (trQueue.size) { clearTimeout(trTimer); trTimer = setTimeout(flushTr, 50); }
+  trBusy++;
   try {
     const r = await fetch('api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ language: lang, texts }) });
     if (!r.ok) return;
     const out = (await r.json()).texts;
     TR[lang] = TR[lang] || {};
-    texts.forEach((t, i) => { TR[lang][t] = out[i]; });
-    S.trVer = (S.trVer || 0) + 1; $('lt-line').dataset.id = ''; setTabs(); render(true);
-  } catch { /* no server: the lines stay in English */ }
+    let got = 0;
+    texts.forEach((t, i) => {
+      if (out[i]) { TR[lang][t] = out[i]; got++; }
+      else if ((trTries[t] = (trTries[t] || 0) + 1) <= 3) trQueue.add(t);  // try again later
+    });
+    if (got && lang === S.profile.language) { S.trVer = (S.trVer || 0) + 1; $('lt-line').dataset.id = ''; setTabs(); render(true); }
+  } catch { /* no server: the lines stay in English */ } finally {
+    trBusy--;
+    if (trQueue.size) { clearTimeout(trTimer); trTimer = setTimeout(flushTr, 50); }
+  }
 }
 function saveProfile() { try { localStorage.setItem('mn-profile', JSON.stringify(S.profile)); } catch { /* storage off: the profile lasts for this visit */ } }
 

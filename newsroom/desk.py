@@ -498,7 +498,7 @@ class Desk:
         lang = self.profile.get("language", "English")
         if last["answer"] and lang != "English" and _looks_english(last["answer"]):  # the writer slipped into English: the localizer puts it right
             from newsroom.localize import translate
-            last = dict(last, answer=(await translate(self.client, lang, [last["answer"]]))[0])
+            last = dict(last, answer=(await translate(self.client, lang, [last["answer"]]))[0] or last["answer"])
         moments = {m["clock"]: m for f in self.facts if isinstance(f, dict) for m in f.get("moments", [])}
         watch = [dict(clock=c, t=m["t"], type=m["type"], player=m["player"]) for c, m in moments.items() if re.search(rf"(?<![\d+]){re.escape(c)}", last["answer"])][:6]
         views = self._views(self.trail[n0:], self.raw[f0:])
